@@ -1,0 +1,22 @@
+{
+  "shared": [
+    "casualtieslink/*.py",
+    "tests/rig.py",
+    "tests/__init__.py",
+    "../plugin/*.cs",
+    "../plugin/*.csproj",
+    "test_groups.json"
+  ],
+  "groups": [
+    {
+      "id": "repo-tools",
+      "watch": [
+        "../tools/*.py"
+      ],
+      "modules": [
+        "tools.test_check_commit_message"
+      ],
+      "needs_game": false
+    }
+  ]
+}
