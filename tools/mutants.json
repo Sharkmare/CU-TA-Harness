@@ -1,0 +1,23 @@
+[
+  {"suite": "plugin", "file": "plugin/KeyWindows.cs", "old": "frame <= window.LastHeldFrame", "new": "frame < window.LastHeldFrame", "label": "held window one frame short"},
+  {"suite": "plugin", "file": "plugin/KeyWindows.cs", "old": "first + frames - 1", "new": "first + frames", "label": "tap one frame long"},
+  {"suite": "plugin", "file": "plugin/RequestGate.cs", "old": "if (origin != null)", "new": "if (origin != null && origin.Length > 0)", "label": "empty Origin accepted"},
+  {"suite": "plugin", "file": "plugin/RequestGate.cs", "old": "host != \"127.0.0.1:\" + port && host != \"localhost:\" + port", "new": "host != \"127.0.0.1:\" + port", "label": "localhost refused"},
+  {"suite": "plugin", "file": "plugin/RequestGate.cs", "old": "if (!hasRequiredHeader)", "new": "if (false)", "label": "header not required"},
+  {"suite": "plugin", "file": "plugin/LaunchSwitch.cs", "old": "port <= HighestPort", "new": "port <= 70000", "label": "port range too wide"},
+  {"suite": "plugin", "file": "plugin/EventBuffer.cs", "old": "if (entry.seq <= since) continue;", "new": "if (entry.seq < since) continue;", "label": "since is inclusive"},
+  {"suite": "plugin", "file": "plugin/EventBuffer.cs", "old": "events.RemoveRange(0, events.Count - capacity)", "new": "events.RemoveRange(0, events.Count - capacity - 1)", "label": "buffer over capacity"},
+  {"suite": "plugin", "file": "plugin/PathParser.cs", "old": "inside.Trim('\"', '\\'')", "new": "inside", "label": "quotes kept in keys"},
+  {"suite": "python", "file": "client/casualtieslink/launcher.py", "old": "if existing and not allow_existing:", "new": "if False:", "label": "second game allowed"},
+  {"suite": "python", "file": "client/casualtieslink/launcher.py", "old": "            os.remove(self.saved_backup)\n", "new": "            pass\n", "label": "save backup left behind"},
+  {"suite": "python", "file": "client/casualtieslink/launcher.py", "old": "        if self.link_enabled:\n            command += [LINK_PORT_ARGUMENT, str(self.port)]\n", "new": "        command += [LINK_PORT_ARGUMENT, str(self.port)]\n", "label": "link port sent when link is off"},
+  {"suite": "python", "file": "client/casualtieslink/pair.py", "old": "        if not os.path.exists(os.path.join(source, name)):\n            path = os.path.join(target, name)", "new": "        if False:\n            path = os.path.join(target, name)", "label": "new profile files kept"},
+  {"suite": "python", "file": "client/casualtieslink/pair.py", "old": "for member in (self.client, self.host):", "new": "for member in (self.host, self.client):", "label": "host closed before client"},
+  {"suite": "python", "file": "client/selection.py", "old": "        files.update(expand(root, PLUGIN_WATCH))\n", "new": "        pass\n", "label": "plugin changes ignored"},
+  {"suite": "python", "file": "client/selection.py", "old": ".replace(b\"\\r\\n\", b\"\\n\")", "new": "", "label": "line endings change hashes"},
+  {"suite": "python", "file": "client/casualtieslink/testcopy.py", "old": "if target == os.path.normcase(REPO_ROOT) or target.startswith(os.path.normcase(REPO_ROOT) + os.sep):", "new": "if False:", "label": "copy allowed inside the repository"},
+  {"suite": "python", "file": "client/casualtieslink/lock.py", "old": "os.O_CREAT | os.O_EXCL | os.O_WRONLY", "new": "os.O_CREAT | os.O_WRONLY", "label": "lock not exclusive"},
+  {"suite": "python", "file": "client/casualtieslink/cli.py", "old": "if spec is not None and missing_required(spec, values):", "new": "if False:", "label": "required arguments not checked"},
+  {"suite": "python", "file": "client/casualtieslink/transport.py", "old": "headers={REQUIRED_HEADER: \"1\", \"Content-Type\": \"application/json\"}", "new": "headers={\"Content-Type\": \"application/json\"}", "label": "link header not sent"},
+  {"suite": "python", "file": "client/casualtieslink/commands.py", "old": "self.events_cursor = self.transport.events(0, 0, limit=1)[\"last\"]", "new": "self.events_cursor = 0", "label": "mark events does nothing"}
+]
