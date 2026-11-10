@@ -42,24 +42,37 @@ class ProfileGuard:
         if not self.taken:
             return
         if os.path.isdir(self.folder_backup):
-            for name in os.listdir(self.directory):
-                path = os.path.join(self.directory, name)
-                if name.startswith("Player") and name.endswith(".log"):
-                    continue
-                if not os.path.exists(os.path.join(self.folder_backup, name)):
-                    shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
-            for name in os.listdir(self.folder_backup):
-                if name.startswith("Player") and name.endswith(".log"):
-                    continue
-                source = os.path.join(self.folder_backup, name)
-                target = os.path.join(self.directory, name)
-                if os.path.isdir(source):
-                    shutil.copytree(source, target, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(source, target)
+            mirror(self.folder_backup, self.directory, top_level=True)
         if os.path.exists(self.registry_backup):
             subprocess.run(["reg", "import", self.registry_backup], capture_output=True)
         self.taken = False
+
+
+def is_player_log(name):
+    return name.startswith("Player") and name.endswith(".log")
+
+
+def mirror(source, target, top_level=False):
+    os.makedirs(target, exist_ok=True)
+    for name in os.listdir(target):
+        if top_level and is_player_log(name):
+            continue
+        if not os.path.exists(os.path.join(source, name)):
+            path = os.path.join(target, name)
+            shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+    for name in os.listdir(source):
+        if top_level and is_player_log(name):
+            continue
+        source_path = os.path.join(source, name)
+        target_path = os.path.join(target, name)
+        if os.path.isdir(source_path):
+            if os.path.exists(target_path) and not os.path.isdir(target_path):
+                os.remove(target_path)
+            mirror(source_path, target_path)
+        else:
+            if os.path.isdir(target_path):
+                shutil.rmtree(target_path)
+            shutil.copy2(source_path, target_path)
 
 
 def host_flags(character=2, extra=None, debug=True):
