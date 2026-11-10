@@ -9,6 +9,17 @@
   ],
   "groups": [
     {
+      "id": "inert",
+      "watch": [
+        "tests/test_inert.py"
+      ],
+      "modules": [
+        "tests.test_inert"
+      ],
+      "needs_game": false,
+      "owns_game": true
+    },
+    {
       "id": "link",
       "watch": [
         "tests/test_link.py"
