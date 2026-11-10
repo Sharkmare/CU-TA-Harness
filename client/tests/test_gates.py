@@ -202,7 +202,7 @@ class A_StockHostClientWithPluginsTests(ScenarioCase):
         before = height(self.client, CLIENT_BODY)
         host_before = height(self.client, HOST_BODY)
         self.client.console("size HostD 2")
-        refused = wait_until(lambda: "size needs the host" in str(self.client.call("console_log", tail=20)))
+        refused = wait_until(lambda: "sizing other players needs the host to run CasualtiesSize" in str(self.client.call("console_log", tail=20)))
         self.assertTrue(refused, str(self.client.call("console_log", tail=20)))
         self.assertAlmostEqual(height(self.client, HOST_BODY), host_before, delta=SIZE_TOLERANCE)
         self.assertAlmostEqual(height(self.host, HOST_BODY), host_before, delta=SIZE_TOLERANCE)
