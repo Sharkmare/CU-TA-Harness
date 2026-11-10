@@ -7,15 +7,6 @@ using UnityEngine.SceneManagement;
 
 namespace CasualtiesLink
 {
-    public class LinkEvent
-    {
-        public long seq;
-        public string type;
-        public float time;
-        public int frame;
-        public Dictionary<string, object> data;
-    }
-
     public static class EventLog
     {
         private const int MaxEvents = 5000;
@@ -23,10 +14,9 @@ namespace CasualtiesLink
         private const float DamageEpsilon = 0.01f;
 
         private static readonly object Gate = new object();
-        private static readonly List<LinkEvent> Events = new List<LinkEvent>();
+        private static readonly EventBuffer Buffer = new EventBuffer(MaxEvents, () => Clock.Elapsed.TotalSeconds);
         private static readonly List<Dictionary<string, object>> LogLines = new List<Dictionary<string, object>>();
         private static readonly System.Diagnostics.Stopwatch Clock = System.Diagnostics.Stopwatch.StartNew();
-        private static long nextSeq = 1;
         private static long nextLogSeq = 1;
 
         private static Body trackedBody;
@@ -44,39 +34,17 @@ namespace CasualtiesLink
 
         public static long Emit(string type, Dictionary<string, object> data)
         {
-            lock (Gate)
-            {
-                var entry = new LinkEvent { seq = nextSeq++, type = type, time = (float)Clock.Elapsed.TotalSeconds, frame = MainThread.FrameNumber, data = data };
-                Events.Add(entry);
-                if (Events.Count > MaxEvents) Events.RemoveRange(0, Events.Count - MaxEvents);
-                Monitor.PulseAll(Gate);
-                return entry.seq;
-            }
+            return Buffer.Emit(type, data, MainThread.FrameNumber);
         }
 
-        public static long LastSequence { get { lock (Gate) return nextSeq - 1; } }
+        public static long LastSequence
+        {
+            get { return Buffer.LastSequence; }
+        }
 
         public static object Read(long since, int waitMilliseconds, int limit, string type)
         {
-            var deadline = DateTime.UtcNow.AddMilliseconds(waitMilliseconds);
-            lock (Gate)
-            {
-                while (true)
-                {
-                    var found = new List<LinkEvent>();
-                    foreach (var entry in Events)
-                    {
-                        if (entry.seq <= since) continue;
-                        if (type != null && entry.type != type) continue;
-                        found.Add(entry);
-                        if (found.Count >= limit) break;
-                    }
-                    var remaining = deadline - DateTime.UtcNow;
-                    if (found.Count > 0 || remaining <= TimeSpan.Zero)
-                        return new Dictionary<string, object> { { "events", found }, { "last", nextSeq - 1 } };
-                    Monitor.Wait(Gate, remaining);
-                }
-            }
+            return Buffer.Read(since, waitMilliseconds, limit, type);
         }
 
         public static object ReadLog(long since, int tail, string contains)

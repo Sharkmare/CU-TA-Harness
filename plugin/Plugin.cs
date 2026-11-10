@@ -11,8 +11,6 @@ namespace CasualtiesLink
         public const string Guid = "casualtieslink";
         public const string Version = "1.0.0";
         public const int ProtocolVersion = 1;
-        public const string PortEnvironmentVariable = "CASUALTIES_LINK_PORT";
-        public const string PortArgument = "--link-port";
         public const int DefaultPort = 7650;
         public const string DisabledLogLine = "CasualtiesLink DISABLED (no --link-port argument or CASUALTIES_LINK_PORT variable); inert";
         public const string EnabledLogLinePrefix = "CasualtiesLink ENABLED on port ";
@@ -22,20 +20,10 @@ namespace CasualtiesLink
 
         private LinkServer server;
 
-        public static int RequestedPort(string[] commandLine, string environmentValue)
-        {
-            for (int i = 0; i < commandLine.Length - 1; i++)
-                if (commandLine[i] == PortArgument && int.TryParse(commandLine[i + 1], out int fromArgument) && fromArgument > 0 && fromArgument < 65536)
-                    return fromArgument;
-            if (!string.IsNullOrEmpty(environmentValue) && int.TryParse(environmentValue, out int fromEnvironment) && fromEnvironment > 0 && fromEnvironment < 65536)
-                return fromEnvironment;
-            return 0;
-        }
-
         private void Awake()
         {
             Instance = this;
-            int port = RequestedPort(System.Environment.GetCommandLineArgs(), System.Environment.GetEnvironmentVariable(PortEnvironmentVariable));
+            int port = LaunchSwitch.RequestedPort(System.Environment.GetCommandLineArgs(), System.Environment.GetEnvironmentVariable(LaunchSwitch.PortEnvironmentVariable));
             if (port == 0)
             {
                 Logger.LogInfo(DisabledLogLine);

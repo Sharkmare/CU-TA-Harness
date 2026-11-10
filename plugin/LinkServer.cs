@@ -12,7 +12,7 @@ namespace CasualtiesLink
 
     public class LinkServer
     {
-        public const string RequiredHeader = "X-CasualtiesLink";
+        public const string RequiredHeader = RequestGate.RequiredHeader;
         private const int CommandWaitMilliseconds = 130000;
         private const int MaximumLongPollMilliseconds = 60000;
 
@@ -83,22 +83,15 @@ namespace CasualtiesLink
         private object Route(HttpListenerContext context)
         {
             var request = context.Request;
-            string host = request.Headers["Host"] ?? "";
-            if (host != "127.0.0.1:" + port && host != "localhost:" + port)
-                throw new LinkException(403, "host header refused");
-            if (request.Headers["Origin"] != null)
-                throw new LinkException(403, "browser requests refused");
+            Refusal refusal = RequestGate.Check(request.HttpMethod, request.Url.AbsolutePath, request.Headers["Host"] ?? "", request.Headers["Origin"], request.Headers[RequiredHeader] != null, port);
+            if (refusal != null) throw new LinkException(refusal.Status, refusal.Message);
 
-            string path = request.Url.AbsolutePath.TrimEnd('/');
+            string path = RequestGate.NormalisePath(request.Url.AbsolutePath);
             if (request.HttpMethod == "GET")
             {
-                if (path == "" || path == "/describe") return Success(Commands.Describe());
                 if (path == "/events") return Success(ReadEvents(request.QueryString));
-                throw new LinkException(404, "unknown GET path; use /describe, /events or POST /cmd/<name>");
+                return Success(Commands.Describe());
             }
-            if (request.HttpMethod != "POST") throw new LinkException(405, "method not allowed");
-            if (request.Headers[RequiredHeader] == null) throw new LinkException(403, "missing " + RequiredHeader + " header");
-            if (!path.StartsWith("/cmd/")) throw new LinkException(404, "POST to /cmd/<name>");
 
             string name = path.Substring("/cmd/".Length);
             JObject args = ReadArguments(request);

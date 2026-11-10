@@ -7,56 +7,50 @@ namespace CasualtiesLink
 
     public static class InputInjector
     {
-        private class KeyWindow { public int FirstHeldFrame; public int LastHeldFrame; }
-
-        private static readonly Dictionary<KeyCode, KeyWindow> Windows = new Dictionary<KeyCode, KeyWindow>();
+        private static readonly KeyWindows Windows = new KeyWindows();
         public static Vector3? MousePosition;
 
         public static void Press(KeyCode key, int frames)
         {
-            int first = Time.frameCount + 1;
-            Windows[key] = new KeyWindow { FirstHeldFrame = first, LastHeldFrame = frames <= 0 ? int.MaxValue : first + frames - 1 };
+            Windows.Press((int)key, frames, Time.frameCount);
         }
 
         public static void Release(KeyCode key)
         {
-            if (Windows.TryGetValue(key, out KeyWindow window) && window.LastHeldFrame == int.MaxValue)
-                window.LastHeldFrame = Mathf.Max(window.FirstHeldFrame - 1, Time.frameCount);
+            Windows.Release((int)key, Time.frameCount);
         }
 
         public static void ReleaseAll()
         {
-            foreach (var key in new List<KeyCode>(Windows.Keys)) Release(key);
+            Windows.ReleaseAll(Time.frameCount);
             MousePosition = null;
         }
 
         public static bool IsHeld(KeyCode key)
         {
-            return Windows.TryGetValue(key, out KeyWindow w) && Time.frameCount >= w.FirstHeldFrame && Time.frameCount <= w.LastHeldFrame;
+            return Windows.IsHeld((int)key, Time.frameCount);
         }
 
         public static bool IsDown(KeyCode key)
         {
-            return Windows.TryGetValue(key, out KeyWindow w) && Time.frameCount == w.FirstHeldFrame;
+            return Windows.IsDown((int)key, Time.frameCount);
         }
 
         public static bool IsUp(KeyCode key)
         {
-            return Windows.TryGetValue(key, out KeyWindow w) && w.LastHeldFrame != int.MaxValue && (long)Time.frameCount == (long)w.LastHeldFrame + 1;
+            return Windows.IsUp((int)key, Time.frameCount);
         }
 
         public static object Describe()
         {
             var held = new List<string>();
-            foreach (var pair in Windows) if (IsHeld(pair.Key)) held.Add(pair.Key.ToString());
+            foreach (int key in Windows.HeldKeys(Time.frameCount)) held.Add(((KeyCode)key).ToString());
             return new Dictionary<string, object> { { "held", held }, { "mouse", MousePosition.HasValue ? (object)new { x = MousePosition.Value.x, y = MousePosition.Value.y } : null } };
         }
 
         public static void EndFrame()
         {
-            var finished = new List<KeyCode>();
-            foreach (var pair in Windows) if ((long)Time.frameCount > (long)pair.Value.LastHeldFrame + 1) finished.Add(pair.Key);
-            foreach (var key in finished) Windows.Remove(key);
+            Windows.EndFrame(Time.frameCount);
         }
     }
 

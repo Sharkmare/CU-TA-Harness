@@ -88,19 +88,19 @@ namespace CasualtiesLink
         public static object Read(string target, string path, int depth, bool nonPublic)
         {
             object root = ResolveTarget(target, out bool isStatic);
-            object value = Walk(root, isStatic, Tokenize(path), out _, out _, nonPublic);
+            object value = Walk(root, isStatic, PathParser.Parse(path), out _, out _, nonPublic);
             return Serialize(value, depth);
         }
 
         public static object Write(string target, string path, JToken newValue, bool nonPublic)
         {
             object root = ResolveTarget(target, out bool isStatic);
-            var tokens = Tokenize(path);
+            var tokens = PathParser.Parse(path);
             if (tokens.Count == 0) throw new Exception("path is required for a write");
             var parentTokens = tokens.Take(tokens.Count - 1).ToList();
             object parent = Walk(root, isStatic, parentTokens, out _, out _, nonPublic);
             bool parentIsStatic = isStatic && parentTokens.Count == 0;
-            Token last = tokens[tokens.Count - 1];
+            PathToken last = tokens[tokens.Count - 1];
             object current = parent;
             MemberInfo member = null;
             if (last.Name != "")
@@ -137,27 +137,7 @@ namespace CasualtiesLink
             throw new Exception("cannot index into " + container.GetType().Name);
         }
 
-        private class Token { public string Name; public object Index; }
-
-        private static List<Token> Tokenize(string path)
-        {
-            var tokens = new List<Token>();
-            if (string.IsNullOrEmpty(path)) return tokens;
-            foreach (string part in path.Split('.'))
-            {
-                int bracket = part.IndexOf('[');
-                var token = new Token { Name = bracket < 0 ? part : part.Substring(0, bracket) };
-                if (bracket >= 0)
-                {
-                    string inside = part.Substring(bracket + 1, part.Length - bracket - 2);
-                    token.Index = long.TryParse(inside, out long number) ? (object)number : inside.Trim('"', '\'');
-                }
-                tokens.Add(token);
-            }
-            return tokens;
-        }
-
-        private static object Walk(object start, bool startIsStatic, List<Token> tokens, out MemberInfo lastMember, out object lastOwner, bool nonPublic)
+        private static object Walk(object start, bool startIsStatic, List<PathToken> tokens, out MemberInfo lastMember, out object lastOwner, bool nonPublic)
         {
             object current = start;
             bool currentIsStatic = startIsStatic;
