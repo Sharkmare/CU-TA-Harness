@@ -1,38 +1,43 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(HERE)
+SEARCH_ROOTS = [HERE, REPO_ROOT]
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, REPO_ROOT)
 
 import selection
-from casualtieslink.lock import GameLock
 from casualtieslink import Game, GameAlreadyRunning, GameProcess, mp_arguments
+from casualtieslink.lock import GameLock
 from casualtieslink.transport import default_port
 from tests import rig
 
 CONFIG_PATH = os.path.join(HERE, "test_groups.json")
 STATE_PATH = os.path.join(HERE, selection.STATE_FILE_NAME)
 DEFAULT_MP_FLAGS = ["disable"]
-LOCK_PATH = os.path.join(HERE, "..", ".game.lock")
+SLOW_UNIT_SECONDS = 5.0
 
 
 def parse_args(argv):
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--all", action="store_true")
-    parser.add_argument("--only", nargs="+")
-    parser.add_argument("--list", action="store_true")
-    parser.add_argument("--attach", action="store_true")
+    parser = argparse.ArgumentParser(description="Change aware test runner. Only tests whose own files or imports changed run.")
+    parser.add_argument("--all", action="store_true", help="run every unit, changed or not")
+    parser.add_argument("--only", nargs="+", help="run these groups")
+    parser.add_argument("--offline", action="store_true", help="run only groups that never start the game")
+    parser.add_argument("--list", action="store_true", help="show what would run and why, then stop")
+    parser.add_argument("--failfast", action="store_true", help="stop a module at its first failing test")
+    parser.add_argument("--attach", action="store_true", help="use a game that is already running with the link")
     parser.add_argument("--match", default=None, help="run only tests whose id contains this text")
     parser.add_argument("--budget-seconds", type=float, default=None, help="fail the run when it takes longer than this")
-    parser.add_argument("--pair", action="store_true", help="run the two instance tests (starts a host and a client game)")
+    parser.add_argument("--pair", action="store_true", help="run the two game tests (starts a host and a client game)")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--mp", nargs="*", default=[], metavar="FLAG[=VALUE]", help="Together mod flags for the launched game (default: disable, because the mod blocks singleplayer)")
-    parser.add_argument("--mutate", default=None, help="break a behaviour on purpose to prove a test can fail (corrupt-save)")
+    parser.add_argument("--mutate", default=None, help="break a behaviour on purpose to prove a test can fail (corrupt-save, no-dune)")
     return parser.parse_args(argv)
 
 
@@ -46,15 +51,20 @@ def matching(suite, fragment):
     return selected
 
 
-def run_group(group, fragment=None):
-    suite = unittest.TestSuite()
-    loader = unittest.TestLoader()
-    for module in group["modules"]:
-        suite.addTests(loader.loadTestsFromName(module))
+def run_module(module, fragment, failfast):
+    suite = unittest.TestLoader().loadTestsFromName(module)
     if fragment:
         suite = matching(suite, fragment)
-    result = unittest.TextTestRunner(verbosity=2).run(suite)
-    return result
+    return unittest.TextTestRunner(verbosity=2, failfast=failfast).run(suite)
+
+
+def run_command(unit):
+    completed = subprocess.run(unit["command"], cwd=HERE)
+    return completed.returncode == 0
+
+
+def new_totals():
+    return {"run": 0, "failures": 0, "errors": 0, "skipped": 0, "expected_failures": 0, "commands": 0}
 
 
 def add_result(totals, result):
@@ -65,26 +75,48 @@ def add_result(totals, result):
     totals["expected_failures"] += len(result.expectedFailures)
 
 
-def run_owned_game_groups(groups, config, state, fragment, totals):
+def run_entry(entry, state, totals, arguments, timings):
     failed = []
-    lock = GameLock("run_tests.py owned groups").acquire() if groups else None
-    try:
-        for group in groups:
-            group_started = time.time()
-            result = run_group(group, fragment)
-            print("group %s: %d tests in %.0fs" % (group["id"], result.testsRun, time.time() - group_started))
+    for unit_entry in entry["units"]:
+        unit = unit_entry["unit"]
+        started = time.time()
+        if isinstance(unit, dict):
+            if arguments.match:
+                continue
+            passed = run_command(unit)
+            totals["commands"] += 1
+            totals["failures"] += 0 if passed else 1
+            ran_something = True
+        else:
+            result = run_module(unit, arguments.match, arguments.failfast)
             add_result(totals, result)
-            if fragment:
-                pass
-            elif result.wasSuccessful() and result.testsRun > len(result.skipped):
-                state[group["id"]] = selection.group_fingerprint(HERE, config, group)
-            elif not result.wasSuccessful():
-                failed.append(group["id"])
-                state.pop(group["id"], None)
-    finally:
-        if lock:
-            lock.release()
-    return state, failed
+            passed = result.wasSuccessful()
+            ran_something = result.testsRun > len(result.skipped)
+        timings.append((time.time() - started, selection.unit_id(unit)))
+        if arguments.match:
+            continue
+        if passed and ran_something:
+            selection.record_pass(state, unit_entry)
+        elif not passed:
+            selection.record_failure(state, unit_entry)
+            failed.append(selection.unit_id(unit))
+    return failed
+
+
+def describe_selection(selected, config, offline):
+    chosen = {entry["group"]["id"]: entry for entry in selected}
+    for group in config["groups"]:
+        entry = chosen.get(group["id"])
+        if offline and (group.get("needs_game") or group.get("owns_game")):
+            print("  %-16s needs the game, skipped" % group["id"])
+            continue
+        if entry is None:
+            print("  %-16s up to date" % group["id"])
+            continue
+        for unit_entry in entry["units"]:
+            reasons = unit_entry["reasons"]
+            shown = ", ".join(reasons[:3]) + (" and %d more" % (len(reasons) - 3) if len(reasons) > 3 else "")
+            print("  %-16s %s: %s" % (group["id"], selection.unit_id(unit_entry["unit"]), shown))
 
 
 def main(argv=None):
@@ -93,63 +125,68 @@ def main(argv=None):
     with open(CONFIG_PATH, encoding="utf-8") as handle:
         config = json.load(handle)
     state = selection.load_state(STATE_PATH)
-    chosen = selection.select(HERE, config, state, arguments.all, arguments.only)
-    skipped = [g["id"] for g in config["groups"] if g not in chosen]
-    print("selected: %s | skipped (unchanged since last pass): %s" % ([g["id"] for g in chosen], skipped))
-    if arguments.list or not chosen:
+    selected = selection.select_units(HERE, SEARCH_ROOTS, config, state, arguments.all, arguments.only, arguments.offline)
+    print("selection:")
+    describe_selection(selected, config, arguments.offline)
+    if arguments.list or not selected:
         return 0
     if arguments.pair:
         os.environ[rig.PAIR_ENABLED_ENVIRONMENT_VARIABLE] = "1"
     if arguments.mutate:
         os.environ[rig.MUTATION_ENVIRONMENT_VARIABLE] = arguments.mutate
 
-    port = arguments.port if arguments.port is not None else default_port()
+    totals = new_totals()
+    timings = []
+    failed = []
+    owned = [entry for entry in selected if entry["group"].get("owns_game")]
+    shared = [entry for entry in selected if not entry["group"].get("owns_game")]
+    needs_game = any(entry["group"].get("needs_game") for entry in shared)
     process = None
-    totals = {"run": 0, "failures": 0, "errors": 0, "skipped": 0, "expected_failures": 0}
-    state, owned_failures = run_owned_game_groups([g for g in chosen if g.get("owns_game")], config, state, arguments.match, totals)
-    chosen = [g for g in chosen if not g.get("owns_game")]
-    if any(g["needs_game"] for g in chosen):
-        if arguments.attach:
-            rig.bind(Game(port))
-        else:
-            lock = GameLock("run_tests.py shared session").acquire()
-            process = GameProcess(port, mp_arguments(_flags(arguments.mp or DEFAULT_MP_FLAGS)))
-            try:
-                print("launched:", process.start()["version"], "pid", process.pid)
-            except GameAlreadyRunning as exc:
-                lock.release()
-                print("not started:", exc)
-                return 2
-            rig.bind(process.game)
-
-    failed_groups = list(owned_failures)
+    lock = None
     try:
-        for group in chosen:
-            result = run_group(group, arguments.match)
-            add_result(totals, result)
-            if arguments.match:
-                pass
-            elif result.wasSuccessful() and result.testsRun > len(result.skipped):
-                state[group["id"]] = selection.group_fingerprint(HERE, config, group)
-            elif not result.wasSuccessful():
-                failed_groups.append(group["id"])
-                state.pop(group["id"], None)
+        if owned:
+            lock = GameLock("run_tests.py owned groups").acquire()
+            try:
+                for entry in owned:
+                    failed += run_entry(entry, state, totals, arguments, timings)
+            finally:
+                lock.release()
+                lock = None
+        if needs_game:
+            port = arguments.port if arguments.port is not None else default_port()
+            if arguments.attach:
+                rig.bind(Game(port))
+            else:
+                lock = GameLock("run_tests.py shared session").acquire()
+                process = GameProcess(port, mp_arguments(flags_from(arguments.mp or DEFAULT_MP_FLAGS)))
+                try:
+                    print("launched:", process.start()["version"], "pid", process.pid)
+                except GameAlreadyRunning as exc:
+                    print("not started:", exc)
+                    return 2
+                rig.bind(process.game)
+        for entry in shared:
+            failed += run_entry(entry, state, totals, arguments, timings)
     finally:
         if process is not None:
             process.close()
+        if lock is not None:
             lock.release()
         if not arguments.mutate and not arguments.match:
             selection.save_state(STATE_PATH, state)
     elapsed = time.time() - program_started
-    print("ran %(run)d tests: %(failures)d failures, %(errors)d errors, %(skipped)d skipped, %(expected_failures)d expected failures in %(seconds).0fs; failed groups: %(failed)s" % dict(
-        totals, seconds=elapsed, failed=failed_groups or "none"))
+    print("ran %(run)d tests and %(commands)d commands: %(failures)d failures, %(errors)d errors, %(skipped)d skipped, %(expected_failures)d expected failures in %(seconds).1fs; failed: %(failed)s" % dict(
+        totals, seconds=elapsed, failed=failed or "none"))
+    slow = sorted((item for item in timings if item[0] >= SLOW_UNIT_SECONDS), reverse=True)
+    for seconds, name in slow[:5]:
+        print("  slow: %s %.1fs" % (name, seconds))
     over_budget = arguments.budget_seconds is not None and elapsed > arguments.budget_seconds
     if arguments.budget_seconds is not None:
         print("time budget %.0fs: used %.0fs, %s" % (arguments.budget_seconds, elapsed, "OVER" if over_budget else "within"))
-    return 1 if failed_groups or over_budget else 0
+    return 1 if failed or over_budget else 0
 
 
-def _flags(items):
+def flags_from(items):
     flags = {}
     for item in items:
         name, _, value = item.partition("=")

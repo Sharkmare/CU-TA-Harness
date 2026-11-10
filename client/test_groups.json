@@ -1,91 +1,97 @@
 {
-  "shared": [
-    "casualtieslink/*.py",
-    "tests/rig.py",
-    "tests/__init__.py",
-    "../plugin/*.cs",
-    "../plugin/*.csproj",
-    "test_groups.json"
-  ],
   "groups": [
     {
       "id": "inert",
-      "watch": [
-        "tests/test_inert.py"
-      ],
       "modules": [
         "tests.test_inert"
       ],
       "needs_game": false,
-      "owns_game": true
+      "owns_game": true,
+      "watch_plugin": true
     },
     {
       "id": "pair",
-      "watch": [
-        "tests/test_pair.py",
-        "tests/test_pair_visuals.py"
-      ],
       "modules": [
         "tests.test_pair",
         "tests.test_pair_visuals"
       ],
       "needs_game": false,
-      "owns_game": true
+      "owns_game": true,
+      "watch_plugin": true
     },
     {
       "id": "link",
-      "watch": [
-        "tests/test_link.py"
-      ],
       "modules": [
         "tests.test_link"
       ],
-      "needs_game": true
+      "needs_game": true,
+      "watch_plugin": true
     },
     {
       "id": "run",
-      "watch": [
-        "tests/test_run.py"
-      ],
       "modules": [
         "tests.test_run"
       ],
-      "needs_game": true
+      "needs_game": true,
+      "watch_plugin": true
     },
     {
       "id": "world",
-      "watch": [
-        "tests/test_world.py"
-      ],
       "modules": [
         "tests.test_world"
       ],
-      "needs_game": true
+      "needs_game": true,
+      "watch_plugin": true
     },
     {
       "id": "client-offline",
-      "watch": [
-        "unit/*.py",
-        "run_tests.py",
-        "selection.py"
-      ],
       "modules": [
         "unit.test_parsing",
         "unit.test_selection",
         "unit.test_lock",
-        "unit.test_testcopy"
+        "unit.test_testcopy",
+        "unit.test_client_fake",
+        "unit.test_cli_fake",
+        "unit.test_launcher",
+        "unit.test_pair_fake"
       ],
       "needs_game": false
     },
     {
       "id": "repo-tools",
-      "watch": [
-        "../tools/*.py"
-      ],
       "modules": [
         "tools.test_check_commit_message"
       ],
       "needs_game": false
+    },
+    {
+      "id": "plugin-offline",
+      "needs_game": false,
+      "modules": [
+        {
+          "id": "plugin-tests",
+          "command": [
+            "dotnet",
+            "run",
+            "--project",
+            "../plugin-tests",
+            "-c",
+            "Release",
+            "--nologo",
+            "-v",
+            "q"
+          ],
+          "watch": [
+            "../plugin-tests/*.cs",
+            "../plugin-tests/*.csproj",
+            "../plugin/LaunchSwitch.cs",
+            "../plugin/KeyWindows.cs",
+            "../plugin/RequestGate.cs",
+            "../plugin/PathParser.cs",
+            "../plugin/EventBuffer.cs"
+          ]
+        }
+      ]
     }
   ]
 }
