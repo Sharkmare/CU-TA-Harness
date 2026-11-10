@@ -39,6 +39,21 @@
       "needs_game": true
     },
     {
+      "id": "client-offline",
+      "watch": [
+        "unit/*.py",
+        "run_tests.py",
+        "selection.py"
+      ],
+      "modules": [
+        "unit.test_parsing",
+        "unit.test_selection",
+        "unit.test_lock",
+        "unit.test_testcopy"
+      ],
+      "needs_game": false
+    },
+    {
       "id": "repo-tools",
       "watch": [
         "../tools/*.py"
