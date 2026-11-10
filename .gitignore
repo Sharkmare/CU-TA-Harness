@@ -6,3 +6,5 @@ __pycache__/
 .game.lock
 client/.test_state.json
 client/reports/
+plugin-tests/bin/
+plugin-tests/obj/
