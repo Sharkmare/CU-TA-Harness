@@ -20,6 +20,15 @@
       "watch_plugin": true
     },
     {
+      "id": "gates",
+      "modules": [
+        "tests.test_gates"
+      ],
+      "needs_game": false,
+      "owns_game": true,
+      "watch_plugin": true
+    },
+    {
       "id": "link",
       "modules": [
         "tests.test_link"
@@ -53,7 +62,9 @@
         "unit.test_client_fake",
         "unit.test_cli_fake",
         "unit.test_launcher",
-        "unit.test_pair_fake"
+        "unit.test_pair_fake",
+        "unit.test_instances",
+        "unit.test_observe"
       ],
       "needs_game": false
     },
