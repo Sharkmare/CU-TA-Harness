@@ -46,8 +46,11 @@ class InstanceFixture(unittest.TestCase):
         touch(os.path.join(plugins, "Together", "RefMagic.dll"), "fork only")
         touch(os.path.join(plugins, "CasualtiesLink", "CasualtiesLink.dll"), "link")
         touch(os.path.join(plugins, "CasualtiesSize", "CasualtiesSize.dll"), "leftover size")
+        self.fresh_link = os.path.join(base, "built", "CasualtiesLink.dll")
+        touch(self.fresh_link, "fresh link")
         self.environment = mock.patch.dict(os.environ, {instances.MODS_ROOT_ENVIRONMENT_VARIABLE: self.mods,
-                                                       instances.STOCK_DIR_ENVIRONMENT_VARIABLE: self.stock})
+                                                       instances.STOCK_DIR_ENVIRONMENT_VARIABLE: self.stock,
+                                                       instances.LINK_DLL_ENVIRONMENT_VARIABLE: self.fresh_link})
         self.environment.start()
         self.addCleanup(self.environment.stop)
         self.addCleanup(self.directory.cleanup)
@@ -72,9 +75,15 @@ class ConfigureInstanceTests(InstanceFixture):
         instances.configure_instance(self.copy, [], stock_together=False)
         self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "fork mp")
 
-    def test_the_link_plugin_is_never_touched(self):
+    def test_the_link_plugin_is_replaced_by_the_freshly_built_one(self):
         instances.configure_instance(self.copy, ["size", "loader"])
-        self.assertEqual(self.read(self.plugin_file("CasualtiesLink", "CasualtiesLink.dll")), "link")
+        self.assertEqual(self.read(self.plugin_file("CasualtiesLink", "CasualtiesLink.dll")), "fresh link")
+
+    def test_a_missing_built_link_plugin_is_an_error_that_says_how_to_build_it(self):
+        os.remove(self.fresh_link)
+        with self.assertRaises(FileNotFoundError) as caught:
+            instances.configure_instance(self.copy, [])
+        self.assertIn("dotnet build", str(caught.exception))
 
     def test_leftover_managed_plugins_are_removed_before_the_new_set_is_installed(self):
         instances.configure_instance(self.copy, [])

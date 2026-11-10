@@ -133,11 +133,34 @@ python run_tests.py --mutate no-dune --pair --only pair
 | pair | yes, its own two | a Dune host and client: both see both players, the handshake is accepted, every body is `charType` 2 with skills 17/18/0 and gain multipliers 1/1/0.5 on both games, injuries are not damped by default, and with the DuneHardy rule switched on (`--mp-setrule DuneHardy 1`) pain gain is 0.7 and bleeding gain 0.8, a stock 5.4.0 client is refused with "Version mismatch"; mixed characters in both directions; remote bodies look like the local body of that character; a pointing arm has the same angle on the other game |
 | client-offline | no | reply and argument parsing, `--mp` flags, the change selection, the game lock, the test copy, the transport and `Game` against a fake game server, the command line, the launcher with a fake process (refuses a second game, command line, save backup and restore, kill on timeout), `ProfileGuard` and `GamePair` with fakes (start order, cleanup after a failed client, restoring the profile) |
 | repo-tools | no | the commit message check |
+| gates | yes, its own two | the scenarios A to D above |
 | plugin-offline | no | `plugin-tests/`, a console program that compiles the Unity-free parts of the plugin and checks them: the launch switch, the key press windows (down, held and up frames), the request gate (host, `Origin`, header, method and path rules), the reflection path parser and the event buffer (numbering, filters, capacity, waiting reads, many threads) |
 
 The fake game server is `client/unit/fake_link.py`. It speaks the same protocol (envelope, header, `/describe`, `/events`) from a local port, so the client, the command line and the launcher are tested without Unity.
 
 The parts of the plugin that need Unity (the reflection walker, the commands, Harmony patches) can only be checked with the game, in the `link`, `run` and `world` groups.
+
+### Plugin gate scenarios (stock Together with and without our plugins)
+
+Our plugins (size, the character loader, the Avali pack) must behave as plain stock Together unless the host and the peer are both ours. `tests/test_gates.py` checks that with real games, one pair at a time, direct IP, no Steam, stock Together 5.4.0 on both. It runs only with `--pair`, in the group `gates`:
+
+```bash
+python run_tests.py --pair --only gates --match A_ --budget-seconds 400     # stock host, client with all plugins
+python run_tests.py --pair --only gates --match C_ --budget-seconds 400     # host with plugins, client without
+python run_tests.py --pair --only gates --match B_                          # both with plugins
+python run_tests.py --pair --only gates --match D_                          # different pack sets
+```
+
+| Scenario | Host | Client | Checked |
+|---|---|---|---|
+| A | stock, none of our plugins | size, loader, Avali | the client's size gate is `NotOurs` and the loader has no host; no error lines in either log; the client sent only the two hellos (counted by message hash, at most three each, none after the timeout) and nothing else; the host sent nothing; `size @m 2` works locally, `size HostD 2` is refused with the host-needs-the-plugin text and the host body does not change; the chosen Avali character is applied only on the client |
+| B | size, loader, Avali | size, loader, Avali | the gates confirm (`Confirmed`, `Welcomed`, host roster has a confirmed peer); a host `size ClientD 2` shows on the client body on both games; the client's Avali character is attached to its body on both games with the same `charType` and skills; after a disconnect and reconnect the client sees the current host size |
+| C | size, loader, Avali | none | the client has none of the types, its bodies are vanilla, nothing is sent to it (the host's custom message counters stay empty), the host has no confirmed peer, `size ClientD 2` changes nothing on the client; no error lines |
+| D | size, loader, sample pack | size, loader, Avali | both games keep running; the loader refuses the mismatching pack set on the client; size still confirms; the client's character is not shown on the host; no error lines |
+
+How it observes: the gate states are read from the plugins' own static fields through `get` with `nonpublic` (`CasualtiesSize.TogetherBridge.Gate.Host`, `CasualtiesCharacters.StockBridge.channel.HostState`). The link plugin counts the custom messages a game sends: it patches `Together.Net.Client_Send`, `Server_SendTo` and `Server_SendToClients` once Together has loaded, and `net_counters` returns the counts by direction and message hash. `message_hash` asks Together itself for the hash of a name, so counts are matched to names (`CasualtiesSize.Hello`) without knowing the wire layout. The plugins' debug logging is switched on in the game copies by writing their `.cfg` files; the shipped defaults are not changed.
+
+Setup is `casualtieslink/instances.py`. It makes two copies of the game folder once (`%TEMP%\CU-scenario-host` and `%TEMP%\CU-scenario-client`), and before every scenario rebuilds each copy's plugin set: it removes the plugin folders it manages, puts the stock Together folder in (without `Multiupdater.dll`), copies the freshly built link plugin, and installs the plugins that scenario names from the build outputs of the sibling folders (`size-mod/bin`, the newest release zip in `CU Characters/dist` and `CU Character Avali/dist`, the sample pack fixture). The operator's game folder is only read. The profile folder and PlayerPrefs are saved and restored around the whole run, and a persisted "Together disabled" preference is set back to enabled for the run. Paths come from the location of this repository (`CU_MODS_ROOT`, `CU_STOCK_TOGETHER_DIR` or `CU_STOCK_TOGETHER_DLL`, `CU_LINK_DLL` override them). Build the plugin first: `dotnet build plugin -c Release`.
 
 ### Checking that the tests can fail
 

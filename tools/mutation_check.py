@@ -12,15 +12,21 @@ MUTANTS_PATH = os.path.join(TOOLS, "mutants.json")
 COPIED_FOLDERS = ("plugin", "plugin-tests", "client", "tools")
 IGNORED = ("bin", "obj", "__pycache__", "reports", "*.dll", ".test_state.json")
 MUTANT_TIMEOUT_SECONDS = 90
-OFFLINE_PYTHON_MODULES = ("unit.test_parsing", "unit.test_selection", "unit.test_lock", "unit.test_testcopy",
-                          "unit.test_client_fake", "unit.test_cli_fake", "unit.test_launcher", "unit.test_pair_fake")
+GROUPS_RELATIVE = os.path.join("client", "test_groups.json")
+OFFLINE_GROUP = "client-offline"
+
+
+def offline_python_modules(root):
+    with open(os.path.join(root, GROUPS_RELATIVE), encoding="utf-8") as handle:
+        groups = json.load(handle)["groups"]
+    return next(group["modules"] for group in groups if group["id"] == OFFLINE_GROUP)
 
 
 def suite_command(suite, root):
     if suite == "plugin":
         return ["dotnet", "run", "--project", os.path.join(root, "plugin-tests"), "-c", "Release", "--nologo", "-v", "q"], root
     if suite == "python":
-        return [sys.executable, "-m", "unittest"] + list(OFFLINE_PYTHON_MODULES), os.path.join(root, "client")
+        return [sys.executable, "-m", "unittest"] + offline_python_modules(root), os.path.join(root, "client")
     raise ValueError("unknown suite %r" % suite)
 
 

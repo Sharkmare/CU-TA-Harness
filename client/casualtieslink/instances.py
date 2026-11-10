@@ -94,6 +94,24 @@ PLUGIN_INSTALLERS = {"size": install_size, "loader": install_loader, "avali": in
 PLUGIN_DEBUG_GUIDS = {"size": SIZE_GUID, "loader": LOADER_GUID}
 
 
+LINK_FOLDER = "CasualtiesLink"
+LINK_DLL_ENVIRONMENT_VARIABLE = "CU_LINK_DLL"
+
+
+def link_dll():
+    return os.environ.get(LINK_DLL_ENVIRONMENT_VARIABLE) or os.path.join(testcopy.REPO_ROOT, "plugin", "bin", "CasualtiesLink.dll")
+
+
+def install_link(copy):
+    source = link_dll()
+    if not os.path.isfile(source):
+        raise FileNotFoundError(source + " (build the plugin first: dotnet build plugin -c Release)")
+    folder = os.path.join(copy, PLUGINS_RELATIVE, LINK_FOLDER)
+    os.makedirs(folder, exist_ok=True)
+    shutil.copy2(source, folder)
+    return source
+
+
 def install_stock_together(copy):
     target = os.path.join(copy, PLUGINS_RELATIVE, TOGETHER_FOLDER)
     if os.path.isdir(target):
@@ -128,7 +146,7 @@ def configure_instance(copy, plugins, stock_together=True, debug=True):
     if unknown:
         raise ValueError("unknown plugin sets %s; known: %s" % (unknown, sorted(PLUGIN_INSTALLERS)))
     clear_managed_plugins(copy)
-    installed = {}
+    installed = {"link": install_link(copy)}
     if stock_together:
         installed["together"] = install_stock_together(copy)
     for name in plugins:
