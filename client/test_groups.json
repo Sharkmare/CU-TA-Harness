@@ -20,6 +20,19 @@
       "owns_game": true
     },
     {
+      "id": "pair",
+      "watch": [
+        "tests/test_pair.py",
+        "tests/test_pair_visuals.py"
+      ],
+      "modules": [
+        "tests.test_pair",
+        "tests.test_pair_visuals"
+      ],
+      "needs_game": false,
+      "owns_game": true
+    },
+    {
       "id": "link",
       "watch": [
         "tests/test_link.py"
