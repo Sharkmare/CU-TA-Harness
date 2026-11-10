@@ -7,9 +7,10 @@ Repository: https://github.com/Sharkmare/CU-TA-Harness
 The multiplayer tests use the Together mod: https://github.com/Sharkmare/casualties-together
 
 ```
-plugin/   CasualtiesLink, C# (netstandard2.1, BepInEx 5, Harmony)
-client/   the casualtieslink package, run_tests.py, tests/ (need the game), unit/ (no game)
-tools/    check_commit_message.py, used by .githooks/commit-msg
+plugin/        CasualtiesLink, C# (netstandard2.1, BepInEx 5, Harmony)
+plugin-tests/  offline tests of the plugin's Unity-free code (console program, .NET 9)
+client/        the casualtieslink package, run_tests.py, tests/ (need the game), unit/ (no game)
+tools/         check_commit_message.py (used by .githooks/commit-msg), mutation_check.py
 ```
 
 ## Build and install
@@ -92,12 +93,21 @@ The two games share one profile: the `LocalLow\Orsoniks\CasualtiesUnknown` folde
 
 ## Tests
 
+Most of the suite runs without the game. Start there:
+
 ```bash
 cd client
-python run_tests.py                       # groups whose files changed since they last passed
+python run_tests.py --offline            # never starts the game; about 5 seconds the first time, nothing when nothing changed
+python run_tests.py --offline --list     # what would run, and which changed file caused it
+python run_tests.py --offline --failfast
+```
+
+The game tests need a free machine, because the game is single instance and the runner takes `.game.lock`:
+
+```bash
+python run_tests.py                       # everything whose files changed since it last passed
 python run_tests.py --all
 python run_tests.py --only world
-python run_tests.py --list
 python run_tests.py --attach              # use a game that is already running with the link
 python run_tests.py --pair                # also run the host and client tests
 python run_tests.py --pair --only pair --budget-seconds 900
@@ -106,21 +116,40 @@ python run_tests.py --mutate corrupt-save --only world
 python run_tests.py --mutate no-dune --pair --only pair
 ```
 
-`run_tests.py` takes the game lock, starts the game once, runs the chosen groups from `test_groups.json`, closes the game and records a hash of each passing group's files in `client/.test_state.json`. A group that failed runs again next time. A change to a file under `shared` runs every group. A group that was only skipped is not recorded as passed. `--match` runs only tests whose id contains the text, and `--budget-seconds` makes the run fail if it takes longer. The summary line shows the total time.
+### What reruns
 
-Groups marked `owns_game` (`inert`, `pair`) start their own games and run before the shared session.
+`run_tests.py` works out, for each test module, which files it depends on: the module itself, every module of this repository that it imports (found by reading the imports, so nothing has to be listed by hand), and for the game groups the plugin sources. It stores a hash of each of those files when the module passes. The next run only runs the modules where a hash differs, and `--list` names the file. Examples: changing `casualtieslink/pair.py` runs `unit.test_pair_fake` and nothing else; changing a plugin file reruns the game groups and not the offline ones; changing line endings alone reruns nothing. A module that failed runs again until it passes, and a module that was only skipped is not recorded as passed. State lives in `client/.test_state.json`.
 
-| Group | What it checks |
-|---|---|
-| link | status, self description, unknown command, missing argument, missing header, `Origin` and `Host` refusals, `describe_type` |
-| run | each character spawns the right player object, starting outside the menu fails, quitting to the menu sends `scene_changed` |
-| world | spawn and pickup, the bandage minigame starts, damage with events and bleeding, console round trip and `heal`, writing then reading a field, stepping frames, injected keys move the player, a screenshot is a PNG, the pickup event, save and load |
-| inert | without the switch the port is closed, nothing listens, the DISABLED line is logged and no config file appears; with `--link-port` it answers and logs ENABLED |
-| pair | a Dune host and client: both see both players, the handshake is accepted, every body is `charType` 2 with skills 17/18/0 and gain multipliers 1/1/0.5 on both games, injuries are not damped by default, and with the DuneHardy rule switched on (`--mp-setrule DuneHardy 1`) pain gain is 0.7 and bleeding gain 0.8, a stock 5.4.0 client is refused with "Version mismatch"; mixed characters in both directions; remote bodies look like the local body of that character; a pointing arm has the same angle on the other game |
-| client-offline | parsing, `--mp` flags, selection, the game lock, the test copy |
-| repo-tools | the commit message check |
+`test_groups.json` lists the groups. A module is either a Python test module or a command with its own watch list (the plugin tests). `needs_game` groups share one game that the runner starts and closes. `owns_game` groups (`inert`, `pair`) start their own games and run first. `--match` runs only tests whose id contains the text, `--budget-seconds` fails the run when it takes longer, and the summary shows the total time and any module slower than five seconds.
 
-`--mutate` breaks something on purpose to show a test can fail. `corrupt-save` truncates the save before loading, and the save and load test fails. `no-dune` leaves out `--mp-setchar 2`, and five Dune checks fail (`charType` 0 instead of 2, skills 9/8/7 instead of 17/18/0, no pain damping).
+### The groups
+
+| Group | Needs the game | What it checks |
+|---|---|---|
+| link | yes | status, self description, unknown command, missing argument, missing header, `Origin` and `Host` refusals, `describe_type` |
+| run | yes | each character spawns the right player object, starting outside the menu fails, quitting to the menu sends `scene_changed` |
+| world | yes | spawn and pickup, the bandage minigame starts, damage with events and bleeding, console round trip and `heal`, writing then reading a field, stepping frames, injected keys move the player, a screenshot is a PNG, the pickup event, save and load |
+| inert | yes, its own | without the switch the port is closed, nothing listens, the DISABLED line is logged and no config file appears; with `--link-port` it answers and logs ENABLED |
+| pair | yes, its own two | a Dune host and client: both see both players, the handshake is accepted, every body is `charType` 2 with skills 17/18/0 and gain multipliers 1/1/0.5 on both games, injuries are not damped by default, and with the DuneHardy rule switched on (`--mp-setrule DuneHardy 1`) pain gain is 0.7 and bleeding gain 0.8, a stock 5.4.0 client is refused with "Version mismatch"; mixed characters in both directions; remote bodies look like the local body of that character; a pointing arm has the same angle on the other game |
+| client-offline | no | reply and argument parsing, `--mp` flags, the change selection, the game lock, the test copy, the transport and `Game` against a fake game server, the command line, the launcher with a fake process (refuses a second game, command line, save backup and restore, kill on timeout), `ProfileGuard` and `GamePair` with fakes (start order, cleanup after a failed client, restoring the profile) |
+| repo-tools | no | the commit message check |
+| plugin-offline | no | `plugin-tests/`, a console program that compiles the Unity-free parts of the plugin and checks them: the launch switch, the key press windows (down, held and up frames), the request gate (host, `Origin`, header, method and path rules), the reflection path parser and the event buffer (numbering, filters, capacity, waiting reads, many threads) |
+
+The fake game server is `client/unit/fake_link.py`. It speaks the same protocol (envelope, header, `/describe`, `/events`) from a local port, so the client, the command line and the launcher are tested without Unity.
+
+The parts of the plugin that need Unity (the reflection walker, the commands, Harmony patches) can only be checked with the game, in the `link`, `run` and `world` groups.
+
+### Checking that the tests can fail
+
+`tools/mutation_check.py` breaks the code on purpose in scratch copies, one change at a time (the list is `tools/mutants.json`), runs the offline tests against each copy and reports any change they did not notice. For example a second game being allowed, the save backup left behind, the plugin accepting an empty `Origin`, a held key one frame short.
+
+```bash
+python tools/mutation_check.py                  # all mutants, about 4 minutes
+python tools/mutation_check.py --suite plugin   # only the plugin tests
+python tools/mutation_check.py --match Origin
+```
+
+`--mutate` breaks the running game setup instead. `corrupt-save` truncates the save before loading, and the save and load test fails. `no-dune` leaves out `--mp-setchar 2`, and five Dune checks fail (`charType` 0 instead of 2, skills 9/8/7 instead of 17/18/0, no pain damping).
 
 The stock client test needs `CU_STOCK_TOGETHER_DLL` to point at a stock 5.4.0 `CasualtiesMP.dll`, otherwise it is skipped.
 
