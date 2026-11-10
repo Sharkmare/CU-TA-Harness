@@ -16,6 +16,8 @@ PLUGINS_RELATIVE = os.path.join("BepInEx", "plugins")
 CONFIG_RELATIVE = os.path.join("BepInEx", "config")
 TOGETHER_FOLDER = "Together"
 STOCK_EXCLUDED_FILES = ("Multiupdater.dll",)
+FORK_ZIP_ENVIRONMENT_VARIABLE = "CU_FORK_TOGETHER_ZIP"
+TOGETHER_IN_ZIP = "BepInEx/plugins/Together/"
 SIZE_FOLDER = "CasualtiesSize"
 LOADER_FOLDER = "CasualtiesCharacters"
 AVALI_FOLDER = "CasualtiesCharacters-Avali"
@@ -123,6 +125,33 @@ def install_stock_together(copy):
     return source
 
 
+def fork_zip():
+    explicit = os.environ.get(FORK_ZIP_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(os.path.expanduser("~"), "Downloads", "CasualtiesTogether-5.4.1-dune.3.zip")
+
+
+def install_fork_together(copy):
+    archive_path = fork_zip()
+    if not os.path.isfile(archive_path):
+        raise FileNotFoundError(archive_path)
+    target = os.path.join(copy, PLUGINS_RELATIVE, TOGETHER_FOLDER)
+    if os.path.isdir(target):
+        shutil.rmtree(target)
+    os.makedirs(target)
+    with zipfile.ZipFile(archive_path) as archive:
+        for name in archive.namelist():
+            if name.startswith(TOGETHER_IN_ZIP) and not name.endswith("/"):
+                destination = os.path.join(target, name[len(TOGETHER_IN_ZIP):])
+                os.makedirs(os.path.dirname(destination), exist_ok=True)
+                with open(destination, "wb") as handle:
+                    handle.write(archive.read(name))
+    if not os.path.isfile(os.path.join(target, "CasualtiesMP.dll")):
+        raise FileNotFoundError("no CasualtiesMP.dll under " + TOGETHER_IN_ZIP + " in " + archive_path)
+    return archive_path
+
+
 def clear_managed_plugins(copy):
     for name in MANAGED_FOLDERS:
         folder = os.path.join(copy, PLUGINS_RELATIVE, name)
@@ -141,14 +170,18 @@ def write_debug_config(copy, guid):
         handle.write(DEBUG_CONFIG_TEXT)
 
 
-def configure_instance(copy, plugins, stock_together=True, debug=True):
+def configure_instance(copy, plugins, together="stock", debug=True):
     unknown = [name for name in plugins if name not in PLUGIN_INSTALLERS]
     if unknown:
         raise ValueError("unknown plugin sets %s; known: %s" % (unknown, sorted(PLUGIN_INSTALLERS)))
     clear_managed_plugins(copy)
     installed = {"link": install_link(copy)}
-    if stock_together:
+    if together == "stock":
         installed["together"] = install_stock_together(copy)
+    elif together == "fork":
+        installed["together"] = install_fork_together(copy)
+    elif together != "keep":
+        raise ValueError("together must be stock, fork or keep, not %r" % together)
     for name in plugins:
         installed[name] = PLUGIN_INSTALLERS[name](copy)
         if debug and name in PLUGIN_DEBUG_GUIDS:
@@ -196,9 +229,9 @@ class ScenarioGames:
         ensure_mp_enabled()
         self.prepared = True
 
-    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None):
-        configure_instance(self.host_copy, host_plugins)
-        configure_instance(self.client_copy, client_plugins)
+    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock"):
+        configure_instance(self.host_copy, host_plugins, together=together)
+        configure_instance(self.client_copy, client_plugins, together=together)
         self.host = GameProcess(HOST_PORT, host_arguments(host_extra), directory=self.host_copy, manage_save=False,
                                 window_args=["-screen-fullscreen", "0", "-screen-width", "640", "-screen-height", "360"])
         self.client = GameProcess(CLIENT_PORT, client_arguments(client_extra), directory=self.client_copy, manage_save=False,

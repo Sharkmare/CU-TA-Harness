@@ -35,6 +35,29 @@ class SentSummaryTests(unittest.TestCase):
         self.assertEqual(observe.sent_by_direction({}, {}), {})
 
 
+class NamesSeenTests(unittest.TestCase):
+    def test_only_names_with_the_prefix_count(self):
+        names = {"aa": "CasualtiesSize.Hello", "bb": "CasualtiesCharacters.Hello", "cc": "Other.Thing"}
+        counts = {"toHost:aa": 3, "toPlayer:bb": 1, "toHost:cc": 2, "toHost:dd": 4}
+        self.assertEqual(observe.names_seen(counts, names, "CasualtiesCharacters."), {"CasualtiesCharacters.Hello"})
+        self.assertEqual(observe.names_seen(counts, names, "Nothing."), set())
+
+    def test_unknown_hashes_are_not_matched_to_a_prefix(self):
+        self.assertEqual(observe.names_seen({"toHost:zz": 1}, {}, "X."), set())
+
+
+class SkinApplierTests(unittest.TestCase):
+    def test_the_count_comes_from_find(self):
+        with FakeLink({"find": [{"object": {"id": 1}}, {"object": {"id": 2}}]}) as link:
+            self.assertEqual(observe.skin_appliers(Game(link.port)), 2)
+
+    def test_a_missing_type_counts_as_none(self):
+        def missing(arguments):
+            raise FakeFailure("no type named 'SkinApplier'")
+        with FakeLink({"find": missing}) as link:
+            self.assertEqual(observe.skin_appliers(Game(link.port)), 0)
+
+
 class GateReadTests(unittest.TestCase):
     def test_a_state_is_read_through_a_nonpublic_path(self):
         with FakeLink({"get": lambda args: "NotOurs"}) as link:

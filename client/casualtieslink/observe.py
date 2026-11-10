@@ -48,5 +48,22 @@ def size_gate_peers(game):
     return reply if isinstance(reply, dict) else {}
 
 
+def names_seen(counts, names_by_hash, prefix):
+    seen = set()
+    for key in counts:
+        digest = key.partition(":")[2]
+        name = names_by_hash.get(digest)
+        if name is not None and name.startswith(prefix):
+            seen.add(name)
+    return seen
+
+
+def skin_appliers(game):
+    try:
+        return len(game.call("find", type="SkinApplier"))
+    except LinkError:
+        return 0
+
+
 def message_hashes(game, names):
     return {game.call("message_hash", name=name)["hash"]: name for name in names}

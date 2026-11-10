@@ -72,8 +72,29 @@ class ConfigureInstanceTests(InstanceFixture):
         self.assertFalse(os.path.exists(self.plugin_file("Together", "RefMagic.dll")), "fork only files must not survive")
 
     def test_together_is_left_alone_when_stock_is_not_asked_for(self):
-        instances.configure_instance(self.copy, [], stock_together=False)
+        instances.configure_instance(self.copy, [], together="keep")
         self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "fork mp")
+
+    def test_the_fork_build_comes_from_the_package_zip_and_replaces_the_folder(self):
+        package = os.path.join(self.directory.name, "fork.zip")
+        make_zip(package, {"BepInEx/plugins/Together/CasualtiesMP.dll": "fork 5.4.1", "BepInEx/plugins/Together/extra.dll": "extra", "INSTALL.txt": "text"})
+        with mock.patch.dict(os.environ, {instances.FORK_ZIP_ENVIRONMENT_VARIABLE: package}):
+            instances.configure_instance(self.copy, [], together="fork")
+        self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "fork 5.4.1")
+        self.assertTrue(os.path.exists(self.plugin_file("Together", "extra.dll")))
+        self.assertFalse(os.path.exists(self.plugin_file("Together", "RefMagic.dll")), "old files must not survive")
+        self.assertFalse(os.path.exists(os.path.join(self.copy, "INSTALL.txt")), "only the Together folder is taken from the zip")
+
+    def test_a_fork_zip_without_the_mod_dll_is_an_error(self):
+        package = os.path.join(self.directory.name, "bad.zip")
+        make_zip(package, {"INSTALL.txt": "text"})
+        with mock.patch.dict(os.environ, {instances.FORK_ZIP_ENVIRONMENT_VARIABLE: package}):
+            with self.assertRaises(FileNotFoundError):
+                instances.configure_instance(self.copy, [], together="fork")
+
+    def test_an_unknown_together_choice_is_refused(self):
+        with self.assertRaises(ValueError):
+            instances.configure_instance(self.copy, [], together="newest")
 
     def test_the_link_plugin_is_replaced_by_the_freshly_built_one(self):
         instances.configure_instance(self.copy, ["size", "loader"])
