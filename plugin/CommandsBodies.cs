@@ -20,6 +20,7 @@ namespace CasualtiesLink
                     {
                         { "object", Reflect.Handle(body) }, { "charType", body.charType },
                         { "root", body.transform.root.name }, { "local", body == local },
+                        { "active", body.gameObject.activeInHierarchy }, { "parent", body.transform.parent != null ? body.transform.parent.name : null },
                     });
                 }
                 return rows;
@@ -55,6 +56,8 @@ namespace CasualtiesLink
                     { "root", root.name }, { "charType", body.charType }, { "sprites", sprites }, { "limbs", limbs },
                     { "gunangle", body.armsAnimator != null ? (object)body.armsAnimator.GetFloat(GunAngleParameter) : null },
                     { "bodyController", ControllerName(body.bodyAnimator) }, { "armsController", ControllerName(body.armsAnimator) },
+                    { "bodyAnimatorId", AnimatorId(body.bodyAnimator) }, { "armsAnimatorId", AnimatorId(body.armsAnimator) },
+                    { "bodyAnimatorPath", AnimatorPath(body.bodyAnimator, root) }, { "armsAnimatorPath", AnimatorPath(body.armsAnimator, root) },
                 };
             }, false, Arg("id", "int", "Instance id of a Body handle from 'bodies'"), Arg("local", "bool", "Use the local player's Body", false, false));
         }
@@ -70,6 +73,17 @@ namespace CasualtiesLink
             Body body = Reflect.ResolveTarget("id:" + id, out _) as Body;
             if (body == null) throw new Exception("id " + id + " is not a Body");
             return body;
+        }
+
+        private static object AnimatorId(Animator animator)
+        {
+            return animator != null ? (object)animator.GetInstanceID() : null;
+        }
+
+        private static string AnimatorPath(Animator animator, Transform root)
+        {
+            if (animator == null) return null;
+            return animator.transform.IsChildOf(root) ? RelativePath(animator.transform, root) : "<outside " + root.name + ">";
         }
 
         private static string ControllerName(Animator animator)

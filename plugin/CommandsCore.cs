@@ -108,6 +108,13 @@ namespace CasualtiesLink
             }, false, Arg("line", "string", "Command line, e.g. 'spawn bandage' or 'heal'", true),
                 Arg("keep_open", "bool", "Leave the console window open if the command opened it. Cheat commands open it, and an open console blocks gameplay input, so it is closed by default.", false, false));
 
+            Add("close_console", "Closes the game console window if it is open. An open console blocks player input, and the Together mod can open it at start.", args =>
+            {
+                bool wasOpen = ConsoleScript.instance != null && ConsoleScript.instance.active;
+                if (wasOpen) ConsoleScript.instance.ToggleActiveState();
+                return new Dictionary<string, object> { { "wasOpen", wasOpen } };
+            });
+
             Add("console_log", "The game's own console history (last 100 lines).", args =>
             {
                 ConsoleScript.CheckForConsole();
