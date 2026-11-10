@@ -9,6 +9,36 @@
   ],
   "groups": [
     {
+      "id": "link",
+      "watch": [
+        "tests/test_link.py"
+      ],
+      "modules": [
+        "tests.test_link"
+      ],
+      "needs_game": true
+    },
+    {
+      "id": "run",
+      "watch": [
+        "tests/test_run.py"
+      ],
+      "modules": [
+        "tests.test_run"
+      ],
+      "needs_game": true
+    },
+    {
+      "id": "world",
+      "watch": [
+        "tests/test_world.py"
+      ],
+      "modules": [
+        "tests.test_world"
+      ],
+      "needs_game": true
+    },
+    {
       "id": "repo-tools",
       "watch": [
         "../tools/*.py"
