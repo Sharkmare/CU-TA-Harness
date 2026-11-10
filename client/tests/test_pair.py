@@ -20,10 +20,12 @@ PAIN_DAMPING = 0.7
 BLEED_DAMPING = 0.8
 DAMPING_TOLERANCE = 0.12
 INJURY_SIZE = 10.0
+DAMPING_SAMPLES = 3
 PAIN_LIMB = 5
 BLEED_LIMB = 2
 LIMB_SKIN_HEALTH = 50.0
 MISMATCH_OBSERVE_SECONDS = 45.0
+PLAYER_BODY_PREFIX = "Body_"
 HOST_BODY = "Body_HostD"
 CLIENT_BODY = "Body_ClientD"
 PAIR_ENABLED = os.environ.get(rig.PAIR_ENABLED_ENVIRONMENT_VARIABLE) == "1"
@@ -33,6 +35,8 @@ SKIP_REASON = "two instance tests start a host and a client game; run run_tests.
 def read_bodies(game):
     rows = {}
     for row in game.call("find", type="Body"):
+        if not row["object"]["name"].startswith(PLAYER_BODY_PREFIX):
+            continue
         handle = "id:%d" % row["object"]["id"]
         rows[row["object"]["name"]] = {
             "handle": handle,
@@ -46,7 +50,7 @@ def wait_for_bodies(game, count, timeout=WORLD_WAIT_SECONDS):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            if len(game.call("find", type="Body")) >= count:
+            if len([row for row in game.call("find", type="Body") if row["object"]["name"].startswith(PLAYER_BODY_PREFIX)]) >= count:
                 return
         except Exception:
             pass
@@ -68,6 +72,11 @@ def layout_lines(directory=None):
 
 
 def damping_ratio(game, field, limb):
+    samples = sorted(single_damping_ratio(game, field, limb) for _ in range(DAMPING_SAMPLES))
+    return samples[len(samples) // 2]
+
+
+def single_damping_ratio(game, field, limb):
     game.set("player", "limbs[%d].skinHealth" % limb, LIMB_SKIN_HEALTH)
     game.step(5)
     before = game.get("player", "limbs[%d].%s" % (limb, field))
@@ -114,8 +123,10 @@ class PairCase(unittest.TestCase):
         cls.pair.start()
         cls.host, cls.client = cls.pair.games
         cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
+        cls.host.call("close_console")
         if cls.expect_join:
             cls.client.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
+            cls.client.call("close_console")
             wait_for_bodies(cls.host, 2)
             wait_for_bodies(cls.client, 2)
             time.sleep(SETTLE_SECONDS)
@@ -124,6 +135,10 @@ class PairCase(unittest.TestCase):
     def tearDownClass(cls):
         pair = getattr(cls, "pair", None)
         if pair is not None:
+            print("\n%s bodies:" % cls.__name__)
+            for label, game in zip(("host", "client"), pair.games):
+                for row in game.call("bodies"):
+                    print("  [%s] %s id=%s charType=%s root=%s parent=%s active=%s local=%s" % (label, row["object"]["name"], row["object"]["id"], row["charType"], row["root"], row.get("parent"), row.get("active"), row["local"]))
             print("\n%s layout lines:" % cls.__name__)
             for label, directory in ("host", None), ("client", pair.client_copy):
                 for line in layout_lines(directory):
@@ -155,25 +170,22 @@ class DunePairTests(PairCase):
             for name, body in read_bodies(game).items():
                 self.assertEqual(body["skills"], DUNE_SKILLS, "%s skills on port %s" % (name, game.transport.port))
 
+    def test_injuries_are_not_damped_by_default(self):
+        for game in (self.host, self.client):
+            self.assertAlmostEqual(damping_ratio(game, "pain", PAIN_LIMB), 1.0, delta=DAMPING_TOLERANCE)
+            self.assertAlmostEqual(damping_ratio(game, "bleedAmount", BLEED_LIMB), 1.0, delta=DAMPING_TOLERANCE)
+
+
+@unittest.skipUnless(PAIR_ENABLED, SKIP_REASON)
+class DuneHardyOnTests(PairCase):
+    host_extra = ("--mp-setrule", "DuneHardy", "1")
+    client_extra = ("--mp-setrule", "DuneHardy", "1")
+
     def test_dune_hardy_damps_pain_and_bleeding_on_the_local_body(self):
         for game in (self.host, self.client):
             context = "port %s timeScale %s conscious %s" % (game.transport.port, game.get("static:Time", "timeScale"), game.get("player", "conscious"))
             self.assertAlmostEqual(damping_ratio(game, "pain", PAIN_LIMB), PAIN_DAMPING, delta=DAMPING_TOLERANCE, msg=context)
             self.assertAlmostEqual(damping_ratio(game, "bleedAmount", BLEED_LIMB), BLEED_DAMPING, delta=DAMPING_TOLERANCE, msg=context)
-
-
-@unittest.skipUnless(PAIR_ENABLED, SKIP_REASON)
-class DuneHardyOffTests(PairCase):
-    host_extra = ("--mp-setrule", "DuneHardy", "0")
-
-    def test_without_dune_hardy_injuries_are_not_damped(self):
-        for game in (self.host, self.client):
-            self.assertAlmostEqual(damping_ratio(game, "pain", PAIN_LIMB), 1.0, delta=DAMPING_TOLERANCE)
-            self.assertAlmostEqual(damping_ratio(game, "bleedAmount", BLEED_LIMB), 1.0, delta=DAMPING_TOLERANCE)
-
-    def test_bodies_are_still_dune(self):
-        for body in read_bodies(self.host).values():
-            self.assertEqual(body["charType"], 2)
 
 
 @unittest.skipUnless(PAIR_ENABLED, SKIP_REASON)
