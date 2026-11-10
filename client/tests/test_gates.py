@@ -96,6 +96,7 @@ class ScenarioCase(unittest.TestCase):
     host_plugins = ()
     client_plugins = ()
     choose_character = False
+    together = "stock"
 
     @classmethod
     def setUpClass(cls):
@@ -105,7 +106,7 @@ class ScenarioCase(unittest.TestCase):
         if cls.choose_character:
             def hook(game):
                 cls.chosen_slot = choose_loader_character(game)
-        cls.host, cls.client = GAMES.start(list(cls.host_plugins), list(cls.client_plugins), after_client_link=hook)
+        cls.host, cls.client = GAMES.start(list(cls.host_plugins), list(cls.client_plugins), after_client_link=hook, together=cls.together)
         cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
         cls.client.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
         wait_for_bodies(cls.host, 2)
@@ -207,6 +208,29 @@ class A_StockHostClientWithPluginsTests(ScenarioCase):
         self.assertAlmostEqual(height(self.client, HOST_BODY), host_before, delta=SIZE_TOLERANCE)
         self.assertAlmostEqual(height(self.host, HOST_BODY), host_before, delta=SIZE_TOLERANCE)
 
+
+
+class StockFlavourMixin:
+    flavour = None
+
+    def test_the_switch_picked_the_flavour_on_both_games(self):
+        for which in ("host", "client"):
+            lines = observe.flavour_switch_lines(GAMES.log_text(which))
+            self.assertEqual(len(lines), 1, "%s: %s" % (which, lines))
+            self.assertEqual(lines[0]["flavour"], self.flavour, lines)
+            self.assertEqual(observe.together_version(GAMES.log_text(which)), self.flavour.rpartition("-")[2], which)
+
+
+@unittest.skipUnless(PAIR_ENABLED, SKIP_REASON)
+class A_Stock550Tests(StockFlavourMixin, A_StockHostClientWithPluginsTests):
+    together = "flavour:stock-5.5.0"
+    flavour = "stock-5.5.0"
+
+
+@unittest.skipUnless(PAIR_ENABLED, SKIP_REASON)
+class A_Stock540Tests(StockFlavourMixin, A_StockHostClientWithPluginsTests):
+    together = "flavour:stock-5.4.0"
+    flavour = "stock-5.4.0"
 
 
 @unittest.skipUnless(PAIR_ENABLED, SKIP_REASON)

@@ -92,6 +92,44 @@ class ConfigureInstanceTests(InstanceFixture):
             with self.assertRaises(FileNotFoundError):
                 instances.configure_instance(self.copy, [], together="fork")
 
+    def flavour_package(self):
+        package = os.path.join(self.directory.name, "flavours.zip")
+        make_zip(package, {
+            "BepInEx/patchers/CT_FlavourSwitch.dll": "switch",
+            "BepInEx/together-flavours/fork.manifest": "m",
+            "BepInEx/together-flavours/fork/CasualtiesMP.dll": "fork",
+            "BepInEx/plugins/Together/CasualtiesMP.dll": "fork",
+            "INSTALL.txt": "text",
+        })
+        return package
+
+    def test_the_flavour_package_installs_patcher_flavours_and_active_build(self):
+        os.makedirs(os.path.join(self.copy, "BepInEx", "together-flavours", "old"))
+        with mock.patch.dict(os.environ, {instances.FLAVOUR_ZIP_ENVIRONMENT_VARIABLE: self.flavour_package()}):
+            instances.configure_instance(self.copy, [], together="flavour:stock-5.5.0")
+        self.assertEqual(self.read(os.path.join(self.copy, "BepInEx", "patchers", "CT_FlavourSwitch.dll")), "switch")
+        self.assertEqual(self.read(os.path.join(self.copy, "BepInEx", "together-flavours", "fork", "CasualtiesMP.dll")), "fork")
+        self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "fork")
+        self.assertFalse(os.path.exists(os.path.join(self.copy, "BepInEx", "together-flavours", "old")), "stale flavours must go")
+        self.assertFalse(os.path.exists(os.path.join(self.copy, "INSTALL.txt")))
+
+    def test_a_flavour_package_without_the_patcher_is_an_error(self):
+        package = os.path.join(self.directory.name, "nopatcher.zip")
+        make_zip(package, {"BepInEx/plugins/Together/CasualtiesMP.dll": "fork"})
+        with mock.patch.dict(os.environ, {instances.FLAVOUR_ZIP_ENVIRONMENT_VARIABLE: package}):
+            with self.assertRaises(FileNotFoundError):
+                instances.configure_instance(self.copy, [], together="flavour:fork")
+
+    def test_the_launch_option_follows_the_flavour_and_only_then(self):
+        self.assertEqual(instances.flavour_arguments("flavour:stock-5.4.0"), ["--mp-flavour", "stock-5.4.0"])
+        self.assertEqual(instances.flavour_arguments("stock"), [])
+        self.assertEqual(instances.flavour_arguments("fork"), [])
+
+    def test_a_malformed_flavour_name_is_refused(self):
+        for bad in ("flavour:", "flavour:Stock 5", "flavour:a/b"):
+            with self.assertRaises(ValueError, msg=bad):
+                instances.flavour_name(bad)
+
     def test_an_unknown_together_choice_is_refused(self):
         with self.assertRaises(ValueError):
             instances.configure_instance(self.copy, [], together="newest")

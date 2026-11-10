@@ -18,6 +18,12 @@ TOGETHER_FOLDER = "Together"
 STOCK_EXCLUDED_FILES = ("Multiupdater.dll",)
 FORK_ZIP_ENVIRONMENT_VARIABLE = "CU_FORK_TOGETHER_ZIP"
 TOGETHER_IN_ZIP = "BepInEx/plugins/Together/"
+FLAVOUR_ZIP_ENVIRONMENT_VARIABLE = "CU_FLAVOUR_ZIP"
+FLAVOUR_PREFIX = "flavour:"
+FLAVOUR_OPTION = "--mp-flavour"
+FLAVOUR_PATCHER = os.path.join("BepInEx", "patchers", "CT_FlavourSwitch.dll")
+FLAVOUR_FOLDER = os.path.join("BepInEx", "together-flavours")
+FLAVOUR_PACKAGE_PARTS = ("BepInEx/patchers/", "BepInEx/together-flavours/", "BepInEx/plugins/Together/")
 SIZE_FOLDER = "CasualtiesSize"
 LOADER_FOLDER = "CasualtiesCharacters"
 AVALI_FOLDER = "CasualtiesCharacters-Avali"
@@ -152,6 +158,50 @@ def install_fork_together(copy):
     return archive_path
 
 
+def flavour_zip():
+    explicit = os.environ.get(FLAVOUR_ZIP_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(os.path.expanduser("~"), "Downloads", "CasualtiesTogether-5.4.1+4.zip")
+
+
+def flavour_name(together):
+    if isinstance(together, str) and together.startswith(FLAVOUR_PREFIX):
+        name = together[len(FLAVOUR_PREFIX):]
+        if not re.fullmatch(r"[a-z0-9.\-]+", name):
+            raise ValueError("not a flavour name: %r" % name)
+        return name
+    return None
+
+
+def flavour_arguments(together):
+    name = flavour_name(together)
+    return [FLAVOUR_OPTION, name] if name else []
+
+
+def install_flavour_package(copy):
+    archive_path = flavour_zip()
+    if not os.path.isfile(archive_path):
+        raise FileNotFoundError(archive_path)
+    for relative in (os.path.join(PLUGINS_RELATIVE, TOGETHER_FOLDER), FLAVOUR_FOLDER):
+        folder = os.path.join(copy, relative)
+        if os.path.isdir(folder):
+            shutil.rmtree(folder)
+    patcher = os.path.join(copy, FLAVOUR_PATCHER)
+    if os.path.exists(patcher):
+        os.remove(patcher)
+    with zipfile.ZipFile(archive_path) as archive:
+        for name in archive.namelist():
+            if name.startswith(FLAVOUR_PACKAGE_PARTS) and not name.endswith("/"):
+                destination = os.path.join(copy, *name.split("/"))
+                os.makedirs(os.path.dirname(destination), exist_ok=True)
+                with open(destination, "wb") as handle:
+                    handle.write(archive.read(name))
+    if not os.path.isfile(patcher):
+        raise FileNotFoundError("no " + FLAVOUR_PATCHER + " in " + archive_path)
+    return archive_path
+
+
 def clear_managed_plugins(copy):
     for name in MANAGED_FOLDERS:
         folder = os.path.join(copy, PLUGINS_RELATIVE, name)
@@ -180,8 +230,10 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stock_together(copy)
     elif together == "fork":
         installed["together"] = install_fork_together(copy)
+    elif flavour_name(together):
+        installed["together"] = install_flavour_package(copy)
     elif together != "keep":
-        raise ValueError("together must be stock, fork or keep, not %r" % together)
+        raise ValueError("together must be stock, fork, keep or flavour:<name>, not %r" % together)
     for name in plugins:
         installed[name] = PLUGIN_INSTALLERS[name](copy)
         if debug and name in PLUGIN_DEBUG_GUIDS:
@@ -229,9 +281,13 @@ class ScenarioGames:
         ensure_mp_enabled()
         self.prepared = True
 
-    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock"):
-        configure_instance(self.host_copy, host_plugins, together=together)
-        configure_instance(self.client_copy, client_plugins, together=together)
+    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock", host_together=None, client_together=None):
+        host_together = host_together or together
+        client_together = client_together or together
+        configure_instance(self.host_copy, host_plugins, together=host_together)
+        configure_instance(self.client_copy, client_plugins, together=client_together)
+        host_extra = list(host_extra) + flavour_arguments(host_together)
+        client_extra = list(client_extra) + flavour_arguments(client_together)
         self.host = GameProcess(HOST_PORT, host_arguments(host_extra), directory=self.host_copy, manage_save=False,
                                 window_args=["-screen-fullscreen", "0", "-screen-width", "640", "-screen-height", "360"])
         self.client = GameProcess(CLIENT_PORT, client_arguments(client_extra), directory=self.client_copy, manage_save=False,

@@ -48,6 +48,23 @@ def size_gate_peers(game):
     return reply if isinstance(reply, dict) else {}
 
 
+FLAVOUR_LINE_PATTERN = re.compile(r"CT_FlavourSwitch\]\s*(.*)")
+TOGETHER_LOADED_PATTERN = re.compile(r"Plugin CasualtiesMP version (\S+) is loaded")
+
+
+def flavour_switch_lines(log_text):
+    lines = []
+    for match in FLAVOUR_LINE_PATTERN.finditer(log_text):
+        fields = dict(pair.split("=", 1) for pair in match.group(1).split() if "=" in pair)
+        lines.append(fields)
+    return lines
+
+
+def together_version(log_text):
+    match = TOGETHER_LOADED_PATTERN.search(log_text)
+    return match.group(1) if match else None
+
+
 def names_seen(counts, names_by_hash, prefix):
     seen = set()
     for key in counts:

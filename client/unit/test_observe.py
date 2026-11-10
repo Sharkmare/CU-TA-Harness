@@ -35,6 +35,27 @@ class SentSummaryTests(unittest.TestCase):
         self.assertEqual(observe.sent_by_direction({}, {}), {})
 
 
+class FlavourLogTests(unittest.TestCase):
+    LOG = (
+        "[Info   :CT_FlavourSwitch] flavour=stock-5.4.0 why=command line action=Swapped active=stock-5.4.0 installed=fork,stock-5.4.0\n"
+        "[Info   :  Together] Plugin CasualtiesMP version 5.4.0 is loaded!\n"
+    )
+
+    def test_the_switch_line_is_parsed_into_fields(self):
+        lines = observe.flavour_switch_lines(self.LOG)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["flavour"], "stock-5.4.0")
+        self.assertEqual(lines[0]["action"], "Swapped")
+        self.assertEqual(lines[0]["installed"], "fork,stock-5.4.0")
+
+    def test_a_log_without_the_switch_has_no_lines(self):
+        self.assertEqual(observe.flavour_switch_lines("nothing here"), [])
+
+    def test_the_loaded_together_version_is_read(self):
+        self.assertEqual(observe.together_version(self.LOG), "5.4.0")
+        self.assertIsNone(observe.together_version("none"))
+
+
 class NamesSeenTests(unittest.TestCase):
     def test_only_names_with_the_prefix_count(self):
         names = {"aa": "CasualtiesSize.Hello", "bb": "CasualtiesCharacters.Hello", "cc": "Other.Thing"}
