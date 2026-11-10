@@ -2,6 +2,8 @@
 
 Test automation (TA) for the Steam game Casualties: Unknown. A small BepInEx plugin, CasualtiesLink, runs inside the game and answers HTTP requests on the local machine. A Python client (standard library only) starts the game, sends it commands and runs the tests.
 
+Repository: https://github.com/Sharkmare/CU-TA-Harness
+
 The multiplayer tests use the Together mod: https://github.com/Sharkmare/casualties-together
 
 ```
@@ -42,7 +44,7 @@ The client adds `--link-port` for you. Leave `BepInEx/plugins/CasualtiesLink/` o
 |---|---|
 | Status | `status`, `state` (menu, pre-run, in-world, loading), `describe_type` |
 | Runs | `start_run` (character 0 Experiment, 1 Milky, 2 Dune, plus preset and settings), `wait_state`, `quit_to_menu`, `save`, `has_save`, `load`, `quit` |
-| Console | `console`, `console_log`, `game_commands` |
+| Console | `console`, `console_log`, `game_commands`, `close_console` |
 | World | `spawn`, `list_items`, `player`, `damage`, `use_item_on_limb` |
 | Bodies | `bodies`, `body_visuals` (sprite names, limb children and angles, arm animator angle, animator controller names) |
 | Input | `keybinds`, `input`, `mouse`, `input_probe`, `release_input` |
@@ -58,7 +60,7 @@ Key and mouse input works by patching `Input.GetKey`, `GetKeyDown`, `GetKeyUp`, 
 ## What the game does that the tests have to work around
 
 - With the Together mod active the game refuses singleplayer, so `start_run` stays at the menu. `run_tests.py` starts the game with `--mp-disable`.
-- Any cheat command opens the console window, and an open console blocks player input. `console` closes it again unless you pass `keep_open`.
+- Any cheat command opens the console window, and an open console blocks player input. `console` closes it again unless you pass `keep_open`. The Together mod can also leave the console open on the host at start, so the pair tests call `close_console` first.
 - The game sets `Time.timeScale` itself in several places, so pausing with `timescale 0` does not last. `step` puts back whatever it found.
 - `start_run` sets the `didbasiccourse` PlayerPref, otherwise a tutorial warning stops the run from starting. The reply tells you the old value.
 - The player object is named `Experiment(Clone)`, `Milky(Clone)` or `Dune(Clone)`.
@@ -114,7 +116,7 @@ Groups marked `owns_game` (`inert`, `pair`) start their own games and run before
 | run | each character spawns the right player object, starting outside the menu fails, quitting to the menu sends `scene_changed` |
 | world | spawn and pickup, the bandage minigame starts, damage with events and bleeding, console round trip and `heal`, writing then reading a field, stepping frames, injected keys move the player, a screenshot is a PNG, the pickup event, save and load |
 | inert | without the switch the port is closed, nothing listens, the DISABLED line is logged and no config file appears; with `--link-port` it answers and logs ENABLED |
-| pair | a Dune host and client: both see both players, the handshake is accepted, every body is `charType` 2 with skills 17/18/0 and gain multipliers 1/1/0.5 on both games, DuneHardy lowers pain gain to 0.7 and bleeding gain to 0.8, turning DuneHardy off removes that, a stock 5.4.0 client is refused with "Version mismatch"; mixed characters in both directions; remote bodies look like the local body of that character; a pointing arm has the same angle on the other game |
+| pair | a Dune host and client: both see both players, the handshake is accepted, every body is `charType` 2 with skills 17/18/0 and gain multipliers 1/1/0.5 on both games, injuries are not damped by default, and with the DuneHardy rule switched on (`--mp-setrule DuneHardy 1`) pain gain is 0.7 and bleeding gain 0.8, a stock 5.4.0 client is refused with "Version mismatch"; mixed characters in both directions; remote bodies look like the local body of that character; a pointing arm has the same angle on the other game |
 | client-offline | parsing, `--mp` flags, selection, the game lock, the test copy |
 | repo-tools | the commit message check |
 
