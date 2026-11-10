@@ -15,5 +15,6 @@
     <Compile Include="..\plugin\RequestGate.cs" />
     <Compile Include="..\plugin\PathParser.cs" />
     <Compile Include="..\plugin\EventBuffer.cs" />
+    <Compile Include="..\plugin\MessageCounter.cs" />
   </ItemGroup>
 </Project>

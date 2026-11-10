@@ -88,7 +88,8 @@
             "../plugin/KeyWindows.cs",
             "../plugin/RequestGate.cs",
             "../plugin/PathParser.cs",
-            "../plugin/EventBuffer.cs"
+            "../plugin/EventBuffer.cs",
+            "../plugin/MessageCounter.cs"
           ]
         }
       ]

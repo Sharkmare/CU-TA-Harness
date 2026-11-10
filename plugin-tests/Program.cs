@@ -10,6 +10,7 @@ namespace CasualtiesLink.Tests
             RequestGateTests.Register(suite);
             PathParserTests.Register(suite);
             EventBufferTests.Register(suite);
+            MessageCounterTests.Register(suite);
             return suite.Run();
         }
     }

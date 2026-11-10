@@ -89,6 +89,7 @@ namespace CasualtiesLink
             RegisterWorld();
             RegisterReflection();
             RegisterBodies();
+            RegisterNet();
         }
     }
 }

@@ -31,6 +31,7 @@ namespace CasualtiesLink
         private static readonly List<Job> Waiting = new List<Job>();
         public static int FrameNumber;
         public static MainThread Instance;
+        private const int NetTapRetryFrames = 60;
 
         private void Awake() { Instance = this; }
 
@@ -44,6 +45,7 @@ namespace CasualtiesLink
         private void Update()
         {
             FrameNumber = Time.frameCount;
+            if (!NetTap.Installed && FrameNumber % NetTapRetryFrames == 0) NetTap.TryInstall();
             int budget = 64;
             while (budget-- > 0 && Queue.TryDequeue(out Job job)) RunJob(job);
             PollWaiting();
