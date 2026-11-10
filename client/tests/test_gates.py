@@ -15,6 +15,8 @@ HELLO_SECONDS = 10.0
 SIZE_HELLO = "CasualtiesSize.Hello"
 LOADER_HELLO = "CasualtiesCharacters.Hello"
 HELLO_SENDS_AT_MOST = 3
+HELLO_SENDS_AT_LEAST = 2
+LOADER_INERT_LINE = "characters are available in singleplayer only"
 HEIGHT_FIELD = "heightMultiplier"
 SIZE_TOLERANCE = 0.05
 REPLICATION_SECONDS = 8.0
@@ -69,13 +71,14 @@ def choose_loader_character(game):
 def custom_characters(game):
     try:
         rows = game.call("find", type="CustomCharacter")
-    except Exception:
+    except Exception as exception:
+        print("custom_characters on port %s: %s" % (game.transport.port, exception))
         return {}
     result = {}
     for row in rows:
         handle = "id:%d" % row["object"]["id"]
         body = game.get(handle, "Body", depth=0)
-        result[body["name"]] = {"slot": game.get(handle, "Id"), "key": game.get(handle, "Definition.FullKey")}
+        result[body["name"]] = {"slot": game.get(handle, "Id")}
     return result
 
 
@@ -108,8 +111,17 @@ class ScenarioCase(unittest.TestCase):
         cls.hashes = observe.message_hashes(cls.client, [SIZE_HELLO, LOADER_HELLO])
 
     @classmethod
+    def plugin_log_lines(cls, which):
+        wanted = ("casualties", "bridge", "together bridge", "exception", "[error", "[warning")
+        return [line for line in GAMES.log_text(which).splitlines() if any(word in line.lower() for word in wanted)]
+
+    @classmethod
     def tearDownClass(cls):
         if GAMES is not None:
+            for which in ("host", "client"):
+                print("\n%s %s log lines about our plugins:" % (cls.__name__, which))
+                for line in cls.plugin_log_lines(which)[:60]:
+                    print("  " + line[:220])
             for label, game in (("host", getattr(cls, "host", None)), ("client", getattr(cls, "client", None))):
                 if game is not None:
                     try:
@@ -132,9 +144,12 @@ class A_StockHostClientWithPluginsTests(ScenarioCase):
     client_plugins = ("size", "loader", "avali")
     choose_character = True
 
-    def test_gates_report_the_host_as_not_ours(self):
+    def test_the_size_gate_reports_the_host_as_not_ours(self):
         self.assertEqual(observe.size_gate_host_state(self.client), "NotOurs")
-        self.assertIn(observe.loader_host_state(self.client), ("NoHost", "Waiting"))
+
+    def test_the_loader_is_inert_on_stock_together(self):
+        self.assertEqual(observe.loader_host_state(self.client), observe.GATE_ABSENT)
+        self.assertIn(LOADER_INERT_LINE, GAMES.log_text("client"))
 
     def test_the_host_has_none_of_our_plugins(self):
         self.assertEqual(observe.size_gate_host_state(self.host), observe.GATE_ABSENT)
@@ -147,8 +162,9 @@ class A_StockHostClientWithPluginsTests(ScenarioCase):
         counters, sent = sent_to_host_names(self.client, self.hashes)
         self.assertTrue(counters["installed"], counters["status"])
         self.assertEqual(sorted(sent), ["toHost"], sent)
-        self.assertEqual(sorted(sent["toHost"]), sorted([SIZE_HELLO, LOADER_HELLO]), sent)
+        self.assertEqual(sorted(sent["toHost"]), [SIZE_HELLO], sent)
         for name, count in sent["toHost"].items():
+            self.assertGreaterEqual(count, HELLO_SENDS_AT_LEAST, name)
             self.assertLessEqual(count, HELLO_SENDS_AT_MOST, name)
         time.sleep(HELLO_SECONDS / 2)
         _, later = sent_to_host_names(self.client, self.hashes)
@@ -158,23 +174,27 @@ class A_StockHostClientWithPluginsTests(ScenarioCase):
         counters, _ = sent_to_host_names(self.host, self.hashes)
         self.assertEqual(counters["counts"], {}, counters)
 
-    def test_the_client_sizes_itself_but_is_refused_for_others(self):
+    def test_the_client_can_size_itself_locally(self):
         before = height(self.client, CLIENT_BODY)
-        self.client.console("size @m 2")
+        reply = self.client.console("size @m 2")
         grew = wait_until(lambda: abs(height(self.client, CLIENT_BODY) - before * 2) < SIZE_TOLERANCE * before * 2)
-        self.assertTrue(grew, "own size did not change locally")
+        self.assertTrue(grew, "own size did not change locally: height %s before %s, console reply: %s" % (
+            height(self.client, CLIENT_BODY), before, reply))
+        self.assertAlmostEqual(height(self.host, CLIENT_BODY), before, delta=SIZE_TOLERANCE * before, msg="the host must not see the client's size")
+
+    def test_the_client_is_refused_for_other_players_with_the_clear_text(self):
+        before = height(self.client, CLIENT_BODY)
         host_before = height(self.client, HOST_BODY)
         self.client.console("size HostD 2")
         refused = wait_until(lambda: "size needs the host" in str(self.client.call("console_log", tail=20)))
         self.assertTrue(refused, str(self.client.call("console_log", tail=20)))
         self.assertAlmostEqual(height(self.client, HOST_BODY), host_before, delta=SIZE_TOLERANCE)
-        self.assertAlmostEqual(height(self.host, CLIENT_BODY), before, delta=SIZE_TOLERANCE * before, msg="the host must not see the client's size")
+        self.assertAlmostEqual(height(self.host, HOST_BODY), host_before, delta=SIZE_TOLERANCE)
 
-    def test_the_chosen_character_applies_only_on_the_client(self):
-        mine = custom_characters(self.client)
-        self.assertIn(CLIENT_BODY, mine)
-        self.assertEqual(mine[CLIENT_BODY]["slot"], self.chosen_slot)
-        self.assertEqual(custom_characters(self.host), {})
+    def test_the_chosen_character_falls_back_to_the_experiment_in_this_session(self):
+        self.assertEqual(custom_characters(self.client), {})
+        self.assertEqual(read_bodies(self.client)[CLIENT_BODY]["charType"], 0)
+        self.assertEqual(read_bodies(self.host)[CLIENT_BODY]["charType"], 0)
 
 
 @unittest.skipUnless(PAIR_ENABLED, SKIP_REASON)
@@ -214,9 +234,8 @@ class B_BothWithPluginsTests(ScenarioCase):
     client_plugins = ("size", "loader", "avali")
     choose_character = True
 
-    def test_both_gates_confirm(self):
+    def test_the_size_gates_confirm_both_ways(self):
         self.assertEqual(observe.size_gate_host_state(self.client), "Confirmed")
-        self.assertEqual(observe.loader_host_state(self.client), "Welcomed")
         peers = observe.size_gate_peers(self.host)
         self.assertIn("Confirmed", [str(value) for value in peers.values()], peers)
 
@@ -228,14 +247,14 @@ class B_BothWithPluginsTests(ScenarioCase):
             self.assertTrue(grew, "client body did not reach x2 on port %s" % game.transport.port)
         self.host.console("size @a reset")
 
-    def test_the_client_character_applies_on_both_games(self):
+    def test_the_loader_stays_inert_on_stock_together_and_sends_nothing(self):
+        self.assertEqual(observe.loader_host_state(self.client), observe.GATE_ABSENT)
+        self.assertEqual(custom_characters(self.client), {})
+        self.assertEqual(custom_characters(self.host), {})
+        _, sent = sent_to_host_names(self.client, self.hashes)
+        self.assertNotIn(LOADER_HELLO, sent.get("toHost", {}), sent)
         for game in (self.host, self.client):
-            found = wait_until(lambda g=game: custom_characters(g).get(CLIENT_BODY))
-            self.assertTrue(found, "no custom character on %s as seen on port %s" % (CLIENT_BODY, game.transport.port))
-            self.assertEqual(found["slot"], self.chosen_slot)
-        rows = [read_bodies(game)[CLIENT_BODY] for game in (self.host, self.client)]
-        self.assertEqual(rows[0]["charType"], rows[1]["charType"])
-        self.assertEqual(rows[0]["skills"], rows[1]["skills"])
+            self.assertEqual(read_bodies(game)[CLIENT_BODY]["charType"], 0)
 
     def test_a_player_who_joins_late_sees_the_current_state(self):
         self.host.console("size @m 2")
@@ -264,8 +283,11 @@ class D_DifferentPackSetsTests(ScenarioCase):
         for game in (self.host, self.client):
             self.assertEqual(game.state()["state"], "in-world")
 
-    def test_the_loader_refuses_the_mismatching_pack_set(self):
-        self.assertEqual(observe.loader_host_state(self.client), "Refused")
+    def test_the_loader_is_inert_so_pack_sets_cannot_clash(self):
+        self.assertEqual(observe.loader_host_state(self.client), observe.GATE_ABSENT)
+        self.assertEqual(observe.loader_host_state(self.host), observe.GATE_ABSENT)
+        _, sent = sent_to_host_names(self.client, self.hashes)
+        self.assertNotIn(LOADER_HELLO, sent.get("toHost", {}), sent)
 
     def test_size_still_works_between_them(self):
         self.assertEqual(observe.size_gate_host_state(self.client), "Confirmed")

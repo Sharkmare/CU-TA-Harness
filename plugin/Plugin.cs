@@ -6,6 +6,7 @@ namespace CasualtiesLink
 {
 
     [BepInPlugin(Guid, "CasualtiesLink", Version)]
+    [BepInDependency("CasualtiesMP", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "casualtieslink";
@@ -47,6 +48,7 @@ namespace CasualtiesLink
             }
 
             Commands.RegisterAll();
+            NetTap.TryInstall();
             server = new LinkServer(port);
             server.Start();
             BoundPort = port;

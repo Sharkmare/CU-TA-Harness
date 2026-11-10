@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 
@@ -7,37 +7,42 @@ namespace CasualtiesLink
 {
     public static class NetTap
     {
-        private const string NetTypeName = "Together.Net, CasualtiesMP";
+        private const string TogetherNetTypeName = "Together.Net, CasualtiesMP";
         private const string MultiplayerTypeName = "Together.Multiplayer, CasualtiesMP";
-        private const string WriterTypeName = "NetDataWriter";
+        private const string PeerTypeName = "LiteNetLib.LiteNetPeer";
+        private const string AnySendMethodName = "Client_Send";
+        private const string ChokepointName = "SendInternal";
         private const string DirectionToHost = "toHost";
         private const string DirectionToPlayer = "toPlayer";
-        private const string DirectionToClients = "toClients";
+        private const int HashedPrefixLength = 5;
 
         public static readonly MessageCounter Counter = new MessageCounter();
         public static bool Installed { get; private set; }
         public static string Status { get; private set; } = "not tried";
 
-        private static PropertyInfo dataProperty;
-        private static PropertyInfo lengthProperty;
+        private static PropertyInfo isServerProperty;
 
         public static void TryInstall()
         {
             if (Installed) return;
-            Type net = Type.GetType(NetTypeName);
-            if (net == null)
+            Type together = Type.GetType(TogetherNetTypeName);
+            if (together == null)
             {
                 Status = "Together not loaded";
                 return;
             }
             try
             {
-                var harmony = new Harmony(Plugin.Guid + ".net");
-                PatchSend(harmony, net, "Client_Send", nameof(ToHost));
-                PatchSend(harmony, net, "Server_SendTo", nameof(ToPlayer));
-                PatchSend(harmony, net, "Server_SendToClients", nameof(ToClients));
+                MethodInfo anySend = together.GetMethods(BindingFlags.Public | BindingFlags.Static).First(method => method.Name == AnySendMethodName);
+                Type peer = anySend.GetParameters()[0].ParameterType.Assembly.GetType(PeerTypeName);
+                if (peer == null) throw new MissingMemberException(PeerTypeName);
+                isServerProperty = together.GetProperty("IsServer", BindingFlags.Public | BindingFlags.Static);
+                MethodInfo target = peer.GetMethods(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                    .FirstOrDefault(method => method.Name == ChokepointName && method.GetParameters().Length > 0 && method.GetParameters()[0].ParameterType.Name.StartsWith("ReadOnlySpan"));
+                if (target == null) throw new MissingMethodException(peer.FullName, ChokepointName);
+                new Harmony(Plugin.Guid + ".net").Patch(target, prefix: new HarmonyMethod(typeof(NetTap).GetMethod(nameof(Outgoing), BindingFlags.Public | BindingFlags.Static)));
                 Installed = true;
-                Status = "installed";
+                Status = "installed on " + peer.Name + "." + ChokepointName;
             }
             catch (Exception exception)
             {
@@ -45,38 +50,16 @@ namespace CasualtiesLink
             }
         }
 
-        private static void PatchSend(Harmony harmony, Type net, string method, string prefix)
+        public static void Outgoing(ReadOnlySpan<byte> __0)
         {
-            MethodInfo target = net.GetMethod(method, BindingFlags.Public | BindingFlags.Static);
-            if (target == null) throw new MissingMethodException(net.FullName, method);
-            harmony.Patch(target, prefix: new HarmonyMethod(typeof(NetTap).GetMethod(prefix, BindingFlags.Public | BindingFlags.Static)));
+            if (__0.Length < HashedPrefixLength || __0[0] != MessageCounter.CustomMessageId) return;
+            Counter.Record(LocalIsServer() ? DirectionToPlayer : DirectionToHost, __0.Slice(0, HashedPrefixLength).ToArray(), HashedPrefixLength);
         }
 
-        public static void ToHost(object[] __args) { Record(DirectionToHost, __args); }
-
-        public static void ToPlayer(object[] __args) { Record(DirectionToPlayer, __args); }
-
-        public static void ToClients(object[] __args) { Record(DirectionToClients, __args); }
-
-        private static void Record(string direction, object[] arguments)
+        private static bool LocalIsServer()
         {
-            try
-            {
-                foreach (object argument in arguments)
-                {
-                    if (argument == null || argument.GetType().Name != WriterTypeName) continue;
-                    if (dataProperty == null)
-                    {
-                        dataProperty = argument.GetType().GetProperty("Data");
-                        lengthProperty = argument.GetType().GetProperty("Length");
-                    }
-                    Counter.Record(direction, (byte[])dataProperty.GetValue(argument, null), (int)lengthProperty.GetValue(argument, null));
-                    return;
-                }
-            }
-            catch (Exception)
-            {
-            }
+            try { return isServerProperty != null && (bool)isServerProperty.GetValue(null, null); }
+            catch (Exception) { return false; }
         }
 
         public static string HashOfName(string name)
