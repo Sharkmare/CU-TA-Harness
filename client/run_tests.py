@@ -32,7 +32,7 @@ def parse_args(argv):
     parser.add_argument("--list", action="store_true", help="show what would run and why, then stop")
     parser.add_argument("--failfast", action="store_true", help="stop a module at its first failing test")
     parser.add_argument("--attach", action="store_true", help="use a game that is already running with the link")
-    parser.add_argument("--match", default=None, help="run only tests whose id contains this text")
+    parser.add_argument("--match", nargs="+", default=None, help="run only tests whose id contains any of these texts")
     parser.add_argument("--budget-seconds", type=float, default=None, help="fail the run when it takes longer than this")
     parser.add_argument("--pair", action="store_true", help="run the two game tests (starts a host and a client game)")
     parser.add_argument("--port", type=int, default=None)
@@ -41,12 +41,12 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def matching(suite, fragment):
+def matching(suite, fragments):
     selected = unittest.TestSuite()
     for item in suite:
         if isinstance(item, unittest.TestSuite):
-            selected.addTests(matching(item, fragment))
-        elif fragment in item.id():
+            selected.addTests(matching(item, fragments))
+        elif any(fragment in item.id() for fragment in fragments):
             selected.addTest(item)
     return selected
 
