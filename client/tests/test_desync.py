@@ -10,7 +10,7 @@ from . import rig
 from . import evidence_scenarios
 from . import spawned_crates
 from .desync_scenarios import CLIENT_BODY_NAME, CORPSE_FLAGS, SCENARIOS, SERIES_SCENARIOS, body_handle_by_name, ready_up, reset_between_scenarios
-from .test_pair import PAIR_ENABLED, SKIP_REASON, wait_for_bodies
+from .test_pair import PAIR_ENABLED, SKIP_REASON, choose_character, wait_for_bodies
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
 REPORT_DIRECTORY = os.path.join(STATE_ROOT, "desync_reports")
@@ -162,6 +162,8 @@ def require_find_the_bug(host, client):
 
 
 class DesyncMixin:
+    client_character = None
+
     @classmethod
     def setUpClass(cls):
         if not PAIR_ENABLED or GAMES is None:
@@ -169,7 +171,8 @@ class DesyncMixin:
         if EXPECTED_HASH == desync.UNKNOWN_HASH:
             raise unittest.SkipTest("no DLL found for build %s (set CU_FLAVOUR_ZIP or CU_UPSTREAM_STAGE)" % BUILD)
         try:
-            cls.host, cls.client = GAMES.start(list(cls.host_plugins), [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=0.0, probe=cls.probe)
+            cls.host, cls.client = GAMES.start(list(cls.host_plugins), [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=0.0, probe=cls.probe,
+                                         after_client_link=choose_character(cls.client_character))
             if not ready_up([cls.host, cls.client]):
                 raise AssertionError("the lobby ready gate did not accept both players")
             cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
@@ -203,7 +206,7 @@ class DesyncMixin:
                                           expect_success=BUILD != desync.BASELINE_BUILD)
         print("\nlaunch log checks: %s" % checks)
         desync.save_launch_checks(checks, REPORT_DIRECTORY, LAUNCH_ID)
-        if "hook-check" in self.__class__.__name__.replace("_", "-") or "hook-regression" in self.__class__.__name__.replace("_", "-") or "hook-evidence" in self.__class__.__name__.replace("_", "-"):
+        if any(group in self.__class__.__name__.replace("_", "-") for group in ("hook-check", "hook-regression", "hook-evidence", "hook-dune")):
             self.assertEqual(checks["issues"], [], checks)
 
     def test_the_games_run_the_requested_build(self):
@@ -214,12 +217,15 @@ class DesyncMixin:
 PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
                           "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
-                          "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
+                          "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
+                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
 GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
-                        "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
+                        "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
+                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
+GROUP_CLIENT_CHARACTER = {"hook-dune": 2}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
-PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence")
-EVIDENCE_GROUPS = ("hook-evidence",)
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune")
+EVIDENCE_GROUPS = ("hook-evidence", "hook-dune")
 
 
 def build_classes():
@@ -228,7 +234,7 @@ def build_classes():
     for group in groups:
         if ONLY_GROUP and group != ONLY_GROUP:
             continue
-        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS, "host_plugins": GROUP_HOST_PLUGINS.get(group, []), "require_find_the_bug": group in EVIDENCE_GROUPS}
+        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS, "client_character": GROUP_CLIENT_CHARACTER.get(group), "host_plugins": GROUP_HOST_PLUGINS.get(group, []), "require_find_the_bug": group in EVIDENCE_GROUPS}
         for run in desync.expand_runs([scenario for scenario in SCENARIOS if scenario.group == group], PROFILES, REPEAT):
             members[run.name] = scenario_method(run)
         for run in desync.expand_runs([scenario for scenario in SERIES_SCENARIOS if scenario.group == group], PROFILES, REPEAT):

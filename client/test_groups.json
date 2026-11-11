@@ -88,7 +88,8 @@
         "unit.test_world_building",
         "unit.test_spawned_crates",
         "unit.test_v2_suite",
-        "unit.test_pvp_banded"
+        "unit.test_pvp_banded",
+        "unit.test_corpse_banded"
       ],
       "needs_game": false
     },

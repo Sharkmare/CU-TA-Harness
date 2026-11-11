@@ -67,14 +67,14 @@ def host_ids_near(host, position):
     return {row["object"]["id"] for row in base.rows_near(host, "BuildingEntity", position, radius=LOOKUP_RADIUS)}
 
 
-def wait_for_new_crate(host, spot, known_ids):
+def wait_for_new_crate(host, spot, known_ids, label=CRATE_ID):
     deadline = time.time() + FIND_TIMEOUT_SECONDS
     while time.time() < deadline:
         fresh = [row for row in base.rows_near(host, "BuildingEntity", spot, radius=LOOKUP_RADIUS) if row["object"]["id"] not in known_ids]
         if fresh:
             return min(fresh, key=lambda row: base.distance(row["position"], spot))
         time.sleep(POLL_SECONDS)
-    raise SetupFailure("no-new-crate", "the host lists no new %s within %.1f of (%.1f, %.1f) after %.0f s" % (CRATE_ID, LOOKUP_RADIUS, spot["x"], spot["y"], FIND_TIMEOUT_SECONDS))
+    raise SetupFailure("no-new-crate", "the host lists no new %s within %.1f of (%.1f, %.1f) after %.0f s" % (label, LOOKUP_RADIUS, spot["x"], spot["y"], FIND_TIMEOUT_SECONDS))
 
 
 def client_crate_position(client, near):
@@ -129,23 +129,27 @@ def hold_client_at_anchor(client):
 
 
 def spawn_crate(host, client):
+    return spawn_object(host, client, CRATE_ID, MIN_HEALTH)
+
+
+def spawn_object(host, client, object_id, min_health):
     anchor = hold_client_at_anchor(client)
     spot = {"x": anchor["x"] + SPAWN_OFFSET, "y": anchor["y"]}
     known_ids = host_ids_near(host, spot)
-    host.call("spawn", id=CRATE_ID, x=spot["x"], y=spot["y"], pickup=False)
+    host.call("spawn", id=object_id, x=spot["x"], y=spot["y"], pickup=False)
     STATE["spawned"] += 1
-    row = wait_for_new_crate(host, spot, known_ids)
+    row = wait_for_new_crate(host, spot, known_ids, object_id)
     handle = "id:%d" % row["object"]["id"]
     settled, trace = settle_and_trace(host, client, handle, row["position"])
     described = world.describe_candidate(host, dict(row, position=settled))
     if described is None:
-        raise SetupFailure("crate-unreadable", "the spawned %s %s has no readable health" % (CRATE_ID, handle))
-    if described["health"] < MIN_HEALTH:
-        raise SetupFailure("low-health", "the spawned %s has health %.1f, below %.0f" % (CRATE_ID, described["health"], MIN_HEALTH))
+        raise SetupFailure("crate-unreadable", "the spawned %s %s has no readable health" % (object_id, handle))
+    if described["health"] < min_health:
+        raise SetupFailure("low-health", "the spawned %s has health %.1f, below %.0f" % (object_id, described["health"], min_health))
     client_row = wait_for_client_listing(client, settled)
     if client_row is None:
         raise SetupFailure("client-does-not-list-crate", "the client does not list the spawned %s %s within %.1f of the host position (%.2f, %.2f) after %.0f s" % (
-            CRATE_ID, handle, LISTED_TOGETHER_RADIUS, settled["x"], settled["y"], FIND_TIMEOUT_SECONDS))
+            object_id, handle, LISTED_TOGETHER_RADIUS, settled["x"], settled["y"], FIND_TIMEOUT_SECONDS))
     distance = base.distance(base.player_position(client), settled)
     return dict(described, position=settled, startHealth=described["health"], healthBefore=described["health"], distance=round(distance, 2), spawnOffset=SPAWN_OFFSET,
                 spawnedAt=spot, clientHandle="id:%d" % client_row["object"]["id"], spawnNumber=STATE["spawned"], settleTrace=trace, skippedPicks=[], timesUsedBefore=0)

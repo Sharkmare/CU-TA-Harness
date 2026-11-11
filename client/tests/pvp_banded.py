@@ -19,8 +19,8 @@ DRIFT_PAUSE_SECONDS = 0.4
 # body centre, so a victim centre at most 3.2 away keeps the cast start within 4.2 of it, inside the 4.5 reach with the victim's own collider
 # as margin. The bottom of the band keeps the punch from starting inside the victim. The punch to a limb is not shorter than the cast, so
 # the crate band is used unchanged.
-BAND_LOW = crates.BAND_LOW
-BAND_HIGH = crates.BAND_HIGH
+BAND_LOW = 2.5
+BAND_HIGH = 3.2
 FAILURE_CATEGORY = "pvp-distance-band-unreachable"
 RESTORE_FAILURE_CATEGORY = "pvp-victim-not-restored"
 RESTORE_TOLERANCE = 1.0

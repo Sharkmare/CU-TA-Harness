@@ -341,3 +341,5 @@ from . import spawned_crates  # noqa: E402,F401
 from . import v2_suite  # noqa: E402,F401
 
 from . import pvp_banded  # noqa: E402,F401
+
+from . import corpse_banded  # noqa: E402,F401
