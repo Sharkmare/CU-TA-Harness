@@ -501,16 +501,18 @@ def hand_hit(client, context):
 
 
 HOLD_CALL_PAUSE_SECONDS = 0.02
+COOLDOWN_RISE_EPSILON = 0.005
 HOLD_MAX_CALLS = 1500
 
 
 def hold_hit(client, context):
-    cooldown = float(client.get("player", "attackCooldown", depth=0))
+    before = float(client.get("player", "attackCooldown", depth=0))
     real = player_position(client)
     copy = context["hostGame"].get(context["hostBodyHandle"], BODY_PATH, depth=0)
     client.call("invoke", target="player", method="UseItemInHand",
                 sets=[{"target": "player", "path": "targetLookPos", "value": {"x": context["position"]["x"], "y": context["position"]["y"], "z": 0.0}}])
-    if cooldown > 0:
+    after = float(client.get("player", "attackCooldown", depth=0))
+    if after <= before + COOLDOWN_RISE_EPSILON:
         return False
     copy = {"x": float(copy["x"]), "y": float(copy["y"])}
     context["swingLog"].append({"clientPosition": real, "hostCopyPosition": copy, "gap": round(distance(real, copy), 3)})

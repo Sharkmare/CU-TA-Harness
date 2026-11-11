@@ -132,7 +132,7 @@ class HintTests(unittest.TestCase):
         return desync.verdict_hints(samples, hit_times, delay, counts, findings)
 
     def test_a_constant_host_to_client_ratio_means_a_multiplier_mismatch(self):
-        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 10.0], [8, 20.0]), sample(0.5, [8, 20.0], [8, 40.0]), sample(0.75, [0, 0.0], [0, 0.0])]
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 10.0], [8, 20.0]), sample(0.5, [8, 20.0], [8, 40.0]), sample(0.6, [8, 30.0], [8, 60.0]), sample(0.75, [0, 0.0], [0, 0.0])]
         self.assertTrue(any("constant host/client crack ratio 0.50" in hint for hint in self.hints(samples, [0.0, 0.5], 0.0)))
 
     def test_equal_counters_do_not_claim_a_ratio(self):

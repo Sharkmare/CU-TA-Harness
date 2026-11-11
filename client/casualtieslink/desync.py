@@ -300,6 +300,7 @@ HOST_LOG_MARKERS = {
     "dropped": "hit server drop",
 }
 RATIO_TOLERANCE = 0.02
+MIN_RATIO_PAIRS = 3
 LATE_BREAK_SECONDS = 0.3
 
 
@@ -376,7 +377,7 @@ def verdict_hints(samples, hit_times, delay_ms, host_counts, findings, jitter_ms
         hints.append("client swing intervals: shortest %.3f s, mean %.3f s; %d of %d could reach the host under the %.3f s cooldown after jitter of up to %.0f ms" % (
             min(intervals), sum(intervals) / len(intervals), len(close), len(intervals), HOST_ATTACK_COOLDOWN_SECONDS, jitter_ms or 0.0))
     pairs = [(s["client"][1], s["host"][1]) for s in samples if s["client"][0] != EMPTY_BLOCK and s["host"][0] != EMPTY_BLOCK and s["client"][1] > 0 and s["host"][1] > 0]
-    if pairs:
+    if len(pairs) >= MIN_RATIO_PAIRS:
         ratios = [host / client for client, host in pairs]
         if max(ratios) - min(ratios) <= RATIO_TOLERANCE and abs(ratios[0] - 1.0) > RATIO_TOLERANCE:
             hints.append("constant host/client crack ratio %.2f: damage multiplier mismatch" % ratios[0])
