@@ -8,7 +8,7 @@ from . import evidence_scenarios as evidence
 from . import hook_scenarios as hooks
 
 GROUP = "console-leak"
-NAME = "consoleleak_save_path_to_client"
+NAME = "consoleleak_save_line_by_client"
 CONSOLE_TAIL = 100
 SETTLE_AFTER_SAVE_SECONDS = 2.0
 ADMIN_WAIT_SECONDS = 8.0

@@ -204,7 +204,7 @@ class DescribeTests(unittest.TestCase):
 
 class WiringTests(unittest.TestCase):
     def test_the_scenario_is_alone_in_its_own_startup_group_and_selectable(self):
-        self.assertEqual(scenarios.matching_scenario_names(["consoleleak"]), ["consoleleak_save_path_to_client"])
+        self.assertEqual(scenarios.matching_scenario_names(["consoleleak"]), ["consoleleak_save_line_by_client"])
         self.assertEqual(sorted(scenarios.counts_by_group(["consoleleak"])), ["console-leak"])
 
     def test_the_group_starts_both_games_with_no_extra_flags(self):
