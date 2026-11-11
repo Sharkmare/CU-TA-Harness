@@ -20,7 +20,7 @@ class JudgeSeriesTests(unittest.TestCase):
         self.assertTrue(findings["host"]["resets"] == [] and not findings["client"]["presentAtEnd"])
 
     def test_a_counter_that_drops_without_a_break_is_a_crack_reset(self):
-        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 40.0], [8, 40.0]), sample(0.5, [8, 40.0], [8, 0.0]), sample(0.75, [0, 0.0], [0, 0.0])]
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 40.0], [8, 40.0]), sample(0.5, [8, 40.0], [8, 0.0]), sample(0.75, [8, 40.0], [8, 20.0]), sample(1.0, [0, 0.0], [0, 0.0])]
         verdict, findings = desync.judge_series(samples)
         self.assertEqual(verdict, desync.VERDICT_CRACK_RESET)
         self.assertEqual(findings["client"]["resets"], [{"t": 0.5, "from": 40.0, "to": 0.0}])
@@ -41,6 +41,10 @@ class JudgeSeriesTests(unittest.TestCase):
     def test_nothing_breaking_is_never_broke(self):
         samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 20.0], [8, 20.0])]
         self.assertEqual(desync.judge_series(samples)[0], desync.VERDICT_NEVER_BROKE)
+
+    def test_a_counter_cleared_a_moment_before_the_block_read_as_gone_is_not_a_reset(self):
+        samples = [sample(0.0, [3, 58.0], [3, 58.0]), sample(0.25, [3, 0.0], [0, 0.0]), sample(0.5, [0, 0.0], [0, 0.0])]
+        self.assertEqual(desync.judge_series(samples)[0], desync.VERDICT_PERSISTED)
 
     def test_a_counter_going_down_because_the_block_broke_is_not_a_reset(self):
         samples = [sample(0.0, [8, 80.0], [8, 80.0]), sample(0.25, [0, 0.0], [0, 0.0])]

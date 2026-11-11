@@ -260,11 +260,12 @@ def side_findings(samples, side):
     reappeared = []
     broke_at = None
     previous = None
-    for sample in samples:
+    for index, sample in enumerate(samples):
         block, counter = sample[side]
         if previous is not None:
             previous_block, previous_counter = previous
-            if previous_block != EMPTY_BLOCK and block != EMPTY_BLOCK and counter < previous_counter - COUNTER_DROP_EPSILON:
+            following = samples[index + 1][side][0] if index + 1 < len(samples) else block
+            if previous_block != EMPTY_BLOCK and block != EMPTY_BLOCK and following != EMPTY_BLOCK and counter < previous_counter - COUNTER_DROP_EPSILON:
                 resets.append({"t": sample["t"], "from": previous_counter, "to": counter})
         if block == EMPTY_BLOCK and broke_at is None:
             broke_at = sample["t"]
