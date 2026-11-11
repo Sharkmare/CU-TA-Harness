@@ -122,7 +122,7 @@ class ReportTests(unittest.TestCase):
     def test_the_saved_report_is_json_named_by_scenario_build_and_hash_prefix(self):
         with tempfile.TemporaryDirectory() as directory:
             path = desync.save_report(self.report([0, 5, 5, 5], [0, 5, 5, 5]), directory)
-            self.assertEqual(os.path.basename(path), "scripted__stock-5.5.0_abababab.json")
+            self.assertEqual(os.path.basename(path), "scripted__stock-5.5.0_abababab__r1.json")
             with open(path, encoding="utf-8") as handle:
                 loaded = json.load(handle)
         self.assertEqual(loaded["verdict"], desync.VERDICT_PERSISTED)

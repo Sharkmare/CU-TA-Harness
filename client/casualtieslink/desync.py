@@ -261,7 +261,7 @@ def format_report(report):
 
 def save_report(report, directory):
     os.makedirs(directory, exist_ok=True)
-    name = "%s__%s.json" % (report["scenario"], re.sub(r"[^A-Za-z0-9.\-]", "_", build_label(report["build"], report["dllSha256"])))
+    name = "%s__%s__r%s.json" % (report["scenario"], re.sub(r"[^A-Za-z0-9.\-]", "_", build_label(report["build"], report["dllSha256"])), report.get("repetition", 1))
     path = os.path.join(directory, name)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, sort_keys=True)
