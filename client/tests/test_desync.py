@@ -7,6 +7,7 @@ from casualtieslink.instances import ScenarioGames, baseline_stage_directory, di
 from casualtieslink.launcher import mp_arguments
 
 from . import rig
+from . import evidence_scenarios
 from .desync_scenarios import CLIENT_BODY_NAME, CORPSE_FLAGS, SCENARIOS, SERIES_SCENARIOS, body_handle_by_name, ready_up, reset_between_scenarios
 from .test_pair import PAIR_ENABLED, SKIP_REASON, wait_for_bodies
 
@@ -46,6 +47,7 @@ def setUpModule():
     if PAIR_ENABLED:
         GAMES = ScenarioGames(STATE_ROOT)
         GAMES.prepare()
+        evidence_scenarios.LOG_READER = GAMES.log_text
 
 
 def tearDownModule():
@@ -149,6 +151,23 @@ def series_method(run):
     return method
 
 
+def config_listing(copy):
+    folder = os.path.join(copy, "BepInEx", "config")
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return "no config folder"
+    shown = ["%s: %s" % (name, open(os.path.join(folder, name), encoding="utf-8", errors="replace").read()[:300].replace("\n", " | ")) for name in names if name.startswith("CasualtiesMP")]
+    return "config files %s; %s" % (names, shown)
+
+
+def require_find_the_bug(host, client):
+    states = {"host": evidence_scenarios.find_the_bug_enabled(host), "client": evidence_scenarios.find_the_bug_enabled(client)}
+    print("\nFindTheBug enabled: %s" % states)
+    if states["host"] is not True or states["client"] is not True:
+        raise AssertionError("[Probe] FindTheBug is not on at startup %s; host %s; client %s" % (states, config_listing(GAMES.host_copy), config_listing(GAMES.client_copy)))
+
+
 class DesyncMixin:
     @classmethod
     def setUpClass(cls):
@@ -168,6 +187,8 @@ class DesyncMixin:
             cls.client.call("close_console")
             time.sleep(SETTLE_SECONDS)
             cls.game_version = str(cls.client.get("static:Application", "version", depth=0))
+            if cls.require_find_the_bug:
+                require_find_the_bug(cls.host, cls.client)
         except BaseException:
             for which in ("host", "client"):
                 print("\n%s log tail:" % which)
@@ -189,7 +210,7 @@ class DesyncMixin:
                                           expect_success=BUILD != desync.BASELINE_BUILD)
         print("\nlaunch log checks: %s" % checks)
         desync.save_launch_checks(checks, REPORT_DIRECTORY, LAUNCH_ID)
-        if "hook-check" in self.__class__.__name__.replace("_", "-") or "hook-regression" in self.__class__.__name__.replace("_", "-"):
+        if "hook-check" in self.__class__.__name__.replace("_", "-") or "hook-regression" in self.__class__.__name__.replace("_", "-") or "hook-evidence" in self.__class__.__name__.replace("_", "-"):
             self.assertEqual(checks["issues"], [], checks)
 
     def test_the_games_run_the_requested_build(self):
@@ -200,11 +221,12 @@ class DesyncMixin:
 PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
                           "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
-                          "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
+                          "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"]}
 GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
-                        "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
+                        "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"]}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
-PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression")
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence")
+EVIDENCE_GROUPS = ("hook-evidence",)
 
 
 def build_classes():
@@ -213,7 +235,7 @@ def build_classes():
     for group in groups:
         if ONLY_GROUP and group != ONLY_GROUP:
             continue
-        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS, "host_plugins": GROUP_HOST_PLUGINS.get(group, [])}
+        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS, "host_plugins": GROUP_HOST_PLUGINS.get(group, []), "require_find_the_bug": group in EVIDENCE_GROUPS}
         for run in desync.expand_runs([scenario for scenario in SCENARIOS if scenario.group == group], PROFILES, REPEAT):
             members[run.name] = scenario_method(run)
         for run in desync.expand_runs([scenario for scenario in SERIES_SCENARIOS if scenario.group == group], PROFILES, REPEAT):
