@@ -8,6 +8,7 @@ from casualtieslink.launcher import mp_arguments
 
 from . import rig
 from . import evidence_scenarios
+from . import spawned_crates
 from .desync_scenarios import CLIENT_BODY_NAME, CORPSE_FLAGS, SCENARIOS, SERIES_SCENARIOS, body_handle_by_name, ready_up, reset_between_scenarios
 from .test_pair import PAIR_ENABLED, SKIP_REASON, wait_for_bodies
 
@@ -48,6 +49,7 @@ def setUpModule():
         GAMES = ScenarioGames(STATE_ROOT)
         GAMES.prepare()
         evidence_scenarios.LOG_READER = GAMES.log_text
+        spawned_crates.FAILURE_DIRECTORY = REPORT_DIRECTORY
 
 
 def tearDownModule():

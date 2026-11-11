@@ -17,13 +17,13 @@ class SpawnTests(unittest.TestCase):
         self.host = mock.Mock()
         self.client = mock.Mock()
         self.host_rows = []
-        self.client_rows = [crate_row(7, 11.75)]
+        self.client_rows = [crate_row(7, 11.0)]
         self.spawn_arguments = None
         self.host.call.side_effect = self.host_call
         self.player = dict(ANCHOR)
-        self.crate_at = {"x": 11.75, "y": 5.0}
+        self.crate_at = {"x": 11.0, "y": 5.0}
         clock = iter(x * 0.25 for x in range(1, 100000))
-        self.described = {"handle": "id:7", "id": 7, "name": "SyncInfo(building, id: 7, res: medcrate)", "position": {"x": 11.75, "y": 5.0}, "health": 1000.0,
+        self.described = {"handle": "id:7", "id": 7, "name": "SyncInfo(building, id: 7, res: medcrate)", "position": {"x": 11.0, "y": 5.0}, "health": 1000.0,
                           "cantHit": False, "indestructible": False, "animal": False, "rigidbodyType": "Dynamic", "layer": 8, "physicsActive": True}
         for patch in (mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.time, "time", lambda: next(clock)),
                       mock.patch.object(crates.base, "player_position", lambda game: dict(self.player)),
@@ -36,7 +36,7 @@ class SpawnTests(unittest.TestCase):
     def host_call(self, command, **arguments):
         if command == "spawn":
             self.spawn_arguments = arguments
-            self.host_rows = [crate_row(7, 11.75)]
+            self.host_rows = [crate_row(7, 11.0)]
         return None
 
     def rows_near(self, game, component, position, name=None, radius=3.0):
@@ -46,8 +46,8 @@ class SpawnTests(unittest.TestCase):
     def test_the_crate_is_spawned_at_the_fixed_offset_from_the_client(self):
         target = crates.spawn_crate(self.host, self.client)
         arguments = self.spawn_arguments
-        self.assertEqual((arguments["id"], arguments["x"], arguments["y"], arguments["pickup"]), ("medcrate", 11.75, 5.0, False))
-        self.assertEqual((target["handle"], target["clientHandle"], target["startHealth"], target["spawnOffset"]), ("id:7", "id:7", 1000.0, 1.75))
+        self.assertEqual((arguments["id"], arguments["x"], arguments["y"], arguments["pickup"]), ("medcrate", 11.0, 5.0, False))
+        self.assertEqual((target["handle"], target["clientHandle"], target["startHealth"], target["spawnOffset"]), ("id:7", "id:7", 1000.0, 1.0))
         self.assertTrue(target["physicsActive"])
 
     def test_a_crate_that_was_already_there_is_not_taken_for_the_new_one(self):
@@ -55,7 +55,7 @@ class SpawnTests(unittest.TestCase):
 
         def spawn(command, **arguments):
             if command == "spawn":
-                self.host_rows = [crate_row(3, 11.7), crate_row(7, 11.75)]
+                self.host_rows = [crate_row(3, 11.7), crate_row(7, 11.0)]
 
         self.host.call.side_effect = spawn
         self.assertEqual(crates.spawn_crate(self.host, self.client)["id"], 7)
@@ -72,12 +72,59 @@ class SpawnTests(unittest.TestCase):
             crates.spawn_crate(self.host, self.client)
         self.assertIn("client does not list", str(caught.exception))
 
-    def test_a_client_too_far_from_the_crate_fails_the_setup(self):
-        self.crate_at = {"x": 18.0, "y": 5.0}
-        self.client_rows = [crate_row(7, 18.0)]
-        with self.assertRaises(AssertionError) as caught:
+    def place_crate_away(self, distance):
+        self.crate_at = {"x": ANCHOR["x"] + distance, "y": 5.0}
+        self.client_rows = [crate_row(7, ANCHOR["x"] + distance)]
+        self.host_rows = []
+
+        def spawn(command, **arguments):
+            if command == "spawn":
+                self.spawn_arguments = arguments
+                self.host_rows = [crate_row(7, ANCHOR["x"] + distance)]
+
+        self.host.call.side_effect = spawn
+
+    def teleport_follows_set(self):
+        def set_position(target, path, value):
+            self.player = {"x": value["x"], "y": value["y"]}
+
+        self.client.set.side_effect = set_position
+
+    def test_a_crate_inside_three_needs_no_reseat(self):
+        self.place_crate_away(2.9)
+        target = crates.spawn_crate(self.host, self.client)
+        self.assertEqual((target["reseated"], target["reseatTries"], target["distanceBeforeReseat"]), (False, 0, 2.9))
+        self.client.set.assert_not_called()
+
+    def test_the_distances_seen_in_the_baseline_launch_are_re_seated_to_within_two(self):
+        for distance in (3.01, 3.05, 3.11, 3.21, 3.31, 3.39, 3.52):
+            with self.subTest(distance=distance):
+                crates.reset_launch_state()
+                self.player = dict(ANCHOR)
+                self.place_crate_away(distance)
+                self.teleport_follows_set()
+                target = crates.spawn_crate(self.host, self.client)
+                self.assertTrue(target["reseated"])
+                self.assertEqual(target["reseatTries"], 1)
+                self.assertEqual(target["distanceBeforeReseat"], round(distance, 2))
+                self.assertLessEqual(target["distance"], crates.RESEAT_DISTANCE)
+
+    def test_a_client_displaced_far_from_the_anchor_is_put_back_before_the_spawn(self):
+        crates.spawn_crate(self.host, self.client)
+        self.player = {"x": ANCHOR["x"] + 11.79, "y": 5.0}
+        self.teleport_follows_set()
+        self.host_rows = []
+        target = crates.spawn_crate(self.host, self.client)
+        self.assertFalse(target["reseated"])
+        self.assertLessEqual(target["distance"], crates.world.MAX_START_DISTANCE)
+
+    def test_a_client_that_cannot_be_moved_fails_after_the_set_number_of_re_seats_with_its_category(self):
+        self.place_crate_away(3.52)
+        with self.assertRaises(crates.SetupFailure) as caught:
             crates.spawn_crate(self.host, self.client)
-        self.assertIn("beyond", str(caught.exception))
+        self.assertEqual(caught.exception.category, "client-too-far-after-reseat")
+        self.assertEqual(self.client.set.call_count, crates.RESEAT_TRIES)
+        self.assertIn("3.52", str(caught.exception))
 
     def test_the_client_is_put_back_at_the_first_anchor_before_the_second_spawn(self):
         crates.spawn_crate(self.host, self.client)
@@ -85,7 +132,7 @@ class SpawnTests(unittest.TestCase):
         self.host_rows = []
         crates.spawn_crate(self.host, self.client)
         self.client.set.assert_called_with("player", crates.base.BODY_PATH, {"x": 10.0, "y": 5.0, "z": 0.0})
-        self.assertEqual(self.spawn_arguments["x"], 11.75)
+        self.assertEqual(self.spawn_arguments["x"], 11.0)
 
     def test_a_crate_below_the_health_floor_fails_the_setup(self):
         self.described["health"] = 20.0
@@ -113,7 +160,7 @@ class RunControlTests(unittest.TestCase):
             self.assertTrue(crates.check(self.missed()))
         with self.assertRaises(unittest.SkipTest) as caught:
             self.prepare_with(lambda host, client: self.fail("must not spawn"))
-        self.assertIn("unhittable or unreachable", str(caught.exception))
+        self.assertIn("looks unhittable", str(caught.exception))
 
     def test_two_failed_runs_do_not_stop_it(self):
         crates.check(self.missed())
@@ -123,13 +170,37 @@ class RunControlTests(unittest.TestCase):
 
     def test_setup_failures_count_toward_the_stop(self):
         def fail(host, client):
-            raise AssertionError("no new crate")
+            raise crates.SetupFailure("no-new-crate", "no new crate")
 
-        for _ in range(3):
-            with self.assertRaises(AssertionError):
+        for _ in range(crates.STOP_AFTER_SETUP_FAILURES):
+            with self.assertRaises(crates.SetupFailure):
                 self.prepare_with(fail)
-        with self.assertRaises(unittest.SkipTest):
+        with self.assertRaises(unittest.SkipTest) as caught:
             self.prepare_with(fail)
+        self.assertIn("first 5 attempts all failed setup", str(caught.exception))
+        self.assertIn("no-new-crate", str(caught.exception))
+
+    def test_four_setup_failures_do_not_stop_it(self):
+        def fail(host, client):
+            raise crates.SetupFailure("no-new-crate", "no new crate")
+
+        for _ in range(crates.STOP_AFTER_SETUP_FAILURES - 1):
+            with self.assertRaises(crates.SetupFailure):
+                self.prepare_with(fail)
+        target = dict(handle="id:7", clientHandle="id:7", position={"x": 1.0, "y": 1.0})
+        self.assertIsNotNone(self.prepare_with(lambda host, client: target))
+
+    def test_failure_reasons_are_grouped_and_written_to_the_failure_file(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(crates, "FAILURE_DIRECTORY", directory):
+            crates.record_failure("no-new-crate", "first")
+            crates.record_failure("no-new-crate", "second")
+            crates.record_failure("client-too-far-after-reseat", "third")
+            with open(directory + "/" + crates.FAILURE_FILE, encoding="utf-8") as handle:
+                written = json.load(handle)
+        self.assertEqual(written["reasons"], {"no-new-crate": 2, "client-too-far-after-reseat": 1})
+        self.assertEqual([item["message"] for item in written["attempts"]], ["first", "second", "third"])
 
     def test_later_failures_do_not_stop_a_launch_that_already_has_a_valid_run(self):
         self.assertEqual(crates.check(self.landed()), [])

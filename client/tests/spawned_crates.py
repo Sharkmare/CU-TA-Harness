@@ -1,3 +1,6 @@
+import collections
+import json
+import os
 import time
 import unittest
 
@@ -8,7 +11,7 @@ from . import world_building as world
 
 GROUP = world.GROUP
 CRATE_ID = "medcrate"
-SPAWN_OFFSET = 1.75
+SPAWN_OFFSET = 1.0
 ANCHOR_TOLERANCE = 0.5
 LOOKUP_RADIUS = 3.0
 LISTED_TOGETHER_RADIUS = 0.5
@@ -19,11 +22,34 @@ POLL_SECONDS = 0.5
 VALID_RUNS_WANTED = 10
 STOP_AFTER_FAILED_RUNS = 3
 MIN_HEALTH = 100.0
-STATE = {"anchor": None, "valid": 0, "failed": 0, "spawned": 0}
+RESEAT_DISTANCE = 2.0
+RESEAT_TRIES = 4
+RESEAT_OFFSET = 1.0
+STOP_AFTER_SETUP_FAILURES = 5
+FAILURE_FILE = "spawned_crate_failures.json"
+FAILURE_DIRECTORY = None
+STATE = {"anchor": None, "valid": 0, "swing_failed": 0, "setup_failed": 0, "spawned": 0, "reasons": collections.Counter(), "attempts": []}
+
+
+class SetupFailure(AssertionError):
+    def __init__(self, category, message):
+        super().__init__(message)
+        self.category = category
 
 
 def reset_launch_state():
-    STATE.update({"anchor": None, "valid": 0, "failed": 0, "spawned": 0})
+    STATE.update({"anchor": None, "valid": 0, "swing_failed": 0, "setup_failed": 0, "spawned": 0, "reasons": collections.Counter(), "attempts": []})
+
+
+def record_failure(category, message):
+    STATE["reasons"][category] += 1
+    STATE["attempts"].append({"category": category, "message": message[:300]})
+    print("SETUP FAILURES grouped: %s" % dict(STATE["reasons"]))
+    if FAILURE_DIRECTORY:
+        os.makedirs(FAILURE_DIRECTORY, exist_ok=True)
+        with open(os.path.join(FAILURE_DIRECTORY, FAILURE_FILE), "w", encoding="utf-8") as handle:
+            json.dump({"valid": STATE["valid"], "setupFailed": STATE["setup_failed"], "firstSwingFailed": STATE["swing_failed"], "reasons": dict(STATE["reasons"]),
+                       "attempts": STATE["attempts"]}, handle, indent=2)
 
 
 def host_ids_near(host, position):
@@ -37,7 +63,7 @@ def wait_for_new_crate(host, spot, known_ids):
         if fresh:
             return min(fresh, key=lambda row: base.distance(row["position"], spot))
         time.sleep(POLL_SECONDS)
-    raise AssertionError("the host lists no new %s within %.1f of (%.1f, %.1f) after %.0f s" % (CRATE_ID, LOOKUP_RADIUS, spot["x"], spot["y"], FIND_TIMEOUT_SECONDS))
+    raise SetupFailure("no-new-crate", "the host lists no new %s within %.1f of (%.1f, %.1f) after %.0f s" % (CRATE_ID, LOOKUP_RADIUS, spot["x"], spot["y"], FIND_TIMEOUT_SECONDS))
 
 
 def wait_until_settled(host, handle, fallback):
@@ -73,6 +99,18 @@ def hold_client_at_anchor(client):
     return STATE["anchor"]
 
 
+def reseat_client(host, client, handle, fallback):
+    for attempt in range(1, RESEAT_TRIES + 1):
+        crate = world.host_position(host, handle) or fallback
+        client.set("player", base.BODY_PATH, {"x": crate["x"] - RESEAT_OFFSET, "y": crate["y"], "z": 0.0})
+        time.sleep(POLL_SECONDS * 2)
+        crate = world.host_position(host, handle) or crate
+        reached = base.distance(base.player_position(client), crate)
+        if reached <= RESEAT_DISTANCE:
+            return attempt, crate, reached
+    return RESEAT_TRIES, crate, reached
+
+
 def spawn_crate(host, client):
     anchor = hold_client_at_anchor(client)
     spot = {"x": anchor["x"] + SPAWN_OFFSET, "y": anchor["y"]}
@@ -84,30 +122,41 @@ def spawn_crate(host, client):
     settled = wait_until_settled(host, handle, row["position"])
     described = world.describe_candidate(host, dict(row, position=settled))
     if described is None:
-        raise AssertionError("the spawned %s %s has no readable health" % (CRATE_ID, handle))
+        raise SetupFailure("crate-unreadable", "the spawned %s %s has no readable health" % (CRATE_ID, handle))
+    if described["health"] < MIN_HEALTH:
+        raise SetupFailure("low-health", "the spawned %s has health %.1f, below %.0f" % (CRATE_ID, described["health"], MIN_HEALTH))
+    distance_before = base.distance(base.player_position(client), settled)
+    reseat_tries = 0
+    if distance_before > world.MAX_START_DISTANCE:
+        reseat_tries, settled, reached = reseat_client(host, client, handle, settled)
+        if reached > RESEAT_DISTANCE:
+            raise SetupFailure("client-too-far-after-reseat", "the client is %.2f from the spawned %s after %d re-seats (was %.2f)" % (reached, CRATE_ID, reseat_tries, distance_before))
     client_row = wait_for_client_listing(client, settled)
     if client_row is None:
-        raise AssertionError("the client does not list the spawned %s %s within %.1f of the host position (%.2f, %.2f) after %.0f s" % (
+        raise SetupFailure("client-does-not-list-crate", "the client does not list the spawned %s %s within %.1f of the host position (%.2f, %.2f) after %.0f s" % (
             CRATE_ID, handle, LISTED_TOGETHER_RADIUS, settled["x"], settled["y"], FIND_TIMEOUT_SECONDS))
     distance = base.distance(base.player_position(client), settled)
     if distance > world.MAX_START_DISTANCE:
-        raise AssertionError("the client is %.2f from the spawned %s, beyond %.1f" % (distance, CRATE_ID, world.MAX_START_DISTANCE))
-    if described["health"] < MIN_HEALTH:
-        raise AssertionError("the spawned %s has health %.1f, below %.0f" % (CRATE_ID, described["health"], MIN_HEALTH))
-    return dict(described, startHealth=described["health"], healthBefore=described["health"], distance=round(distance, 2), spawnOffset=SPAWN_OFFSET,
-                spawnedAt=spot, clientHandle="id:%d" % client_row["object"]["id"], spawnNumber=STATE["spawned"], teleports=0, skippedPicks=[], timesUsedBefore=0)
+        raise SetupFailure("client-too-far-after-reseat", "the client is %.2f from the spawned %s, beyond %.1f" % (distance, CRATE_ID, world.MAX_START_DISTANCE))
+    return dict(described, position=settled, startHealth=described["health"], healthBefore=described["health"], distance=round(distance, 2), spawnOffset=SPAWN_OFFSET,
+                spawnedAt=spot, clientHandle="id:%d" % client_row["object"]["id"], spawnNumber=STATE["spawned"], teleports=reseat_tries, reseated=reseat_tries > 0,
+                reseatTries=reseat_tries, distanceBeforeReseat=round(distance_before, 2), skippedPicks=[], timesUsedBefore=0)
 
 
 def prepare(host, client):
     if STATE["valid"] >= VALID_RUNS_WANTED:
         raise unittest.SkipTest("%d valid runs already recorded in this launch" % STATE["valid"])
-    if STATE["valid"] == 0 and STATE["failed"] >= STOP_AFTER_FAILED_RUNS:
-        raise unittest.SkipTest("stopped: %d runs in a row ended without a landed first swing, the spawned %s looks unhittable or unreachable" % (STATE["failed"], CRATE_ID))
+    if STATE["valid"] == 0 and STATE["swing_failed"] >= STOP_AFTER_FAILED_RUNS:
+        raise unittest.SkipTest("stopped: %d runs without a landed first swing and no valid run, the spawned %s looks unhittable; reasons %s" % (
+            STATE["swing_failed"], CRATE_ID, dict(STATE["reasons"])))
+    if STATE["valid"] == 0 and STATE["setup_failed"] >= STOP_AFTER_SETUP_FAILURES:
+        raise unittest.SkipTest("stopped: the first %d attempts all failed setup; reasons %s" % (STATE["setup_failed"], dict(STATE["reasons"])))
     base.empty_the_hand(client)
     try:
         target = spawn_crate(host, client)
-    except AssertionError:
-        STATE["failed"] += 1
+    except SetupFailure as failure:
+        STATE["setup_failed"] += 1
+        record_failure(failure.category, str(failure))
         raise
     return {"position": target["position"], "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"],
             "target": target, "measurements": []}
@@ -126,7 +175,8 @@ def act(client, context):
 def check(context):
     issues = world.check_first_swing(context)
     if issues:
-        STATE["failed"] += 1
+        STATE["swing_failed"] += 1
+        record_failure("first-swing-no-damage", issues[0])
     else:
         STATE["valid"] += 1
     return issues
