@@ -228,9 +228,12 @@ class HeldClickTests(unittest.TestCase):
     def test_intervals_and_the_cooldown_hint_use_the_jitter_range(self):
         samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(2.0, [0, 0.0], [0, 0.0])]
         verdict, findings = desync.judge_series(samples)
-        hints = desync.verdict_hints(samples, [0.0, 0.72, 1.45, 2.4], 100.0, None, findings, 60.0)
-        self.assertEqual(desync.swing_intervals([0.0, 0.72, 1.45]), [0.72, 0.73])
-        self.assertIn("client swing intervals: shortest 0.720 s, mean 0.800 s; 2 of 3 could reach the host under the 0.7 s cooldown after jitter of up to 60 ms", hints)
+        hits = [0.0, 0.2, 0.4, 0.62]
+        hints = desync.verdict_hints(samples, hits, 100.0, None, findings, 100.0)
+        self.assertEqual(desync.swing_intervals(hits), [0.2, 0.2, 0.22])
+        self.assertIn("client swing intervals: shortest 0.200 s, mean 0.207 s; 3 of 3 could reach the host under the 0.124 s cooldown after jitter of up to 100 ms", hints)
+        quiet = desync.verdict_hints(samples, hits, 100.0, None, findings, 50.0)
+        self.assertIn("client swing intervals: shortest 0.200 s, mean 0.207 s; 0 of 3 could reach the host under the 0.124 s cooldown after jitter of up to 50 ms", quiet)
 
 
 class DelayParsingTests(unittest.TestCase):

@@ -364,7 +364,7 @@ def gap_summary(swing_log, accepted):
 MILLISECONDS_PER_SECOND = 1000.0
 
 
-HOST_ATTACK_COOLDOWN_SECONDS = 0.7
+HOST_ATTACK_COOLDOWN_SECONDS = 0.124
 
 
 def verdict_hints(samples, hit_times, delay_ms, host_counts, findings, jitter_ms=0.0):
@@ -373,7 +373,7 @@ def verdict_hints(samples, hit_times, delay_ms, host_counts, findings, jitter_ms
     if intervals:
         spread = (jitter_ms or 0.0) / MILLISECONDS_PER_SECOND
         close = [value for value in intervals if value - spread < HOST_ATTACK_COOLDOWN_SECONDS]
-        hints.append("client swing intervals: shortest %.3f s, mean %.3f s; %d of %d could reach the host under the %.1f s cooldown after jitter of up to %.0f ms" % (
+        hints.append("client swing intervals: shortest %.3f s, mean %.3f s; %d of %d could reach the host under the %.3f s cooldown after jitter of up to %.0f ms" % (
             min(intervals), sum(intervals) / len(intervals), len(close), len(intervals), HOST_ATTACK_COOLDOWN_SECONDS, jitter_ms or 0.0))
     pairs = [(s["client"][1], s["host"][1]) for s in samples if s["client"][0] != EMPTY_BLOCK and s["host"][0] != EMPTY_BLOCK and s["client"][1] > 0 and s["host"][1] > 0]
     if pairs:
