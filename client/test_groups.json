@@ -84,7 +84,8 @@
         "unit.test_launchsummary",
         "unit.test_hook_scenarios",
         "unit.test_regression_scenarios",
-        "unit.test_evidence_scenarios"
+        "unit.test_evidence_scenarios",
+        "unit.test_world_building"
       ],
       "needs_game": false
     },

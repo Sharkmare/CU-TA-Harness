@@ -733,3 +733,4 @@ def ready_up(games, timeout=READY_TIMEOUT_SECONDS, step=1.0):
 from . import hook_scenarios  # noqa: E402,F401
 from . import regression_scenarios  # noqa: E402,F401
 from . import evidence_scenarios  # noqa: E402,F401
+from . import world_building  # noqa: E402,F401
