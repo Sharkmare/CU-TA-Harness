@@ -50,7 +50,8 @@ def scenario_test(scenario):
 def series_test(scenario):
     def run(self):
         observation = desync.observe_series(scenario, self.host, self.client, perform_action=not rig.mutation_active(desync.SKIP_ACTION_MUTATION))
-        report = desync.describe_series(observation, BUILD, EXPECTED_HASH, self.game_version, DELAY_MS, JITTER_MS)
+        host_counts = desync.host_log_counts(GAMES.log_text("host"))
+        report = desync.describe_series(observation, BUILD, EXPECTED_HASH, self.game_version, DELAY_MS, JITTER_MS, host_counts)
         text = desync.format_series_report(report)
         print("\n" + text)
         desync.save_series_report(report, REPORT_DIRECTORY)
@@ -68,7 +69,7 @@ class DesyncMixin:
         if EXPECTED_HASH == desync.UNKNOWN_HASH:
             raise unittest.SkipTest("no DLL found for build %s (set CU_FLAVOUR_ZIP or CU_UPSTREAM_STAGE)" % BUILD)
         try:
-            cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, delay_ms=DELAY_MS, jitter_ms=JITTER_MS)
+            cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=DELAY_MS, jitter_ms=JITTER_MS)
             if not ready_up([cls.host, cls.client]):
                 raise AssertionError("the lobby ready gate did not accept both players")
             cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
@@ -97,7 +98,8 @@ class DesyncMixin:
             self.assertEqual(desync.sha256_of_file(os.path.join(copy, TOGETHER_DLL_RELATIVE)), EXPECTED_HASH, "%s runs another Together DLL than %s" % (which, BUILD))
 
 
-GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": []}
+GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"]}
+GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"]}
 
 
 def build_classes():
@@ -113,6 +115,7 @@ def build_classes():
                 member = series_test(scenario)
                 members[member.__name__] = member
         members["client_extra"] = GROUP_CLIENT_ARGUMENTS[group]
+        members["host_extra"] = GROUP_HOST_ARGUMENTS[group]
         if group == "default":
             members["test_the_games_run_the_requested_build"] = DesyncMixin.test_the_games_run_the_requested_build
         delay = "" if DELAY_MS is None else "_delay%g" % DELAY_MS

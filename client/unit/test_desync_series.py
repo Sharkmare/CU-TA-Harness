@@ -126,6 +126,44 @@ class SeriesReportTests(unittest.TestCase):
         self.assertIn("hitTimes", loaded)
 
 
+class HintTests(unittest.TestCase):
+    def hints(self, samples, hit_times, delay, counts=None):
+        verdict, findings = desync.judge_series(samples)
+        return desync.verdict_hints(samples, hit_times, delay, counts, findings)
+
+    def test_a_constant_host_to_client_ratio_means_a_multiplier_mismatch(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 10.0], [8, 20.0]), sample(0.5, [8, 20.0], [8, 40.0]), sample(0.75, [0, 0.0], [0, 0.0])]
+        self.assertTrue(any("constant host/client crack ratio 0.50" in hint for hint in self.hints(samples, [0.0, 0.5], 0.0)))
+
+    def test_equal_counters_do_not_claim_a_ratio(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 20.0], [8, 20.0]), sample(0.5, [0, 0.0], [0, 0.0])]
+        hints = self.hints(samples, [0.0], 0.0)
+        self.assertFalse(any("ratio" in hint for hint in hints))
+        self.assertIn("no divergence pattern in this run", hints)
+
+    def test_fewer_host_steps_than_swings_with_delay_points_at_dropped_swings(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 20.0], [8, 0.0]), sample(1.0, [8, 40.0], [8, 20.0]), sample(2.0, [0, 0.0], [0, 0.0])]
+        counts = {"cooldownDrops": 3, "rangeDrops": 0, "applied": 2, "unresolved": 0, "dropped": 0}
+        hints = self.hints(samples, [0.0, 0.7, 1.4, 2.1, 2.8, 3.5], 100.0, counts)
+        self.assertTrue(any("dropped swings" in hint and "100 ms" in hint for hint in hints))
+        self.assertIn("host dropped swings on the attacker cooldown", hints)
+        self.assertIn("host log: cooldown drops 3, range drops 0, applied lines 2", hints)
+        self.assertNotIn("host rejected swings for range", hints)
+
+    def test_a_late_host_break_is_named_with_its_lag(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(1.0, [8, 50.0], [0, 0.0]), sample(1.5, [0, 0.0], [0, 0.0])]
+        self.assertTrue(any("host broke the block 0.50 s after the client" in hint for hint in self.hints(samples, [0.0], 250.0)))
+
+    def test_host_log_lines_are_counted_by_marker(self):
+        log = "[Info] [evidencebag] hit server cooldown client=2 cd=0.3\n[Info] [evidencebag] hit server cooldown client=2 cd=0.1\n[Info] [evidencebag] hit server range client=2\nother\n"
+        counts = desync.host_log_counts(log)
+        self.assertEqual((counts["cooldownDrops"], counts["rangeDrops"], counts["applied"]), (2, 1, 0))
+
+    def test_counter_steps_ignore_the_clearing_at_the_break(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 20.0], [8, 20.0]), sample(0.5, [0, 0.0], [0, 0.0])]
+        self.assertEqual((desync.counter_increases(samples, "host"), desync.counter_increases(samples, "client")), (1, 1))
+
+
 class DelayParsingTests(unittest.TestCase):
     def test_numbers_parse_and_empty_means_no_proxy(self):
         self.assertEqual(desync.parse_delay("250"), 250.0)

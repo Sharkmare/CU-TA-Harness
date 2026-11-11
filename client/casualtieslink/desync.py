@@ -214,7 +214,8 @@ class SeriesScenario:
 
 
 class SeriesObservation:
-    def __init__(self, scenario, baseline, samples, hit_times, acted):
+    def __init__(self, scenario, baseline, samples, hit_times, acted, context=None):
+        self.context = context or {}
         self.scenario = scenario
         self.baseline = baseline
         self.samples = samples
@@ -251,7 +252,7 @@ def observe_series(scenario, host, client, perform_action=True, clock=time.monot
     finally:
         stop.set()
         thread.join(timeout=5.0)
-    return SeriesObservation(scenario, baseline, list(samples), hit_times, perform_action)
+    return SeriesObservation(scenario, baseline, list(samples), hit_times, perform_action, context)
 
 
 def side_findings(samples, side):
@@ -290,9 +291,68 @@ def judge_series(samples):
     return VERDICT_PERSISTED, findings
 
 
-def describe_series(observation, build, dll_hash, game_version=None, delay_ms=None, jitter_ms=0.0):
+HOST_LOG_MARKERS = {
+    "cooldownDrops": "hit server cooldown",
+    "rangeDrops": "hit server range",
+    "applied": "hit server apply",
+    "unresolved": "hit server unresolved",
+    "dropped": "hit server drop",
+}
+RATIO_TOLERANCE = 0.02
+LATE_BREAK_SECONDS = 0.3
+
+
+def host_log_counts(log_text):
+    return {name: sum(1 for line in log_text.splitlines() if marker in line) for name, marker in HOST_LOG_MARKERS.items()}
+
+
+def counter_increases(samples, side):
+    increases = 0
+    previous = 0.0
+    for sample in samples:
+        block, counter = sample[side]
+        if block != EMPTY_BLOCK and counter > previous + COUNTER_DROP_EPSILON:
+            increases += 1
+        if block != EMPTY_BLOCK:
+            previous = counter
+    return increases
+
+
+def verdict_hints(samples, hit_times, delay_ms, host_counts, findings):
+    hints = []
+    pairs = [(s["client"][1], s["host"][1]) for s in samples if s["client"][0] != EMPTY_BLOCK and s["host"][0] != EMPTY_BLOCK and s["client"][1] > 0 and s["host"][1] > 0]
+    if pairs:
+        ratios = [host / client for client, host in pairs]
+        if max(ratios) - min(ratios) <= RATIO_TOLERANCE and abs(ratios[0] - 1.0) > RATIO_TOLERANCE:
+            hints.append("constant host/client crack ratio %.2f: damage multiplier mismatch" % ratios[0])
+    host_steps = counter_increases(samples, "host")
+    client_steps = counter_increases(samples, "client")
+    swings = len(hit_times)
+    hints.append("swings requested %d, host crack steps %d, client crack steps %d" % (swings, host_steps, client_steps))
+    if host_counts:
+        hints.append("host log: cooldown drops %d, range drops %d, applied lines %d" % (host_counts["cooldownDrops"], host_counts["rangeDrops"], host_counts["applied"]))
+        if host_counts["cooldownDrops"] > 0:
+            hints.append("host dropped swings on the attacker cooldown")
+        if host_counts["rangeDrops"] > 0:
+            hints.append("host rejected swings for range")
+    host_break, client_break = findings["host"]["brokeAt"], findings["client"]["brokeAt"]
+    if host_break is not None and client_break is not None and host_break - client_break > LATE_BREAK_SECONDS:
+        hints.append("host broke the block %.2f s after the client" % (host_break - client_break))
+    if host_break is not None and client_break is not None and client_break - host_break > LATE_BREAK_SECONDS:
+        hints.append("client saw the break %.2f s after the host" % (client_break - host_break))
+    if swings > host_steps + 1 and delay_ms:
+        hints.append("fewer host crack steps than swings at %g ms: dropped swings" % delay_ms)
+    if not [h for h in hints if h.startswith("constant") or "dropped" in h or "rejected" in h or "after the" in h]:
+        hints.append("no divergence pattern in this run")
+    return hints
+
+
+def describe_series(observation, build, dll_hash, game_version=None, delay_ms=None, jitter_ms=0.0, host_counts=None):
     verdict, findings = judge_series(observation.samples)
     return {
+        "block": {key: observation.context.get(key) for key in ("position", "blockId", "blockHealth", "cell")},
+        "hostLog": host_counts,
+        "hints": verdict_hints(observation.samples, observation.hit_times, delay_ms, host_counts, findings),
         "gameVersion": game_version,
         "actionPerformedBy": "client",
         "build": build,
@@ -324,6 +384,10 @@ def format_series_report(report):
         lines.append("  %s: broke at %s, crack resets %s, reappeared %s, present at end: %s" % (
             side, found["brokeAt"], [(item["t"], item["from"], item["to"]) for item in found["resets"]] or "none",
             [(item["t"], item["goneFor"]) for item in found["reappeared"]] or "never", found["presentAtEnd"]))
+    block = report.get("block") or {}
+    lines.insert(4, "  block id %s, health %s, at %s" % (block.get("blockId"), block.get("blockHealth"), block.get("position")))
+    for hint in report.get("hints", []):
+        lines.append("  hint: %s" % hint)
     previous = None
     for sample in report["samples"]:
         state = (sample["host"], sample["client"])
