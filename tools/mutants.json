@@ -159,5 +159,33 @@
     "old": "string key = direction + \":\" + hash;",
     "new": "string key = hash;",
     "label": "directions merged"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/desync.py",
+    "old": "    if perform_action:\n        scenario.act(client, context)",
+    "new": "    if True:\n        scenario.act(client, context)",
+    "label": "desync ignores the skipped action"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/desync.py",
+    "old": "if any(changed_on_client) and not changed_on_client[-1] and not changed_on_host[-1]:",
+    "new": "if False:",
+    "label": "desync never reports a revert"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/desync.py",
+    "old": "    if any(sample.host != sample.client for sample in observation.samples):",
+    "new": "    if False:",
+    "label": "desync ignores disagreement"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/desync.py",
+    "old": "def stage_dll_hash(stage_directory):\n    path = os.path.join(stage_directory, \"plugins\", \"Together\", \"CasualtiesMP.dll\")",
+    "new": "def stage_dll_hash(stage_directory):\n    path = os.path.join(stage_directory, \"plugins\", \"CasualtiesMP.dll\")",
+    "label": "desync hashes the wrong stage file"
   }
 ]
