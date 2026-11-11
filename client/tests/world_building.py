@@ -345,3 +345,5 @@ from . import pvp_banded  # noqa: E402,F401
 from . import corpse_banded  # noqa: E402,F401
 
 from . import static_copy  # noqa: E402,F401
+
+from . import console_leak  # noqa: E402,F401
