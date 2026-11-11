@@ -214,9 +214,9 @@ class DesyncMixin:
 PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
                           "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
-                          "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"]}
+                          "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
 GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
-                        "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"]}
+                        "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
 PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence")
 EVIDENCE_GROUPS = ("hook-evidence",)

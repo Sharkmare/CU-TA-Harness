@@ -33,6 +33,7 @@ BAND_RESEAT_OFFSET = 2.0
 BAND_WAIT_SECONDS = 0.3
 BAND_TRIES = 4
 CAST_SAMPLE_STEP = 0.25
+RAW_HIT_WIDTH = 700
 HIT_LIST_KEYS = ("items", "hits", "results", "values", "elements", "array", "data", "value")
 PHYSICS_ENGINE_TYPE = world.PHYSICS_ENGINE_TYPE
 STOP_AFTER_SETUP_FAILURES = 5
@@ -219,7 +220,8 @@ def hit_list(result):
 def cast_by_raycast_all(client, origin, direction):
     result = client.call("invoke", target=PHYSICS_ENGINE_TYPE, method="RaycastAll",
                          args=[{"x": origin["x"], "y": origin["y"]}, direction, ATTACK_DISTANCE], types=["Vector2", "Vector2", "Single"])
-    return [names_in(item) for item in hit_list(result)]
+    items = hit_list(result)
+    return [names_in(item) for item in items], (json.dumps(items[0], default=str)[:RAW_HIT_WIDTH] if items else None)
 
 
 def cast_by_point_samples(client, origin, direction):
@@ -244,16 +246,17 @@ def mimic_cast(client, origin, aim):
         return {"method": None, "error": "limb1 position unreadable", "hits": []}
     direction = unit_direction(origin, aim)
     try:
-        hits = cast_by_raycast_all(client, origin, direction)
+        hits, raw_first_hit = cast_by_raycast_all(client, origin, direction)
         method = "RaycastAll"
         error = None
     except Exception as failure:
+        raw_first_hit = None
         hits, samples_error = cast_by_point_samples(client, origin, direction)
         method = "OverlapPoint samples"
         error = "RaycastAll failed: %s%s" % (str(failure)[:90], "; samples failed: " + samples_error if samples_error else "")
     hits = hits or []
     crate_places = [index for index, hit in enumerate(hits) if CRATE_ID in str(hit.get("name") or "").lower()]
-    return {"method": method, "error": error, "attackDistance": ATTACK_DISTANCE, "hits": hits[:12], "crateIndex": crate_places[0] if crate_places else None,
+    return {"method": method, "error": error, "rawFirstHit": raw_first_hit, "attackDistance": ATTACK_DISTANCE, "hits": hits[:12], "crateIndex": crate_places[0] if crate_places else None,
             "hitsBeforeCrate": hits[:crate_places[0]] if crate_places else hits[:12]}
 
 

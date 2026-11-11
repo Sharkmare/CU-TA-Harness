@@ -337,3 +337,5 @@ SCENARIOS = [
 base.SCENARIOS.extend(SCENARIOS)
 
 from . import spawned_crates  # noqa: E402,F401
+
+from . import v2_suite  # noqa: E402,F401

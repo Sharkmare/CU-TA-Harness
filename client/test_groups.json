@@ -86,7 +86,8 @@
         "unit.test_regression_scenarios",
         "unit.test_evidence_scenarios",
         "unit.test_world_building",
-        "unit.test_spawned_crates"
+        "unit.test_spawned_crates",
+        "unit.test_v2_suite"
       ],
       "needs_game": false
     },

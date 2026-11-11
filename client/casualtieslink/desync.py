@@ -18,10 +18,11 @@ FIXED_BUILD = "upstream-fixed"
 BASELINE_BUILD = "upstream-baseline"
 FIXED_DIAG_BUILD = "upstream-fixed-diag"
 FIXED_NOBUILD_BUILD = "upstream-fixed-nobuild"
+FIXED_V2_BUILD = "upstream-fixed-v2"
 STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage", DIAG2_BUILD: "diag-stage2", DIAG3_BUILD: "diag-stage3",
                  FIXED_BUILD: "fullgame-stage", BASELINE_BUILD: "baseline-stage", FIXED_DIAG_BUILD: "fullgame-diag-stage",
-                 FIXED_NOBUILD_BUILD: "fullgame-nobuild-stage"}
-KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD, FIXED_BUILD, BASELINE_BUILD, FIXED_DIAG_BUILD, FIXED_NOBUILD_BUILD)
+                 FIXED_NOBUILD_BUILD: "fullgame-nobuild-stage", FIXED_V2_BUILD: "fullgame-v2-stage"}
+KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD, FIXED_BUILD, BASELINE_BUILD, FIXED_DIAG_BUILD, FIXED_NOBUILD_BUILD, FIXED_V2_BUILD)
 DIAG_BUILDS = (DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD)
 TRANSPILER_MARKER = "TRANSPILER"
 
@@ -148,7 +149,8 @@ def class_suffix(build, dll_hash):
 class Scenario:
     network_sensitive = False
 
-    def __init__(self, name, description, prepare, act, read, changed, offsets=SAMPLE_OFFSETS_SECONDS, group="default", check=None):
+    def __init__(self, name, description, prepare, act, read, changed, offsets=SAMPLE_OFFSETS_SECONDS, group="default", check=None, max_repeat=None):
+        self.max_repeat = max_repeat
         self.check = check
         self.offsets = offsets
         self.group = group
@@ -313,6 +315,8 @@ def expand_runs(scenarios, profiles, repeat):
         chosen = profiles if scenario.network_sensitive else [launchplan.DIRECT]
         for profile in chosen:
             count = (profile.repeat or repeat) if scenario.network_sensitive else repeat
+            if getattr(scenario, "max_repeat", None):
+                count = min(count, scenario.max_repeat)
             for repetition in range(1, count + 1):
                 name = "test_" + scenario.name
                 if scenario.network_sensitive:
