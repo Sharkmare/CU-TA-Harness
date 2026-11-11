@@ -9,38 +9,27 @@ from tests import hook_scenarios, regression_scenarios, spawned_crates, test_des
 
 
 class SuiteTests(unittest.TestCase):
-    def test_the_mining_and_pvp_checks_run_in_the_same_startup_group_as_the_crate_scenario(self):
+    def test_the_mining_check_runs_in_the_same_startup_group_as_the_crate_scenario(self):
         self.assertEqual(v2_suite.MINING.group, spawned_crates.GROUP)
-        self.assertEqual(v2_suite.PVP.group, spawned_crates.GROUP)
         self.assertEqual(sorted(scenarios.counts_by_group(["spawned_crate", "v2check"])), ["hook-evidence"])
 
     def test_the_originals_keep_their_own_groups_and_names(self):
         self.assertEqual(hook_scenarios.HOOK_MINING.group, "hook-check")
         self.assertEqual(hook_scenarios.HOOK_MINING.name, "hookcheck_dig_cracks")
-        self.assertEqual(v2_suite.pvp_source().group, "hook-regression")
-        self.assertEqual(v2_suite.pvp_source().name, "regress_pvp_melee_by_client")
 
     def test_the_copies_share_the_original_steps(self):
         self.assertIs(v2_suite.MINING.prepare, hook_scenarios.HOOK_MINING.prepare)
         self.assertIs(v2_suite.MINING.hit, hook_scenarios.HOOK_MINING.hit)
-        self.assertIs(v2_suite.PVP.act, v2_suite.pvp_source().act)
-        self.assertIs(v2_suite.PVP.check, v2_suite.pvp_source().check)
 
-    def test_the_selection_fragments_pick_the_crate_the_mining_and_the_pvp_scenario_and_nothing_else(self):
-        self.assertEqual(sorted(scenarios.matching_scenario_names(["spawned_crate", "v2check"])),
-                         ["spawned_crate_hit_by_client", "v2check_dig_cracks", "v2check_pvp_melee_by_client"])
+    def test_the_selection_fragments_pick_the_crate_and_the_mining_scenario(self):
+        self.assertEqual(sorted(scenarios.matching_scenario_names(["spawned_crate", "v2check"])), ["spawned_crate_hit_by_client", "v2check_dig_cracks"])
 
-    def test_the_pvp_scenario_is_capped_at_two_runs_which_is_ten_punches(self):
-        runs = desync.expand_runs([v2_suite.PVP], [launchplan.DIRECT], 12)
-        self.assertEqual(len(runs), v2_suite.PVP_RUNS)
-        self.assertEqual(v2_suite.PVP_RUNS * hook_scenarios.REGRESSION_SWINGS, 10)
-
-    def test_the_crate_keeps_all_twelve_attempts_and_the_mining_follows_the_profile_repeat(self):
-        profiles = launchplan.parse_profiles(["100:0@10"])
-        crate = desync.expand_runs([scenario for scenario in scenarios.SCENARIOS if scenario.name == "spawned_crate_hit_by_client"], profiles, 12)
-        mining = desync.expand_runs([v2_suite.MINING], profiles, 12)
-        self.assertEqual(len(crate), 12)
-        self.assertEqual((len(mining), {run.profile.delay_ms for run in mining}), (10, {100.0}))
+    def test_the_crate_keeps_all_attempts_and_the_mining_follows_the_profile_repeat(self):
+        profiles = launchplan.parse_profiles(["100:0@5"])
+        crate = desync.expand_runs([scenario for scenario in scenarios.SCENARIOS if scenario.name == "spawned_crate_hit_by_client"], profiles, 8)
+        mining = desync.expand_runs([v2_suite.MINING], profiles, 8)
+        self.assertEqual(len(crate), 8)
+        self.assertEqual((len(mining), {run.profile.delay_ms for run in mining}), (5, {100.0}))
 
     def test_a_scenario_without_a_cap_is_not_limited(self):
         plain = scenarios.SCENARIOS[0]
@@ -53,8 +42,8 @@ class SuiteTests(unittest.TestCase):
             self.assertIn("--mp-verbose", arguments["hook-evidence"])
 
     def test_the_launch_plan_for_the_v2_command_is_one_launch(self):
-        counts = scenarios.counts_by_group(["spawned_crate", "v2check", "launch_log_checks"])
-        launches = launchplan.plan_launches(["upstream-fixed-v2"], sorted(counts), launchplan.parse_profiles(["100:0@10"]), 12, ["spawned_crate", "v2check", "launch_log_checks"])
+        counts = scenarios.counts_by_group(["pvp_banded", "spawned_crate", "v2check", "launch_log_checks"])
+        launches = launchplan.plan_launches(["upstream-fixed-v2"], sorted(counts), launchplan.parse_profiles(["100:0@5"]), 8, ["pvp_banded", "spawned_crate", "v2check", "launch_log_checks"])
         self.assertEqual(len(launches), 1)
         self.assertEqual(launches[0].startup_group, "hook-evidence")
 

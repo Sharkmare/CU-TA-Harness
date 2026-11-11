@@ -87,7 +87,8 @@
         "unit.test_evidence_scenarios",
         "unit.test_world_building",
         "unit.test_spawned_crates",
-        "unit.test_v2_suite"
+        "unit.test_v2_suite",
+        "unit.test_pvp_banded"
       ],
       "needs_game": false
     },

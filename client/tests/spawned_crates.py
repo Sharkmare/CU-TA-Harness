@@ -23,7 +23,7 @@ SETTLED_STEP = 0.05
 MIN_SETTLE_SECONDS = 2.0
 CHECKPOINT_SECONDS = (0.5, 2.0)
 POLL_SECONDS = 0.5
-VALID_RUNS_WANTED = 10
+VALID_RUNS_WANTED = 6
 STOP_AFTER_FAILED_RUNS = 3
 MIN_HEALTH = 100.0
 ATTACK_DISTANCE = 4.5
@@ -151,7 +151,7 @@ def spawn_crate(host, client):
                 spawnedAt=spot, clientHandle="id:%d" % client_row["object"]["id"], spawnNumber=STATE["spawned"], settleTrace=trace, skippedPicks=[], timesUsedBefore=0)
 
 
-def ensure_band(host, client, handle, fallback):
+def ensure_band(host, client, handle, fallback, side=-1):
     history = []
     crate = fallback
     for attempt in range(BAND_TRIES + 1):
@@ -163,7 +163,7 @@ def ensure_band(host, client, handle, fallback):
         if attempt == BAND_TRIES:
             break
         offset = BAND_RESEAT_OFFSET if distance > BAND_HIGH else (BAND_LOW + BAND_HIGH) / 2
-        client.set("player", base.BODY_PATH, {"x": crate["x"] - offset, "y": crate["y"], "z": 0.0})
+        client.set("player", base.BODY_PATH, {"x": crate["x"] + side * offset, "y": crate["y"], "z": 0.0})
         time.sleep(BAND_WAIT_SECONDS)
     return {"ok": False, "reseats": BAND_TRIES, "distances": history}
 
