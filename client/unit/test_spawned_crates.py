@@ -146,7 +146,7 @@ class BandTests(unittest.TestCase):
                 self.assertEqual((result["ok"], result["reseats"], result["distances"]), (True, 0, [distance]))
         self.client.set.assert_not_called()
 
-    def test_the_distances_seen_in_the_earlier_launches_outside_the_band_are_re_seated_to_two_beside_the_crate(self):
+    def test_the_distances_seen_in_the_earlier_launches_outside_the_band_are_re_seated_to_the_band_middle(self):
         for distance in (3.28, 3.29, 3.3, 3.55, 3.63, 3.9, 4.66, 5.02, 11.79):
             with self.subTest(distance=distance):
                 self.client.reset_mock()
@@ -154,7 +154,56 @@ class BandTests(unittest.TestCase):
                 self.landing = 2.8
                 result = self.band()
                 self.assertEqual((result["ok"], result["reseats"]), (True, 1))
-                self.client.set.assert_called_once_with("player", crates.base.BODY_PATH, {"x": 18.0, "y": 5.0, "z": 0.0})
+                self.client.set.assert_called_once_with("player", crates.base.BODY_PATH, {"x": 20.0 - crates.BAND_TARGET, "y": 5.0, "z": 0.0})
+
+    def plant(self, first_point, second_point):
+        (x0, y0), (x1, y1) = first_point, second_point
+        slope = (y1 - y0) / (x1 - x0)
+
+        def landed(target, path, value):
+            offset = self.crate["x"] - value["x"]
+            self.player = {"x": self.crate["x"] - (y0 + slope * (offset - x0)), "y": 5.0}
+
+        self.client.set.side_effect = landed
+
+    def test_the_sequence_that_oscillated_in_the_fixed_full_build_launch_now_converges(self):
+        self.player = {"x": self.crate["x"] - 3.58, "y": 5.0}
+        self.plant((2.0, 2.24), (2.85, 3.58))
+        result = self.band()
+        self.assertTrue(result["ok"], result)
+        self.assertLessEqual(result["reseats"], crates.BAND_TRIES)
+        self.assertEqual(len(result["distances"]), result["reseats"] + 1)
+        self.assertLess(abs(result["distances"][-1] - crates.BAND_TARGET), abs(result["distances"][0] - crates.BAND_TARGET))
+        self.assertGreaterEqual(result["distances"][-1], crates.BAND_LOW)
+        self.assertLessEqual(result["distances"][-1], crates.BAND_HIGH)
+
+    def test_the_first_move_goes_to_the_band_middle_and_the_next_one_moves_by_the_measured_error(self):
+        self.player = {"x": self.crate["x"] - 3.58, "y": 5.0}
+        self.plant((2.0, 2.24), (2.85, 3.58))
+        result = self.band()
+        self.assertEqual(result["offsets"][0], round(crates.BAND_TARGET, 3))
+        expected = crates.BAND_TARGET + crates.BAND_GAIN * (crates.BAND_TARGET - 3.58)
+        self.assertAlmostEqual(result["offsets"][1], expected, places=2)
+
+    def test_the_old_two_point_zero_then_middle_rule_would_have_stayed_out_and_this_one_does_not_repeat_an_offset(self):
+        self.player = {"x": self.crate["x"] - 3.58, "y": 5.0}
+        self.plant((2.0, 2.24), (2.85, 3.58))
+        result = self.band()
+        self.assertEqual(len(set(result["offsets"])), len(result["offsets"]))
+
+    def test_a_plant_that_overshoots_by_more_than_a_third_still_converges_within_the_tries(self):
+        for slope in (0.5, 1.0, 1.576, 2.0):
+            with self.subTest(slope=slope):
+                self.client.reset_mock()
+                self.player = {"x": self.crate["x"] - 4.2, "y": 5.0}
+                self.plant((2.0, 2.0), (3.0, 2.0 + slope))
+                self.assertTrue(self.band()["ok"])
+
+    def test_a_correction_never_asks_for_an_offset_below_the_minimum(self):
+        self.player = {"x": self.crate["x"] - 9.0, "y": 5.0}
+        self.plant((0.0, 6.0), (1.0, 7.0))
+        result = self.band()
+        self.assertTrue(all(offset >= crates.MIN_RESEAT_OFFSET for offset in result["offsets"]))
 
     def test_a_client_too_close_is_moved_to_the_middle_of_the_band(self):
         self.player = {"x": self.crate["x"] - 1.2, "y": 5.0}
@@ -432,9 +481,11 @@ class PreflightTests(unittest.TestCase):
         with mock.patch.object(crates, "BAND_HIGH", 5.0):
             self.assertTrue(any("attack distance" in problem for problem in crates.preflight(["spawned_crate"], 12)))
 
-    def test_a_re_seat_offset_outside_the_band_top_is_refused(self):
-        with mock.patch.object(crates, "BAND_RESEAT_OFFSET", 4.0):
-            self.assertTrue(any("re-seat offset" in problem for problem in crates.preflight(["spawned_crate"], 12)))
+    def test_a_re_seat_target_outside_the_band_or_a_gain_outside_zero_to_one_is_refused(self):
+        with mock.patch.object(crates, "BAND_TARGET", 4.0):
+            self.assertTrue(any("re-seat target" in problem for problem in crates.preflight(["spawned_crate"], 12)))
+        with mock.patch.object(crates, "BAND_GAIN", 1.5):
+            self.assertTrue(any("re-seat gain" in problem for problem in crates.preflight(["spawned_crate"], 12)))
 
     def test_too_few_attempts_for_the_valid_runs_and_the_early_stop_are_refused(self):
         self.assertEqual(len(crates.preflight(["spawned_crate"], 4)), 2)

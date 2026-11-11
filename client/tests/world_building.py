@@ -343,3 +343,5 @@ from . import v2_suite  # noqa: E402,F401
 from . import pvp_banded  # noqa: E402,F401
 
 from . import corpse_banded  # noqa: E402,F401
+
+from . import static_copy  # noqa: E402,F401

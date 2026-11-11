@@ -29,7 +29,9 @@ MIN_HEALTH = 100.0
 ATTACK_DISTANCE = 4.5
 BAND_LOW = 2.5
 BAND_HIGH = 3.2
-BAND_RESEAT_OFFSET = 2.0
+BAND_TARGET = (BAND_LOW + BAND_HIGH) / 2
+BAND_GAIN = 0.6
+MIN_RESEAT_OFFSET = 0.5
 BAND_WAIT_SECONDS = 0.3
 BAND_TRIES = 4
 CAST_SAMPLE_STEP = 0.25
@@ -132,9 +134,10 @@ def spawn_crate(host, client):
     return spawn_object(host, client, CRATE_ID, MIN_HEALTH)
 
 
-def spawn_object(host, client, object_id, min_health):
+def spawn_object(host, client, object_id, min_health, spot=None):
     anchor = hold_client_at_anchor(client)
-    spot = {"x": anchor["x"] + SPAWN_OFFSET, "y": anchor["y"]}
+    if spot is None:
+        spot = {"x": anchor["x"] + SPAWN_OFFSET, "y": anchor["y"]}
     known_ids = host_ids_near(host, spot)
     host.call("spawn", id=object_id, x=spot["x"], y=spot["y"], pickup=False)
     STATE["spawned"] += 1
@@ -157,19 +160,23 @@ def spawn_object(host, client, object_id, min_health):
 
 def ensure_band(host, client, handle, fallback, side=-1):
     history = []
+    offsets = []
     crate = fallback
+    offset = BAND_TARGET
     for attempt in range(BAND_TRIES + 1):
         crate = world.host_position(host, handle) or crate
         distance = base.distance(base.player_position(client), crate)
         history.append(round(distance, 2))
         if BAND_LOW <= distance <= BAND_HIGH:
-            return {"ok": True, "reseats": attempt, "distances": history}
+            return {"ok": True, "reseats": attempt, "distances": history, "offsets": offsets}
         if attempt == BAND_TRIES:
             break
-        offset = BAND_RESEAT_OFFSET if distance > BAND_HIGH else (BAND_LOW + BAND_HIGH) / 2
+        if attempt > 0:
+            offset = max(MIN_RESEAT_OFFSET, offset + BAND_GAIN * (BAND_TARGET - distance))
+        offsets.append(round(offset, 3))
         client.set("player", base.BODY_PATH, {"x": crate["x"] + side * offset, "y": crate["y"], "z": 0.0})
         time.sleep(BAND_WAIT_SECONDS)
-    return {"ok": False, "reseats": BAND_TRIES, "distances": history}
+    return {"ok": False, "reseats": BAND_TRIES, "distances": history, "offsets": offsets}
 
 
 def optional_read(game, path):
@@ -341,7 +348,8 @@ def preflight(fragments, attempts, builds=()):
     checks = [
         (BAND_LOW < BAND_HIGH, "the distance band %.1f to %.1f is empty" % (BAND_LOW, BAND_HIGH)),
         (BAND_HIGH < ATTACK_DISTANCE, "the band top %.1f is not inside the attack distance %.1f" % (BAND_HIGH, ATTACK_DISTANCE)),
-        (0 < BAND_RESEAT_OFFSET <= BAND_HIGH, "the re-seat offset %.1f is outside 0 to the band top %.1f" % (BAND_RESEAT_OFFSET, BAND_HIGH)),
+        (BAND_LOW <= BAND_TARGET <= BAND_HIGH, "the re-seat target %.2f is outside the band %.1f to %.1f" % (BAND_TARGET, BAND_LOW, BAND_HIGH)),
+        (0 < BAND_GAIN <= 1, "the re-seat gain %.2f is outside 0 to 1" % BAND_GAIN),
         (SPAWN_OFFSET <= BAND_HIGH, "the spawn offset %.1f is beyond the band top %.1f" % (SPAWN_OFFSET, BAND_HIGH)),
         (LISTED_TOGETHER_RADIUS <= LOOKUP_RADIUS, "the client listing radius %.1f exceeds the host lookup radius %.1f" % (LISTED_TOGETHER_RADIUS, LOOKUP_RADIUS)),
         (BAND_TRIES >= 1, "no band re-seat tries are allowed"),

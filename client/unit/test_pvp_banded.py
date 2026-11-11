@@ -95,13 +95,20 @@ class ActTests(ActHarness):
             self.assertGreater(call.args[2]["x"], 20.0 - 6)
         self.assertTrue(any(call.args[2]["x"] > self.victim["x"] for call in self.client.set.call_args_list))
 
+    def test_limb1_to_body_distance_is_recorded_for_every_punch(self):
+        self.landing = True
+        context = self.run_act()
+        for entry in context["measurements"]:
+            self.assertIsNotNone(entry["geometry"]["limb1ToBodyDistance"])
+            self.assertTrue(entry["geometry"]["aimIsBodyCentre"])
+
     def test_every_punch_records_distance_positions_movement_drift_and_hook_lines(self):
         self.landing = True
         context = self.run_act()
         entry = context["measurements"][1]
         geometry = entry["geometry"]
         self.assertEqual(set(geometry), {"clientPosition", "victimHostPosition", "victimClientPosition", "distance", "distanceToClientCopy", "movedSincePreviousPunch",
-                                         "idleDriftPerSecond", "victimConscious", "side"})
+                                         "idleDriftPerSecond", "victimConscious", "side", "limb1Position", "limb1ToBodyDistance", "aimIsBodyCentre"})
         self.assertEqual(context["measurements"][0]["geometry"]["movedSincePreviousPunch"], None)
         self.assertAlmostEqual(geometry["movedSincePreviousPunch"], 0.0, places=2)
         self.assertEqual(geometry["victimConscious"], True)
@@ -265,6 +272,35 @@ class RestoreTests(unittest.TestCase):
         self.assertEqual(dict(crates.STATE["reasons"]), {"pvp-victim-not-restored": 1})
 
 
+class ValidRunTests(unittest.TestCase):
+    def setUp(self):
+        crates.reset_launch_state()
+        pvp_banded.reset_launch_state()
+        self.addCleanup(crates.reset_launch_state)
+        self.addCleanup(pvp_banded.reset_launch_state)
+
+    def entries(self, count):
+        return [{"swing": index, "hostDelta": 18.0, "clientDelta": 18.0, "extra": [0.0, 1.0]} for index in range(1, count + 1)]
+
+    def test_a_run_with_all_five_punches_counts_as_valid_even_when_none_landed(self):
+        pvp_banded.check({"measurements": [{"swing": index, "hostDelta": 0.0, "clientDelta": 0.1, "extra": [0.0, 0.0]} for index in range(1, 6)]})
+        self.assertEqual(pvp_banded.STATE["valid"], 1)
+
+    def test_a_band_failure_run_and_a_restore_failure_run_do_not_count(self):
+        pvp_banded.check({"bandFailure": {"swing": 2, "distances": [3.9]}, "measurements": self.entries(1)})
+        pvp_banded.check({"restoreFailure": {"fullTotal": 1.0, "hostTotal": 1.0, "fullClientTotal": 1.0, "clientTotal": 0.0}, "measurements": []})
+        self.assertEqual(pvp_banded.STATE["valid"], 0)
+
+    def test_three_valid_runs_end_the_launch_and_invalid_attempts_do_not_use_up_the_valid_count(self):
+        for _ in range(3):
+            pvp_banded.check({"bandFailure": {"swing": 1, "distances": [3.9]}, "measurements": []})
+        self.assertEqual(pvp_banded.STATE["valid"], 0)
+        for _ in range(pvp_banded.VALID_RUNS_WANTED):
+            pvp_banded.check({"measurements": self.entries(5)})
+        with mock.patch.object(pvp_banded.regression, "pvp_prepare", lambda host, client: self.fail("must not prepare")), self.assertRaises(unittest.SkipTest):
+            pvp_banded.prepare(mock.Mock(), mock.Mock())
+
+
 class CheckTests(unittest.TestCase):
     def setUp(self):
         crates.reset_launch_state()
@@ -292,11 +328,13 @@ class CheckTests(unittest.TestCase):
 
 
 class PlanTests(unittest.TestCase):
-    def test_the_scenario_runs_three_times_in_the_evidence_group_and_sorts_before_the_other_checks(self):
+    def test_the_scenario_has_six_attempts_and_wants_three_valid_runs_which_is_fifteen_punches(self):
         scenario = next(item for item in scenarios.SCENARIOS if item.name == "pvp_banded_by_client")
-        self.assertEqual((scenario.group, scenario.max_repeat), ("hook-evidence", 3))
-        self.assertEqual(len(desync.expand_runs([scenario], [launchplan.DIRECT], 8)), 3)
-        self.assertEqual(3 * hook_scenarios.REGRESSION_SWINGS, 15)
+        self.assertEqual((scenario.group, scenario.max_repeat), ("hook-evidence", 6))
+        self.assertEqual(len(desync.expand_runs([scenario], [launchplan.DIRECT], 8)), 6)
+        self.assertEqual(pvp_banded.VALID_RUNS_WANTED * hook_scenarios.REGRESSION_SWINGS, 15)
+
+    def test_the_scenario_sorts_before_the_other_checks(self):
         names = sorted(["test_00_launch_log_checks", "test_spawned_crate_hit_by_client_r1", "test_v2check_dig_cracks_d100-j0_r1", "test_pvp_banded_by_client_r1"])
         self.assertEqual(names[:2], ["test_00_launch_log_checks", "test_pvp_banded_by_client_r1"])
 
@@ -320,7 +358,7 @@ class EnsureBandSideTests(unittest.TestCase):
         with mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.world, "host_position", lambda host, handle: dict(position)), \
                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 20.0, "y": 5.0}):
             crates.ensure_band(None, client, "id:1", position, side=1)
-        self.assertEqual(client.set.call_args_list[0].args[2], {"x": 12.0, "y": 5.0, "z": 0.0})
+        self.assertEqual(client.set.call_args_list[0].args[2], {"x": 10.0 + crates.BAND_TARGET, "y": 5.0, "z": 0.0})
 
     def test_the_default_side_is_unchanged_for_crates(self):
         client = mock.Mock()
@@ -328,7 +366,7 @@ class EnsureBandSideTests(unittest.TestCase):
         with mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.world, "host_position", lambda host, handle: dict(position)), \
                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 0.0, "y": 5.0}):
             crates.ensure_band(None, client, "id:1", position)
-        self.assertEqual(client.set.call_args_list[0].args[2], {"x": 8.0, "y": 5.0, "z": 0.0})
+        self.assertEqual(client.set.call_args_list[0].args[2], {"x": 10.0 - crates.BAND_TARGET, "y": 5.0, "z": 0.0})
 
 
 if __name__ == "__main__":

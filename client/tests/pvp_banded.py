@@ -1,4 +1,5 @@
 import time
+import unittest
 
 from casualtieslink.desync import Scenario
 
@@ -10,7 +11,9 @@ from . import spawned_crates as crates
 
 GROUP = "hook-evidence"
 NAME = "pvp_banded_by_client"
-RUNS = 3
+RUNS = 6
+VALID_RUNS_WANTED = 3
+STATE = {"valid": 0}
 PUNCHES_PER_RUN = hooks.REGRESSION_SWINGS
 PUNCH_LANDED_MINIMUM = 1.0
 DRIFT_PAUSE_SECONDS = 0.4
@@ -33,6 +36,7 @@ FULL_HEALTH = {"limbs": None, "total": None, "clientTotal": None}
 
 def reset_launch_state():
     FULL_HEALTH.update({"limbs": None, "total": None, "clientTotal": None})
+    STATE["valid"] = 0
 
 
 def victim_position(game, handle):
@@ -78,6 +82,8 @@ def restore_victim(host, client, context):
 
 
 def prepare(host, client):
+    if STATE["valid"] >= VALID_RUNS_WANTED:
+        raise unittest.SkipTest("%d valid PvP runs already recorded in this launch" % STATE["valid"])
     context = regression.pvp_prepare(host, client)
     restore = restore_victim(host, client, context)
     context["target"] = {"pvpRule": context.get("pvpRule"), "victimRestore": restore}
@@ -123,6 +129,10 @@ def act(client, context):
         geometry = {"clientPosition": player, "victimHostPosition": victim, "victimClientPosition": victim_on_client, "distance": round(base.distance(player, victim), 3),
                     "distanceToClientCopy": round(base.distance(player, victim_on_client), 3), "movedSincePreviousPunch": None if previous_after is None else round(base.distance(victim, previous_after), 3),
                     "idleDriftPerSecond": drift, "victimConscious": readable(host, context["hostVictim"], "conscious"), "side": side}
+        limb = crates.point_of(crates.optional_read(client, "limbs[1].transform.position"))
+        geometry["limb1Position"] = limb
+        geometry["limb1ToBodyDistance"] = None if limb is None else round(base.distance(limb, victim_on_client), 3)
+        geometry["aimIsBodyCentre"] = True
         marks = {which: len(evidence.read_log(which).splitlines()) for which in ("host", "client")}
         before = (hooks.limb_total(host, context["hostVictim"]), hooks.limb_total(client, context["clientVictim"]), round(float(host.get(context["hostVictim"], base.BODY_PATH, depth=0)["x"]), 3))
         fired = hooks.fire_one_swing(client, victim_on_client)
@@ -152,6 +162,8 @@ def check(context):
         message = "INVALID: the client could not be brought into the %.1f to %.1f band before punch %d (distances tried %s)" % (BAND_LOW, BAND_HIGH, failure["swing"], failure["distances"])
         crates.record_failure(FAILURE_CATEGORY, message)
         return [message]
+    if len(context.get("measurements") or []) >= PUNCHES_PER_RUN:
+        STATE["valid"] += 1
     return regression.pvp_check(context)
 
 
