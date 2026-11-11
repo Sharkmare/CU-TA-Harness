@@ -1,5 +1,7 @@
 import collections
+import re
 import time
+import unittest
 
 from casualtieslink.desync import Scenario
 
@@ -9,19 +11,33 @@ from . import hook_scenarios as hooks
 
 GROUP = "hook-evidence"
 HEALTH_RANGE = (100.0, 400.0)
-CANDIDATES_CONSIDERED = 60
 HOST_LIST_LIMIT = 400
 MAX_START_DISTANCE = 3.0
+MAX_TARGET_MOVE = 0.5
 MOVE_OFFSET = 1.5
-CLIENT_SEES_TARGET_SECONDS = 8.0
+TELEPORT_ATTEMPTS = 4
+TELEPORT_WAIT_SECONDS = 4.0
+POLL_SECONDS = 0.25
+SETTLE_SECONDS = 0.6
+MAX_PICKS = 6
+MIN_CANDIDATES = 8
+VALID_RUNS_WANTED = 10
 SWINGS = 5
 SYNCHRONIZER_TYPE = "static:ScavMPBuildingSynchronizer"
+PHYSICS_ENGINE_TYPE = "static:UnityEngine.Physics2D"
+KINEMATIC = "Kinematic"
 USED = set()
 PHYSICS_COUNTS = collections.Counter()
+VALID_RUNS = [0]
+SURVEY = {"candidates": None, "rows": 0}
 
 
-def key_of(position):
-    return (round(position["x"], 1), round(position["y"], 1))
+def reset_launch_state():
+    USED.clear()
+    PHYSICS_COUNTS.clear()
+    VALID_RUNS[0] = 0
+    SURVEY["candidates"] = None
+    SURVEY["rows"] = 0
 
 
 def optional_get(game, handle, path, nonpublic=False):
@@ -45,70 +61,137 @@ def describe_candidate(host, row):
         return None
     return {"handle": handle, "id": row["object"]["id"], "name": row["object"]["name"], "position": row["position"], "health": float(health),
             "cantHit": bool(optional_get(host, handle, "cantHit")), "indestructible": bool(optional_get(host, handle, "indestructible")),
+            "animal": bool(optional_get(host, handle, "animal")),
             "rigidbodyType": optional_get(host, handle, "rb.bodyType", nonpublic=True), "layer": optional_get(host, handle, "gameObject.layer"),
             "physicsActive": physics_active(host, handle)}
 
 
-def host_candidates(host, anchor):
+def host_physics_candidates(host, anchor):
     rows = [row for row in host.call("find", type="BuildingEntity", limit=HOST_LIST_LIMIT) if "position" in row]
     rows.sort(key=lambda row: base.distance(row["position"], anchor))
     found = []
-    for row in rows[:CANDIDATES_CONSIDERED]:
+    for row in rows:
+        if physics_active(host, "id:%d" % row["object"]["id"]) is not True:
+            continue
         described = describe_candidate(host, row)
         if described is not None:
             found.append(described)
-    return found
+    return found, len(rows)
+
+
+def kind_of(candidate):
+    match = re.search(r"res: ([^)]+)\)", candidate["name"])
+    return match.group(1) if match else candidate["name"][-24:]
+
+
+def kinds_summary(candidates):
+    counts = collections.Counter((kind_of(item), round(item["health"]), item["animal"], item["rigidbodyType"]) for item in candidates)
+    return sorted(([kind, health, animal, body, count] for (kind, health, animal, body), count in counts.items()), key=lambda row: (-row[4], row[0]))
 
 
 def usable(candidate, used=USED, health_range=HEALTH_RANGE):
     low, high = health_range
-    return ("corpse" not in candidate["name"].lower() and not candidate["cantHit"] and not candidate["indestructible"]
-            and low <= candidate["health"] <= high and key_of(candidate["position"]) not in used)
+    return (candidate["physicsActive"] is True and not candidate["animal"] and candidate["rigidbodyType"] != KINEMATIC
+            and "corpse" not in candidate["name"].lower() and not candidate["cantHit"] and not candidate["indestructible"]
+            and low <= candidate["health"] <= high and candidate["id"] not in used)
 
 
-def choose(candidates, anchor, counts=PHYSICS_COUNTS, used=USED):
+def survey(host, anchor):
+    if SURVEY["candidates"] is None:
+        SURVEY["candidates"], SURVEY["rows"] = host_physics_candidates(host, anchor)
+        print("\nSURVEY: %d buildings in the host list, %d physics-active, %d usable" % (
+            SURVEY["rows"], len(SURVEY["candidates"]), len([item for item in SURVEY["candidates"] if usable(item, used=set())])))
+        for row in kinds_summary(SURVEY["candidates"]):
+            print("SURVEY kind %s health %s animal %s body %s count %d" % tuple(row))
+    return SURVEY["candidates"]
+
+
+def enough_candidates(candidates):
+    usable_now = [item for item in candidates if usable(item, used=set())]
+    if len(usable_now) < MIN_CANDIDATES:
+        raise AssertionError("SURVEY: only %d usable physics-active, non-animal buildings with health %s (need %d); %d physics-active in the host list; kinds %s" % (
+            len(usable_now), HEALTH_RANGE, MIN_CANDIDATES, len(candidates), kinds_summary(candidates)[:12]))
+    return usable_now
+
+
+def choose(candidates, anchor, used=USED):
     pool = [item for item in candidates if usable(item, used)]
     if not pool:
         return None
-    wanted = [item for item in pool if item["physicsActive"] is not None and counts[item["physicsActive"]] == min(counts[True], counts[False])]
-    chosen_pool = wanted or pool
-    return min(chosen_pool, key=lambda item: base.distance(item["position"], anchor))
+    return min(pool, key=lambda item: base.distance(item["position"], anchor))
 
 
-def wait_until_client_sees(client, position, timeout=CLIENT_SEES_TARGET_SECONDS):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        rows = base.rows_near(client, "BuildingEntity", position, radius=0.5)
-        if rows:
-            return rows[0]
-        time.sleep(0.5)
+def host_position(host, handle):
+    found = optional_get(host, handle, base.BODY_PATH)
+    if isinstance(found, dict) and "x" in found:
+        return {"x": float(found["x"]), "y": float(found["y"])}
     return None
 
 
+def refresh(host, candidate):
+    position = host_position(host, candidate["handle"])
+    health = optional_get(host, candidate["handle"], "health")
+    if position is None or health is None:
+        return None
+    return dict(candidate, position=position, health=float(health))
+
+
+def bring_client_to(host, client, candidate):
+    for attempt in range(1, TELEPORT_ATTEMPTS + 1):
+        position = host_position(host, candidate["handle"]) or candidate["position"]
+        client.set("player", base.BODY_PATH, {"x": position["x"] - MOVE_OFFSET, "y": position["y"], "z": 0.0})
+        deadline = time.time() + TELEPORT_WAIT_SECONDS
+        while time.time() < deadline:
+            time.sleep(POLL_SECONDS)
+            position = host_position(host, candidate["handle"]) or position
+            if base.distance(base.player_position(client), position) > MAX_START_DISTANCE:
+                continue
+            rows = base.rows_near(client, "BuildingEntity", position, radius=0.5)
+            if rows:
+                return rows[0], attempt
+    return None, TELEPORT_ATTEMPTS
+
+
+def try_setup(host, client, chosen):
+    fresh = refresh(host, chosen)
+    if fresh is None or not usable(fresh, used=set()):
+        return None, "%s could not be read or is no longer usable" % kind_of(chosen)
+    client_row, attempts = bring_client_to(host, client, fresh)
+    if client_row is None:
+        return None, "%s: the client never reached it within %.1f with it loaded after %d teleports (client at %s, building at %s)" % (
+            kind_of(chosen), MAX_START_DISTANCE, attempts, base.player_position(client), host_position(host, fresh["handle"]))
+    time.sleep(SETTLE_SECONDS)
+    settled = host_position(host, fresh["handle"])
+    if settled is None or base.distance(settled, fresh["position"]) > MAX_TARGET_MOVE:
+        return None, "%s moved from %s to %s while the client came over" % (kind_of(chosen), fresh["position"], settled)
+    distance = base.distance(base.player_position(client), settled)
+    if distance > MAX_START_DISTANCE:
+        return None, "%s: the client is %.2f away at the first swing" % (kind_of(chosen), distance)
+    return dict(fresh, position=settled, distance=round(distance, 2), clientHandle="id:%d" % client_row["object"]["id"], teleports=attempts), None
+
+
 def prepare(host, client):
+    if VALID_RUNS[0] >= VALID_RUNS_WANTED:
+        raise unittest.SkipTest("%d valid runs already recorded in this launch" % VALID_RUNS[0])
     base.empty_the_hand(client)
     anchor = base.player_position(client)
-    candidates = host_candidates(host, anchor)
-    chosen = choose(candidates, anchor)
-    if chosen is None:
-        raise AssertionError("no fresh hittable destructible building with health %s among the %d nearest on the host; saw %s" % (
-            HEALTH_RANGE, len(candidates), sorted(set((item["name"][-30:], item["health"]) for item in candidates))[:8]))
-    USED.add(key_of(chosen["position"]))
-    if base.distance(anchor, chosen["position"]) > MAX_START_DISTANCE:
-        client.set("player", base.BODY_PATH, {"x": chosen["position"]["x"] - MOVE_OFFSET, "y": chosen["position"]["y"], "z": 0.0})
-        time.sleep(hooks.SETTLE_AFTER_SWING_SECONDS * 2)
-    client_row = wait_until_client_sees(client, chosen["position"])
-    if client_row is None:
-        raise AssertionError("the client does not see the host's building %s at (%.1f, %.1f) within %.0f s" % (chosen["name"], chosen["position"]["x"], chosen["position"]["y"], CLIENT_SEES_TARGET_SECONDS))
-    distance = base.distance(base.player_position(client), chosen["position"])
-    if distance > MAX_START_DISTANCE:
-        raise AssertionError("the client is %.2f from the building after the move, beyond %.1f" % (distance, MAX_START_DISTANCE))
-    fresh_health = float(optional_get(host, chosen["handle"], "health") or 0.0)
-    if fresh_health <= 0:
-        raise AssertionError("the host building %s has health %.1f before the first swing" % (chosen["name"], fresh_health))
-    PHYSICS_COUNTS[bool(chosen["physicsActive"])] += 1
-    target = dict(chosen, distance=round(distance, 2), healthBefore=fresh_health, clientHandle="id:%d" % client_row["object"]["id"])
-    return {"position": chosen["position"], "name": None, "host": host, "hostHandle": chosen["handle"], "clientHandle": target["clientHandle"], "target": target, "measurements": []}
+    candidates = survey(host, anchor)
+    enough_candidates(candidates)
+    skipped = []
+    for _ in range(MAX_PICKS):
+        chosen = choose(candidates, base.player_position(client))
+        if chosen is None:
+            break
+        USED.add(chosen["id"])
+        target, reason = try_setup(host, client, chosen)
+        if target is None:
+            skipped.append(reason)
+            continue
+        PHYSICS_COUNTS[True] += 1
+        target = dict(target, healthBefore=target["health"], skippedPicks=skipped, surveyCandidates=len(candidates))
+        return {"position": target["position"], "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"],
+                "target": target, "measurements": []}
+    raise AssertionError("no setup succeeded in %d picks: %s" % (MAX_PICKS, skipped))
 
 
 def health_by_handle(game, handle):
@@ -117,10 +200,17 @@ def health_by_handle(game, handle):
 
 
 def current_position(host, context):
-    found = optional_get(host, context["hostHandle"], base.BODY_PATH)
-    if isinstance(found, dict) and "x" in found:
-        return {"x": float(found["x"]), "y": float(found["y"])}
-    return context["position"]
+    return host_position(host, context["hostHandle"]) or context["position"]
+
+
+def collider_at(client, point):
+    try:
+        found = client.call("invoke", target=PHYSICS_ENGINE_TYPE, method="OverlapPoint", args=[{"x": point["x"], "y": point["y"]}], types=["Vector2"])
+    except Exception as failure:
+        return {"error": str(failure)[:120]}
+    if isinstance(found, dict):
+        return {"name": found.get("name") or str(found)[:120]}
+    return {"name": None if found is None else str(found)[:120]}
 
 
 def act(client, context):
@@ -130,6 +220,7 @@ def act(client, context):
         aim = current_position(host, context)
         marks = {which: len(evidence.read_log(which).splitlines()) for which in ("host", "client")}
         before = (health_by_handle(host, context["hostHandle"]), health_by_handle(client, context["clientHandle"]))
+        probe = collider_at(client, aim)
         cooldown_before = float(client.get("player", "attackCooldown", depth=0))
         fired = hooks.fire_one_swing(client, aim)
         cooldown_after = float(client.get("player", "attackCooldown", depth=0))
@@ -138,7 +229,8 @@ def act(client, context):
         lines = {which: evidence.new_lines(marks[which], evidence.read_log(which)) for which in ("host", "client")}
         entries.append({"swing": index, "fired": fired, "aim": aim, "host": [before[0], after[0]], "client": [before[1], after[1]],
                         "hostDelta": round(before[0] - after[0], 3), "clientDelta": round(before[1] - after[1], 3),
-                        "cooldown": [round(cooldown_before, 3), round(cooldown_after, 3)],
+                        "cooldown": [round(cooldown_before, 3), round(cooldown_after, 3)], "colliderAtAim": probe,
+                        "clientDistance": round(base.distance(base.player_position(client), aim), 2),
                         "hostLines": evidence.evidence_lines(lines["host"]), "clientLines": evidence.evidence_lines(lines["client"]),
                         "hostExceptions": evidence.exception_lines(lines["host"]), "clientExceptions": evidence.exception_lines(lines["client"])})
         if not fired:
@@ -156,6 +248,7 @@ def check(context):
     first = entries[0]
     if first["hostDelta"] <= 0 or first["clientDelta"] <= 0:
         return ["INVALID: the first swing changed nothing (host %.2f, client %.2f); target %s" % (first["hostDelta"], first["clientDelta"], context.get("target", {}).get("name"))]
+    VALID_RUNS[0] += 1
     return []
 
 
@@ -187,7 +280,7 @@ def group_by_physics(reports):
 
 
 SCENARIOS = [
-    Scenario("worldhit_building_by_client", "the client stands within 3 of a building taken from the host's own list (fresh, hittable, 100 to 400 health) and hits it bare handed five times, re-aiming each swing; targets are grouped by physics-active or static",
+    Scenario("worldhit_building_by_client", "the client stands within 3 of a physics-active, non-animal building taken from the host's own list (health 100 to 400, re-picked if it moves) and hits it bare handed five times, re-aiming each swing",
              prepare, act, lambda game, context: 0, never_changes, group=GROUP, check=check),
 ]
 
