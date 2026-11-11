@@ -91,15 +91,24 @@ def scenario_method(run):
 
     def method(self):
         prepare_run(self, run.profile)
+        logs_before = {which: GAMES.log_text(which) for which in ("host", "client")}
         try:
             observation = desync.observe(scenario, self.host, self.client, perform_action=not rig.mutation_active(desync.SKIP_ACTION_MUTATION))
         finally:
             restore_network()
         report = desync.describe(observation, BUILD, EXPECTED_HASH, self.game_version, LAUNCH_ID, run.repetition, run.profile.as_dict(), GAMES.proxy.seed)
+        report["newExceptionLines"] = {which: desync.new_exception_lines(logs_before[which], GAMES.log_text(which)) for which in ("host", "client")}
+        if scenario.check:
+            for which, lines in report["newExceptionLines"].items():
+                if lines:
+                    report["issues"].append("%d new exception or error lines in the %s log, first: %s" % (len(lines), which, lines[0][:200]))
         text = desync.format_report(report)
         print("\n" + text)
         desync.save_report(report, REPORT_DIRECTORY)
-        self.assertEqual(report["verdict"], desync.VERDICT_PERSISTED, text)
+        if scenario.check:
+            self.assertEqual(report["issues"], [], text)
+        else:
+            self.assertEqual(report["verdict"], desync.VERDICT_PERSISTED, text)
     method.__name__ = run.name
     method.__doc__ = scenario.description
     return method
@@ -144,7 +153,7 @@ class DesyncMixin:
         if EXPECTED_HASH == desync.UNKNOWN_HASH:
             raise unittest.SkipTest("no DLL found for build %s (set CU_FLAVOUR_ZIP or CU_UPSTREAM_STAGE)" % BUILD)
         try:
-            cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=0.0, probe=cls.probe)
+            cls.host, cls.client = GAMES.start(list(cls.host_plugins), [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=0.0, probe=cls.probe)
             if not ready_up([cls.host, cls.client]):
                 raise AssertionError("the lobby ready gate did not accept both players")
             cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
@@ -168,15 +177,25 @@ class DesyncMixin:
         if GAMES is not None:
             GAMES.stop()
 
+    def test_00_launch_log_checks(self):
+        if self.host_plugins == [] and self.__class__.__name__.endswith("hand_mining"):
+            self.skipTest("only the hook check group is expected to carry the repaired transpiler")
+        checks = desync.launch_log_checks(GAMES.log_text("host"), GAMES.log_text("client"), expect_no_scatter=bool(self.host_plugins))
+        print("\nlaunch log checks: %s" % checks)
+        desync.save_launch_checks(checks, REPORT_DIRECTORY, LAUNCH_ID)
+        if "hook-check" in self.__class__.__name__.replace("_", "-"):
+            self.assertEqual(checks["issues"], [], checks)
+
     def test_the_games_run_the_requested_build(self):
         for which, copy in (("host", GAMES.host_copy), ("client", GAMES.client_copy)):
             self.assertEqual(desync.sha256_of_file(os.path.join(copy, TOGETHER_DLL_RELATIVE)), EXPECTED_HASH, "%s runs another Together DLL than %s" % (which, BUILD))
 
 
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
-                          "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"]}
-GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"]}
-PROBE_GROUPS = ("hand-mining", "mixed-hand-mining")
+                          "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"]}
+GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"]}
+GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check")
 
 
 def build_classes():
@@ -185,7 +204,7 @@ def build_classes():
     for group in groups:
         if ONLY_GROUP and group != ONLY_GROUP:
             continue
-        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS}
+        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS, "host_plugins": GROUP_HOST_PLUGINS.get(group, [])}
         for run in desync.expand_runs([scenario for scenario in SCENARIOS if scenario.group == group], PROFILES, REPEAT):
             members[run.name] = scenario_method(run)
         for run in desync.expand_runs([scenario for scenario in SERIES_SCENARIOS if scenario.group == group], PROFILES, REPEAT):

@@ -728,3 +728,6 @@ def ready_up(games, timeout=READY_TIMEOUT_SECONDS, step=1.0):
         if pending:
             time.sleep(step)
     return not pending
+
+
+from . import hook_scenarios  # noqa: E402,F401

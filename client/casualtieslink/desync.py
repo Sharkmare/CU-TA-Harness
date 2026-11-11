@@ -20,6 +20,49 @@ DIAG_BUILDS = (DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD)
 TRANSPILER_MARKER = "TRANSPILER"
 
 
+TRANSPILER_SUCCESS = "Body.Attack TRANSPILER SUCCESS"
+TRANSPILER_MISSING_MARKERS = "loop markers not found"
+FAILED_ATTACK_PATCH = "Failed to patch: Body_Attack_MultiplayerPatch"
+NO_SCATTER_LINE = "NoScatterPunish:"
+NO_SCATTER_COMPLETE = "(2 of 2 Together checks replaced)"
+EXCEPTION_PATTERN = re.compile(r"Exception|\[Error")
+
+
+def launch_log_checks(host_log, client_log, expect_no_scatter=True):
+    checks = {}
+    for which, text in (("host", host_log), ("client", client_log)):
+        checks[which + "TranspilerSuccess"] = sum(1 for line in text.splitlines() if TRANSPILER_SUCCESS in line)
+        checks[which + "MarkersNotFound"] = sum(1 for line in text.splitlines() if TRANSPILER_MISSING_MARKERS in line)
+        checks[which + "FailedAttackPatch"] = [line.strip() for line in text.splitlines() if FAILED_ATTACK_PATCH in line]
+    scatter = [line.strip() for line in host_log.splitlines() if NO_SCATTER_LINE in line]
+    checks["noScatterLines"] = scatter
+    issues = []
+    for which in ("host", "client"):
+        if checks[which + "TranspilerSuccess"] < 1:
+            issues.append("no 'Body.Attack TRANSPILER SUCCESS' line in the %s log" % which)
+        if checks[which + "MarkersNotFound"]:
+            issues.append("'loop markers not found' in the %s log" % which)
+        if checks[which + "FailedAttackPatch"]:
+            issues.append("'%s' in the %s log: %s" % (FAILED_ATTACK_PATCH, which, checks[which + "FailedAttackPatch"][0][:120]))
+    if expect_no_scatter and not any(NO_SCATTER_COMPLETE in line for line in scatter):
+        issues.append("no 'NoScatterPunish ... (2 of 2 Together checks replaced)' line in the host log")
+    checks["issues"] = issues
+    return checks
+
+
+def save_launch_checks(checks, directory, launch_id):
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, "launch_checks__%s.json" % re.sub(r"[^A-Za-z0-9.\-]", "_", launch_id or "no-launch"))
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(checks, handle, indent=2, sort_keys=True)
+    return path
+
+
+def new_exception_lines(before_text, after_text):
+    before = set(line for line in before_text.splitlines() if EXCEPTION_PATTERN.search(line))
+    return [line.strip() for line in after_text.splitlines() if EXCEPTION_PATTERN.search(line) and line not in before]
+
+
 def transpiler_lines(log_text):
     return [line.strip() for line in log_text.splitlines() if TRANSPILER_MARKER in line]
 DEFAULT_BUILD = "stock-5.5.0"
@@ -83,7 +126,8 @@ def class_suffix(build, dll_hash):
 class Scenario:
     network_sensitive = False
 
-    def __init__(self, name, description, prepare, act, read, changed, offsets=SAMPLE_OFFSETS_SECONDS, group="default"):
+    def __init__(self, name, description, prepare, act, read, changed, offsets=SAMPLE_OFFSETS_SECONDS, group="default", check=None):
+        self.check = check
         self.offsets = offsets
         self.group = group
         self.name = name
@@ -105,7 +149,8 @@ class Sample:
 
 
 class Observation:
-    def __init__(self, scenario, baseline_host, baseline_client, samples, acted):
+    def __init__(self, scenario, baseline_host, baseline_client, samples, acted, context=None):
+        self.context = context or {}
         self.scenario = scenario
         self.baseline_host = baseline_host
         self.baseline_client = baseline_client
@@ -127,7 +172,7 @@ def observe(scenario, host, client, offsets=None, perform_action=True, clock=tim
         if remaining > 0:
             sleep(remaining)
         samples.append(Sample(offset, scenario.read(host, context), scenario.read(client, context)))
-    return Observation(scenario, baseline_host, baseline_client, samples, perform_action)
+    return Observation(scenario, baseline_host, baseline_client, samples, perform_action, context)
 
 
 def judge(observation):
@@ -161,6 +206,8 @@ def describe(observation, build, dll_hash, game_version=None, launch_id=None, re
         "description": observation.scenario.description,
         "actedOnClient": observation.acted,
         "verdict": verdict,
+        "measurements": observation.context.get("measurements"),
+        "issues": observation.scenario.check(observation.context) if observation.scenario.check else [],
         "baseline": {"host": observation.baseline_host, "client": observation.baseline_client},
         "samples": [sample.as_dict() for sample in observation.samples],
     }
@@ -177,6 +224,10 @@ def format_report(report):
     for sample in report["samples"]:
         marker = "" if sample["host"] == sample["client"] else "  <- instances disagree"
         lines.append("  t=%4.1fs   host=%s client=%s%s" % (sample["offset"], sample["host"], sample["client"], marker))
+    for entry in (report.get("measurements") or [])[:40]:
+        lines.append("  measurement %s" % entry)
+    for issue in report.get("issues", []):
+        lines.append("  ISSUE: %s" % issue)
     lines.append("  verdict: %s" % report["verdict"])
     if report["verdict"] == VERDICT_REVERTED:
         lines.append("  the host value overwrote the client value")

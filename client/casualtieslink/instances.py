@@ -39,7 +39,8 @@ SIZE_FOLDER = "CasualtiesSize"
 LOADER_FOLDER = "CasualtiesCharacters"
 AVALI_FOLDER = "CasualtiesCharacters-Avali"
 SAMPLE_PACK_FOLDER = "CasualtiesCharacters-Sample"
-MANAGED_FOLDERS = (SIZE_FOLDER, LOADER_FOLDER, AVALI_FOLDER, SAMPLE_PACK_FOLDER)
+NO_SCATTER_FOLDER = "NoScatterPunish"
+MANAGED_FOLDERS = (SIZE_FOLDER, LOADER_FOLDER, AVALI_FOLDER, SAMPLE_PACK_FOLDER, NO_SCATTER_FOLDER)
 SIZE_GUID = "hive.casualties.size"
 LOADER_GUID = "hive.casualties.characters"
 DEBUG_CONFIG_TEXT = "[Debug]\n\nEnabled = true\n"
@@ -110,7 +111,17 @@ def install_sample_pack(copy):
     return source
 
 
-PLUGIN_INSTALLERS = {"size": install_size, "loader": install_loader, "avali": install_avali, "samplepack": install_sample_pack}
+def install_noscatter(copy):
+    source = os.path.join(mods_root(), "no-scatter-punish", "bin", "NoScatterPunish.dll")
+    if not os.path.isfile(source):
+        raise FileNotFoundError(source)
+    folder = os.path.join(copy, PLUGINS_RELATIVE, NO_SCATTER_FOLDER)
+    os.makedirs(folder, exist_ok=True)
+    shutil.copy2(source, folder)
+    return source
+
+
+PLUGIN_INSTALLERS = {"size": install_size, "loader": install_loader, "avali": install_avali, "samplepack": install_sample_pack, "noscatter": install_noscatter}
 PLUGIN_DEBUG_GUIDS = {"size": SIZE_GUID, "loader": LOADER_GUID}
 
 

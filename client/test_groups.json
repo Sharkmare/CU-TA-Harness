@@ -81,7 +81,8 @@
         "unit.test_desync_series",
         "unit.test_launchplan",
         "unit.test_diagblock",
-        "unit.test_launchsummary"
+        "unit.test_launchsummary",
+        "unit.test_hook_scenarios"
       ],
       "needs_game": false
     },
