@@ -68,7 +68,9 @@ def class_suffix(build, dll_hash):
 
 
 class Scenario:
-    def __init__(self, name, description, prepare, act, read, changed):
+    def __init__(self, name, description, prepare, act, read, changed, offsets=SAMPLE_OFFSETS_SECONDS, group="default"):
+        self.offsets = offsets
+        self.group = group
         self.name = name
         self.description = description
         self.prepare = prepare
@@ -96,7 +98,8 @@ class Observation:
         self.acted = acted
 
 
-def observe(scenario, host, client, offsets=SAMPLE_OFFSETS_SECONDS, perform_action=True, clock=time.monotonic, sleep=time.sleep):
+def observe(scenario, host, client, offsets=None, perform_action=True, clock=time.monotonic, sleep=time.sleep):
+    offsets = offsets if offsets is not None else scenario.offsets
     context = scenario.prepare(host, client)
     baseline_host = scenario.read(host, context)
     baseline_client = scenario.read(client, context)

@@ -3,10 +3,11 @@ import time
 import unittest
 
 from casualtieslink import desync
+from casualtieslink.launcher import mp_arguments
 from casualtieslink.instances import ScenarioGames, flavour_zip, stage_directory
 
 from . import rig
-from .desync_scenarios import SCENARIOS, ready_up
+from .desync_scenarios import CORPSE_FLAGS, SCENARIOS, ready_up
 from .test_pair import PAIR_ENABLED, SKIP_REASON, wait_for_bodies
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
@@ -53,7 +54,7 @@ class DesyncMixin:
         if EXPECTED_HASH == desync.UNKNOWN_HASH:
             raise unittest.SkipTest("no DLL found for build %s (set CU_FLAVOUR_ZIP or CU_UPSTREAM_STAGE)" % BUILD)
         try:
-            cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD))
+            cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD), client_extra=cls.client_extra)
             if not ready_up([cls.host, cls.client]):
                 raise AssertionError("the lobby ready gate did not accept both players")
             cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
@@ -81,15 +82,29 @@ class DesyncMixin:
             self.assertEqual(desync.sha256_of_file(os.path.join(copy, TOGETHER_DLL_RELATIVE)), EXPECTED_HASH, "%s runs another Together DLL than %s" % (which, BUILD))
 
 
-def build_class():
-    members = {scenario_test(scenario).__name__: scenario_test(scenario) for scenario in SCENARIOS}
-    name = "Desync_" + desync.class_suffix(BUILD, EXPECTED_HASH)
-    return type(name, (DesyncMixin, unittest.TestCase), members)
+GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS)}
 
 
-DesyncBuildTests = build_class()
-globals()[DesyncBuildTests.__name__] = DesyncBuildTests
-del DesyncBuildTests
+def build_classes():
+    classes = []
+    for group in sorted({scenario.group for scenario in SCENARIOS}):
+        members = {}
+        for scenario in SCENARIOS:
+            if scenario.group == group:
+                member = scenario_test(scenario)
+                members[member.__name__] = member
+        members["client_extra"] = GROUP_CLIENT_ARGUMENTS[group]
+        if group == "default":
+            members["test_the_games_run_the_requested_build"] = DesyncMixin.test_the_games_run_the_requested_build
+        name = "Desync_%s_%s" % (desync.class_suffix(BUILD, EXPECTED_HASH), group.replace("-", "_"))
+        classes.append(type(name, (DesyncMixin, unittest.TestCase), members))
+    return classes
+
+
+for generated in build_classes():
+    globals()[generated.__name__] = generated
+del generated
+
 
 if __name__ == "__main__":
     unittest.main()

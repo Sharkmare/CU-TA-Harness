@@ -144,6 +144,81 @@ class ReadyUpTests(unittest.TestCase):
             self.assertFalse(scenarios.ready_up([Game(link.port)], timeout=0.3, step=0.05))
 
 
+class RealPathHelperTests(unittest.TestCase):
+    def test_the_crack_counter_is_found_by_block_cell_in_a_nested_dump(self):
+        world = {"halfWidth": 100, "halfHeight": 50, "blockDamages": [
+            {"pos": {"x": 1, "y": 1}, "damage": 5.0}, {"pos": {"x": 110, "y": 3}, "damage": 42.456}]}
+
+        def get(arguments):
+            return world[arguments["path"]]
+
+        with FakeLink({"get": get}) as link:
+            game = Game(link.port)
+            self.assertEqual(scenarios.crack_read(game, {"position": {"x": 10.5, "y": -47.0}}), 42.46)
+            self.assertEqual(scenarios.crack_read(game, {"position": {"x": 0.0, "y": 0.0}}), 0.0)
+
+    def test_every_scenario_group_has_launch_arguments(self):
+        from tests import test_desync
+        for scenario in scenarios.SCENARIOS:
+            self.assertIn(scenario.group, test_desync.GROUP_CLIENT_ARGUMENTS)
+
+    def test_the_corpse_group_makes_the_client_a_dune(self):
+        from tests import test_desync
+        self.assertEqual(test_desync.GROUP_CLIENT_ARGUMENTS["mixed-characters"], ["--mp-setchar", "2"])
+
+    def test_scenarios_with_a_fuse_sample_after_it_burns(self):
+        scenario = [item for item in scenarios.SCENARIOS if item.name == "S14_grenade_crater_by_client"][0]
+        self.assertGreaterEqual(min(scenario.offsets), 5.0)
+
+    def test_the_comparison_helpers(self):
+        self.assertTrue(scenarios.gone_or_lower(None, 10))
+        self.assertTrue(scenarios.gone_or_lower(3, 10))
+        self.assertFalse(scenarios.gone_or_lower(10, 10))
+        self.assertTrue(scenarios.lower_sum(5, 6))
+
+
+class DigLoopTests(unittest.TestCase):
+    def test_the_client_swings_until_the_block_is_gone_aiming_at_it(self):
+        state = {"swings": 0, "look": []}
+
+        def invoke(arguments):
+            if arguments["method"] == "GetBlock":
+                return 0 if state["swings"] >= 2 else 8
+            if arguments["method"] == "UseItemInHand":
+                state["swings"] += 1
+            return None
+
+        def set_value(arguments):
+            state["look"].append((arguments["path"], arguments["value"]))
+
+        original = scenarios.SWING_PAUSE_SECONDS
+        scenarios.SWING_PAUSE_SECONDS = 0.0
+        try:
+            with FakeLink({"invoke": invoke, "set": set_value}) as link:
+                scenarios.dig_act(Game(link.port), {"position": {"x": 3.0, "y": 4.0}})
+        finally:
+            scenarios.SWING_PAUSE_SECONDS = original
+        self.assertEqual(state["swings"], 2)
+        self.assertEqual(state["look"][0], ("targetLookPos", {"x": 3.0, "y": 4.0, "z": 0.0}))
+
+    def test_the_client_gives_up_after_the_swing_limit(self):
+        state = {"swings": 0}
+
+        def invoke(arguments):
+            if arguments["method"] == "GetBlock":
+                return 8
+            state["swings"] += 1
+
+        original = scenarios.SWING_PAUSE_SECONDS
+        scenarios.SWING_PAUSE_SECONDS = 0.0
+        try:
+            with FakeLink({"invoke": invoke, "set": lambda arguments: None}) as link:
+                scenarios.dig_act(Game(link.port), {"position": {"x": 0.0, "y": 0.0}})
+        finally:
+            scenarios.SWING_PAUSE_SECONDS = original
+        self.assertEqual(state["swings"], scenarios.MAX_SWINGS)
+
+
 class ScenarioListTests(unittest.TestCase):
     def test_every_scenario_is_complete_and_uniquely_named(self):
         names = [scenario.name for scenario in scenarios.SCENARIOS]
@@ -156,7 +231,7 @@ class ScenarioListTests(unittest.TestCase):
 
     def test_the_audit_ranked_mutations_are_covered(self):
         names = {scenario.name for scenario in scenarios.SCENARIOS}
-        for expected in ("block_removal_by_client", "corpse_damage_by_client", "door_open_by_client", "item_pickup_by_client", "item_drop_by_client", "container_load_by_client", "container_unload_by_client"):
+        for expected in ("S1_block_dig_by_client", "S2_block_crack_by_client", "S3_corpse_punch_by_client", "S5_building_break_by_client", "S6_door_open_by_client", "S7_item_pickup_by_client", "S7_item_drop_by_client", "S7_item_throw_by_client", "S9_eat_by_client", "S14_grenade_crater_by_client", "container_load_by_client", "container_unload_by_client", "block_removal_by_client"):
             self.assertIn(expected, names)
 
 

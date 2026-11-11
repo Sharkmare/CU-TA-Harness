@@ -171,17 +171,22 @@ Setup is `casualtieslink/instances.py`. It makes two copies of the game folder o
 
 ### Desync scenarios (does the host keep what a client did)
 
-Seven scenarios in `tests/desync_scenarios.py` each perform one action on the client through the link and then read the authoritative state on both games at 0 s, 2 s and 10 s:
+The scenarios in `tests/desync_scenarios.py` follow the audit's list (`casualties-together-local/docs/desync_audit.md`). Each performs one action on the client through the link and reads the authoritative state on both games at 0 s, 2 s and 10 s (digging and the dynamite use their own offsets). The client's real hit path is used where the audit names it: the client holds a host-spawned pickaxe and `Body.UseItemInHand` runs with `targetLookPos` on the target, so Together's attack patch fires.
 
 | Scenario | Client action | State read on both |
 |---|---|---|
-| `block_removal_by_client` | `WorldGeneration.DamageBlock` on a solid block below the client | `GetBlock` at that position |
-| `item_pickup_by_client` | `Body.PickUpItem` on an item the host spawned | ground items of that kind near the spot |
-| `item_drop_by_client` | `Body.DropItem` after a pickup | ground items of that kind near the client |
-| `corpse_damage_by_client` | `health = 0` on a corpse the host spawned | the corpse's `BuildingEntity.health` (none if gone) |
-| `door_open_by_client` | `health = 0` on the nearest `Openable`'s `BuildingEntity` | its health (none if gone) |
-| `container_load_by_client` | `Container.LoadItem` | `Container.itemCount` |
-| `container_unload_by_client` | `Container.UnloadItem` after a load | `Container.itemCount` |
+| `block_removal_by_client` | control: `WorldGeneration.DamageBlock` called directly | `GetBlock` at that position |
+| `S1_block_dig_by_client` | pickaxe swings until the block breaks | `GetBlock` at 0, 3 and 8 s |
+| `S2_block_crack_by_client` | one pickaxe swing | the block's entry in `blockDamages` |
+| `S3_corpse_punch_by_client` | pickaxe swings at a corpse, client is Dune and host is not (own group `mixed-characters`) | corpse health (none if gone) |
+| `S5_building_break_by_client` | pickaxe swings at the nearest breakable building | its health (none if gone) |
+| `S6_door_open_by_client` | `Openable.OnUse` on the nearest instant-open door | its health (none if gone) |
+| `S7_item_pickup_by_client`, `S7_item_drop_by_client`, `S7_item_throw_by_client` | `PickUpItem`, `DropItem`, `ThrowItem` | unparented items of that kind near the spot |
+| `S9_eat_by_client` | `UseItemInHand` on bread after the host set the client's hunger to 40 | the client body's `hunger` |
+| `S14_grenade_crater_by_client` | dynamite lit and thrown at a wall | sum of block ids in a 9 by 9 box, sampled at 6, 8 and 12 s |
+| `container_load_by_client`, `container_unload_by_client` | `Container.LoadItem`, `UnloadItem` on a pouch | `Container.itemCount` |
+
+Not written: S4 (a physics corpse, no verified way to make one dynamic), S8, S10, S11, S13 (no client driver found yet) and S12 (needs two clients; the rig has one).
 
 The engine is `casualtieslink/desync.py`. Each scenario ends in one verdict: `persisted` (both agree and the change is there from 0 s), `reverted-by-host` (the client had the change and it was overwritten with the old value), `diverged` (the games disagree), `not-there-from-the-start` or `never-changed`. The test passes only on `persisted`. The report prints the baseline and the host and client value at each time, marks rows where the games disagree, names the build and the SHA-256 of its `CasualtiesMP.dll`, and is saved as JSON in `.state/desync_reports/<scenario>__<build>@<hash8>.json`.
 
