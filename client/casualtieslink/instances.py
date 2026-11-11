@@ -33,6 +33,8 @@ FULLGAME_NOBUILD_STAGE_CHOICE = "fullgame-nobuild-stage"
 FULLGAME_V2_STAGE_CHOICE = "fullgame-v2-stage"
 FULLGAME_FINAL_STAGE_CHOICE = "fullgame-final-stage"
 OFFICIAL_STAGE_CHOICE = "official-stage"
+FULLBUILD_CONTROL_STAGE_CHOICE = "fullbuild-control-stage"
+FULLBUILD_FIXED_STAGE_CHOICE = "fullbuild-fixed-stage"
 FULLGAME_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_STAGE"
 BASELINE_STAGE_ENVIRONMENT_VARIABLE = "CU_BASELINE_STAGE"
 FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_DIAG_STAGE"
@@ -40,6 +42,9 @@ FULLGAME_NOBUILD_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_NOBUILD_STAGE"
 FULLGAME_V2_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_V2_STAGE"
 FULLGAME_FINAL_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_FINAL_STAGE"
 OFFICIAL_STAGE_ENVIRONMENT_VARIABLE = "CU_OFFICIAL_STAGE"
+FULLBUILD_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLBUILD_CONTROL_STAGE"
+FULLBUILD_FIXED_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLBUILD_FIXED_STAGE"
+FULLBUILD_PROJECT_FOLDER = "Private CU together"
 DIAG_STAGE3_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE3"
 DIAG_STAGE2_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE2"
 DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE"
@@ -309,6 +314,21 @@ def official_stage_directory():
     return os.path.join(testcopy.REPO_ROOT, ".state", "stages", "official-5.5.0")
 
 
+def fullbuild_stage_directory(variable, folder):
+    explicit = os.environ.get(variable)
+    if explicit:
+        return explicit
+    return os.path.join(mods_root(), FULLBUILD_PROJECT_FOLDER, "build", folder)
+
+
+def fullbuild_control_stage_directory():
+    return fullbuild_stage_directory(FULLBUILD_CONTROL_STAGE_ENVIRONMENT_VARIABLE, "stage_fullbuild_control")
+
+
+def fullbuild_fixed_stage_directory():
+    return fullbuild_stage_directory(FULLBUILD_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_fullbuild_fixed")
+
+
 def baseline_stage_directory():
     explicit = os.environ.get(BASELINE_STAGE_ENVIRONMENT_VARIABLE)
     if explicit:
@@ -320,7 +340,8 @@ def stage_directory_by_build():
     return {"upstream-fixes": stage_directory, "upstream-diag": diag_stage_directory, "upstream-diag2": diag_stage2_directory,
             "upstream-diag3": diag_stage3_directory, "upstream-fixed": fullgame_stage_directory, "upstream-baseline": baseline_stage_directory,
             "upstream-fixed-diag": fullgame_diag_stage_directory, "upstream-fixed-nobuild": fullgame_nobuild_stage_directory,
-            "upstream-fixed-v2": fullgame_v2_stage_directory, "upstream-fixed-final": fullgame_final_stage_directory, "official-5.5.0": official_stage_directory}
+            "upstream-fixed-v2": fullgame_v2_stage_directory, "upstream-fixed-final": fullgame_final_stage_directory, "official-5.5.0": official_stage_directory,
+            "fullbuild-control": fullbuild_control_stage_directory, "fullbuild-fixed": fullbuild_fixed_stage_directory}
 
 
 def install_stage_together(copy, directory=None):
@@ -403,6 +424,10 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, fullgame_final_stage_directory())
     elif together == OFFICIAL_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, official_stage_directory())
+    elif together == FULLBUILD_CONTROL_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, fullbuild_control_stage_directory())
+    elif together == FULLBUILD_FIXED_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, fullbuild_fixed_stage_directory())
     elif together == BASELINE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, baseline_stage_directory())
     elif flavour_name(together):

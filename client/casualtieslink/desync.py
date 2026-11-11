@@ -21,12 +21,16 @@ FIXED_NOBUILD_BUILD = "upstream-fixed-nobuild"
 FIXED_V2_BUILD = "upstream-fixed-v2"
 FIXED_FINAL_BUILD = "upstream-fixed-final"
 OFFICIAL_BUILD = "official-5.5.0"
+FULLBUILD_CONTROL_BUILD = "fullbuild-control"
+FULLBUILD_FIXED_BUILD = "fullbuild-fixed"
 STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage", DIAG2_BUILD: "diag-stage2", DIAG3_BUILD: "diag-stage3",
                  FIXED_BUILD: "fullgame-stage", BASELINE_BUILD: "baseline-stage", FIXED_DIAG_BUILD: "fullgame-diag-stage",
-                 FIXED_NOBUILD_BUILD: "fullgame-nobuild-stage", FIXED_V2_BUILD: "fullgame-v2-stage", FIXED_FINAL_BUILD: "fullgame-final-stage", OFFICIAL_BUILD: "official-stage"}
-KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD, FIXED_BUILD, BASELINE_BUILD, FIXED_DIAG_BUILD, FIXED_NOBUILD_BUILD, FIXED_V2_BUILD, FIXED_FINAL_BUILD, OFFICIAL_BUILD)
+                 FIXED_NOBUILD_BUILD: "fullgame-nobuild-stage", FIXED_V2_BUILD: "fullgame-v2-stage", FIXED_FINAL_BUILD: "fullgame-final-stage", OFFICIAL_BUILD: "official-stage",
+                 FULLBUILD_CONTROL_BUILD: "fullbuild-control-stage", FULLBUILD_FIXED_BUILD: "fullbuild-fixed-stage"}
+KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD, FIXED_BUILD, BASELINE_BUILD, FIXED_DIAG_BUILD, FIXED_NOBUILD_BUILD, FIXED_V2_BUILD, FIXED_FINAL_BUILD, OFFICIAL_BUILD, FULLBUILD_CONTROL_BUILD, FULLBUILD_FIXED_BUILD)
 DIAG_BUILDS = (DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD)
 TRANSPILER_MARKER = "TRANSPILER"
+PATCH_PROBLEM_MARKERS = ("Failed to patch", "IL Compile Error", "Ambiguous match")
 
 
 TRANSPILER_SUCCESS = "Body.Attack TRANSPILER SUCCESS"
@@ -43,6 +47,7 @@ def launch_log_checks(host_log, client_log, expect_no_scatter=True, expect_succe
         checks[which + "TranspilerSuccess"] = sum(1 for line in text.splitlines() if TRANSPILER_SUCCESS in line)
         checks[which + "MarkersNotFound"] = sum(1 for line in text.splitlines() if TRANSPILER_MISSING_MARKERS in line)
         checks[which + "FailedAttackPatch"] = [line.strip() for line in text.splitlines() if FAILED_ATTACK_PATCH in line]
+        checks[which + "PatchProblems"] = [line.strip()[:240] for line in text.splitlines() if any(marker in line for marker in PATCH_PROBLEM_MARKERS)]
     scatter = [line.strip() for line in host_log.splitlines() if NO_SCATTER_LINE in line]
     checks["noScatterLines"] = scatter
     issues = []

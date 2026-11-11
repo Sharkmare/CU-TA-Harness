@@ -90,7 +90,8 @@
         "unit.test_v2_suite",
         "unit.test_pvp_banded",
         "unit.test_corpse_banded",
-        "unit.test_official_stage"
+        "unit.test_official_stage",
+        "unit.test_fullbuild_stages"
       ],
       "needs_game": false
     },
