@@ -154,8 +154,8 @@ class RealPathHelperTests(unittest.TestCase):
 
         with FakeLink({"get": get}) as link:
             game = Game(link.port)
-            self.assertEqual(scenarios.crack_read(game, {"position": {"x": 10.5, "y": -47.0}}), 42.46)
-            self.assertEqual(scenarios.crack_read(game, {"position": {"x": 0.0, "y": 0.0}}), 0.0)
+            self.assertEqual(scenarios.crack_counter(game, {"position": {"x": 10.5, "y": -47.0}}), 42.46)
+            self.assertEqual(scenarios.crack_counter(game, {"position": {"x": 0.0, "y": 0.0}}), 0.0)
 
     def test_every_scenario_group_has_launch_arguments(self):
         from tests import test_desync

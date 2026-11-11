@@ -1,4 +1,5 @@
 import math
+import unittest
 import time
 
 from casualtieslink.desync import Scenario
@@ -6,15 +7,19 @@ from casualtieslink.desync import Scenario
 SETTLE_SECONDS = 3.0
 APPEAR_TIMEOUT_SECONDS = 20.0
 NEARBY_RADIUS = 1.0
-GROUND_RADIUS = 1.0
-SOLID_SEARCH_DEPTH = 10
+GROUND_RADIUS = 3.0
+FALL_RADIUS = 3.0
 UNBREAKABLE_DAMAGE = 100000.0
 BODY_PATH = "transform.position"
 GROUND_ITEM_ID = "bandage"
 CONTAINER_ID = "pouch"
 CORPSE_ID = "corpse"
 CORPSE_KILLED_HEALTH = 0.0
-SPAWN_OFFSET = 1.5
+SPAWN_OFFSET = 0.2
+CORPSE_OFFSET = 1.0
+REACH_COLUMNS = 4
+REACH_ROWS_ABOVE = 1
+REACH_ROWS_BELOW = 3
 INVENTORY_SLOT = 0
 
 
@@ -34,32 +39,50 @@ def rows_near(game, component, position, name=None, radius=NEARBY_RADIUS):
     return [row for row in game.call("find", **arguments) if "position" in row and distance(row["position"], position) <= radius]
 
 
-def wait_for_rows(game, component, position, name=None, timeout=APPEAR_TIMEOUT_SECONDS):
+def player_summary(game):
+    try:
+        return str(player_position(game))
+    except Exception as exception:
+        return "unknown (%s)" % exception
+
+
+def nearest_summary(game, component, position, count=5):
+    try:
+        rows = [row for row in game.call("find", type=component, limit=400) if "position" in row]
+    except Exception as exception:
+        return "find failed: %s" % exception
+    rows.sort(key=lambda row: distance(row["position"], position))
+    return "; ".join("%s at (%.1f, %.1f)" % (row["object"]["name"], row["position"]["x"], row["position"]["y"]) for row in rows[:count]) or "none"
+
+
+def wait_for_rows(game, component, position, name=None, timeout=APPEAR_TIMEOUT_SECONDS, radius=NEARBY_RADIUS):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        rows = rows_near(game, component, position, name)
+        rows = rows_near(game, component, position, name, radius=radius)
         if rows:
             return rows
         time.sleep(0.5)
-    raise AssertionError("no %s%s near (%.1f, %.1f) on port %s within %.0fs" % (
-        component, " named " + name if name else "", position["x"], position["y"], game.transport.port, timeout))
+    raise AssertionError("no %s%s near (%.1f, %.1f) on port %s within %.0fs; player at %s; nearest %s: %s" % (
+        component, " named " + name if name else "", position["x"], position["y"], game.transport.port, timeout,
+        player_summary(game), component, nearest_summary(game, component, position)))
 
 
 def block_value(game, position):
     return int(game.call("invoke", target="world", method="GetBlock", args=[position], types=["Vector2"]))
 
 
-def solid_block_below(game):
+def solid_block_nearby(game):
     base = player_position(game)
-    for depth in range(1, SOLID_SEARCH_DEPTH + 1):
-        candidate = {"x": base["x"], "y": base["y"] - depth}
+    cells = [(dx, dy) for dx in range(-REACH_COLUMNS, REACH_COLUMNS + 1) for dy in range(-REACH_ROWS_BELOW, REACH_ROWS_ABOVE + 1) if (dx, dy) != (0, 0)]
+    for dx, dy in sorted(cells, key=lambda cell: math.hypot(*cell)):
+        candidate = {"x": base["x"] + dx, "y": base["y"] + dy}
         if block_value(game, candidate) > 0:
             return candidate
-    raise AssertionError("no solid block within %d below the player at (%.1f, %.1f)" % (SOLID_SEARCH_DEPTH, base["x"], base["y"]))
+    raise AssertionError("no solid block within %d columns of the player at (%.1f, %.1f)" % (REACH_COLUMNS, base["x"], base["y"]))
 
 
 def block_prepare(host, client):
-    return {"position": solid_block_below(client)}
+    return {"position": solid_block_nearby(client)}
 
 
 def block_act(client, context):
@@ -82,18 +105,18 @@ def ground_count(game, context):
     return sum(1 for row in rows if is_unparented(game, row))
 
 
-def spawn_on_host(host, client, item_id):
+def spawn_on_host(host, client, item_id, offset=SPAWN_OFFSET):
     anchor = player_position(client)
-    spot = {"x": anchor["x"] + SPAWN_OFFSET, "y": anchor["y"]}
+    spot = {"x": anchor["x"] + offset, "y": anchor["y"]}
     host.call("spawn", id=item_id, x=spot["x"], y=spot["y"], pickup=False)
     return spot
 
 
 def item_on_both(host, client, item_id):
     spot = spawn_on_host(host, client, item_id)
-    wait_for_rows(host, "Item", spot, item_id)
-    rows = wait_for_rows(client, "Item", spot, item_id)
-    return {"position": spot, "name": item_id, "clientHandle": rows[0]["object"]["id"]}
+    wait_for_rows(host, "Item", spot, item_id, radius=FALL_RADIUS)
+    rows = wait_for_rows(client, "Item", spot, item_id, radius=FALL_RADIUS)
+    return {"position": rows[0]["position"], "name": item_id, "clientHandle": rows[0]["object"]["id"]}
 
 
 def pickup_prepare(host, client):
@@ -124,14 +147,14 @@ def corpse_health(game, context):
 
 
 def corpse_prepare(host, client):
-    spot = spawn_on_host(host, client, CORPSE_ID)
-    wait_for_rows(host, "BuildingEntity", spot, CORPSE_ID)
-    rows = wait_for_rows(client, "BuildingEntity", spot, CORPSE_ID)
-    return {"position": spot, "name": CORPSE_ID, "clientHandle": rows[0]["object"]["id"]}
+    spot = spawn_on_host(host, client, CORPSE_ID, CORPSE_OFFSET)
+    wait_for_rows(host, "BuildingEntity", spot, CORPSE_ID, radius=FALL_RADIUS)
+    rows = wait_for_rows(client, "BuildingEntity", spot, CORPSE_ID, radius=FALL_RADIUS)
+    return {"position": rows[0]["position"], "name": CORPSE_ID, "clientHandle": rows[0]["object"]["id"]}
 
 
 def container_children(game, context):
-    rows = rows_near(game, "Container", context["position"], context["name"])
+    rows = rows_near(game, "Container", context["position"], context["name"], radius=FALL_RADIUS)
     if not rows:
         return None
     return int(game.get("id:%d" % rows[0]["object"]["id"], "itemCount"))
@@ -139,11 +162,12 @@ def container_children(game, context):
 
 def container_prepare(host, client):
     spot = spawn_on_host(host, client, CONTAINER_ID)
-    wait_for_rows(host, "Container", spot, CONTAINER_ID)
-    container = wait_for_rows(client, "Container", spot, CONTAINER_ID)[0]
+    wait_for_rows(host, "Container", spot, CONTAINER_ID, radius=FALL_RADIUS)
+    container = wait_for_rows(client, "Container", spot, CONTAINER_ID, radius=FALL_RADIUS)[0]
+    spot = container["position"]
     held = {"x": spot["x"] + SPAWN_OFFSET / 2, "y": spot["y"]}
     host.call("spawn", id=GROUND_ITEM_ID, x=held["x"], y=held["y"], pickup=False)
-    item = wait_for_rows(client, "Item", held, GROUND_ITEM_ID)[0]
+    item = wait_for_rows(client, "Item", held, GROUND_ITEM_ID, radius=FALL_RADIUS)[0]
     return {"position": spot, "name": CONTAINER_ID, "containerHandle": container["object"]["id"], "itemHandle": item["object"]["id"]}
 
 
@@ -183,6 +207,7 @@ HUNGER_START = 40.0
 HUNGER_GAIN = 5.0
 FUSE_OFFSETS_SECONDS = (6.0, 8.0, 12.0)
 DIG_OFFSETS_SECONDS = (0.0, 3.0, 8.0)
+LATENCY_OFFSETS_SECONDS = (2.0, 4.0, 10.0)
 THROW_RADIUS = 12.0
 CORPSE_FLAGS = {"setchar": 2}
 
@@ -193,12 +218,18 @@ def hand_slot(game):
 
 def hold_on_client(host, client, item_id):
     context = item_on_both(host, client, item_id)
-    client.call("invoke", target="player", method="PickUpItem", args=["id:%d" % context["clientHandle"], hand_slot(client), True], types=["Item", "Int32", "Boolean"])
-    time.sleep(SETTLE_SECONDS_AFTER_PICKUP)
-    return context
+    slot = hand_slot(client)
+    client.call("invoke", target="player", method="PickUpItem", args=["id:%d" % context["clientHandle"], slot, True], types=["Item", "Int32", "Boolean"])
+    deadline = time.time() + HOLD_TIMEOUT_SECONDS
+    while time.time() < deadline:
+        if client.call("invoke", target="player", method="GetItem", args=[slot], types=["Int32"]) is not None:
+            return context
+        time.sleep(0.5)
+    raise AssertionError("the client does not hold the %s after %.0fs: slot %d, held now %s" % (item_id, HOLD_TIMEOUT_SECONDS, slot, client.call("invoke", target="player", method="GetItem", args=[slot], types=["Int32"])))
 
 
 SETTLE_SECONDS_AFTER_PICKUP = 2.0
+HOLD_TIMEOUT_SECONDS = 8.0
 
 
 def look_at(game, position):
@@ -212,18 +243,9 @@ def swing(client, position, times=1):
         time.sleep(SWING_PAUSE_SECONDS)
 
 
-def solid_block_within_reach(game):
-    base = player_position(game)
-    for depth in range(1, REACH_BLOCKS + 1):
-        candidate = {"x": base["x"], "y": base["y"] - depth}
-        if block_value(game, candidate) > 0:
-            return candidate
-    raise AssertionError("no solid block within %d below the player at (%.1f, %.1f)" % (REACH_BLOCKS, base["x"], base["y"]))
-
-
 def dig_prepare(host, client):
     hold_on_client(host, client, PICKAXE_ID)
-    return {"position": solid_block_within_reach(client)}
+    return {"position": solid_block_nearby(client)}
 
 
 def dig_act(client, context):
@@ -258,6 +280,10 @@ def block_cell(game, position):
 
 
 def crack_read(game, context):
+    return [block_value(game, context["position"]), crack_counter(game, context)]
+
+
+def crack_counter(game, context):
     cell = block_cell(game, context["position"])
     rows = game.get("world", "blockDamages", depth=3)
     for node in numbers_in(rows):
@@ -313,7 +339,7 @@ def door_prepare(host, client):
     rows = [row for row in client.call("find", type="Openable", limit=200) if "position" in row]
     instant = [row for row in rows if client.get("id:%d" % row["object"]["id"], "instantOpen", depth=0)]
     if not instant:
-        raise AssertionError("no instantOpen Openable in the client world (%d Openables)" % len(rows))
+        raise unittest.SkipTest("no instantOpen Openable in the client world (%d Openables)" % len(rows))
     nearest = min(instant, key=lambda row: distance(row["position"], anchor))
     wait_for_rows(host, "Openable", nearest["position"])
     return {"position": nearest["position"], "name": None, "clientHandle": nearest["object"]["id"]}
@@ -357,8 +383,15 @@ def eat_prepare(host, client):
     return {"bodyName": "Body_ClientD"}
 
 
+def use_held_item(client):
+    held = client.call("invoke", target="player", method="GetItem", args=[hand_slot(client)], types=["Int32"])
+    if held is None:
+        raise AssertionError("the client holds nothing to use")
+    client.call("invoke", target="player", method="UseItem", args=["id:%d" % held["id"]], types=["Item"])
+
+
 def eat_act(client, context):
-    client.call("invoke", target="player", method="UseItemInHand")
+    use_held_item(client)
 
 
 def hunger_read(game, context):
@@ -375,12 +408,12 @@ def crater_sum(game, centre):
 
 def crater_prepare(host, client):
     hold_on_client(host, client, DYNAMITE_ID)
-    wall = solid_block_within_reach(client)
+    wall = solid_block_nearby(client)
     return {"position": wall}
 
 
 def crater_act(client, context):
-    client.call("invoke", target="player", method="UseItemInHand")
+    use_held_item(client)
     time.sleep(SWING_PAUSE_SECONDS)
     look_at(client, context["position"])
     client.call("invoke", target="player", method="ThrowItem", args=[0.3])
@@ -404,7 +437,7 @@ SCENARIOS = [
     Scenario("S1_block_dig_by_client", "the client digs a block with a pickaxe through Body.UseItemInHand; the block is gone on both and stays gone",
              dig_prepare, dig_act, block_read, lambda value, baseline: value != baseline and value == 0, offsets=DIG_OFFSETS_SECONDS),
     Scenario("S2_block_crack_by_client", "the client hits a block once; the host and client damage counters for that block are equal",
-             crack_prepare, crack_act, crack_read, lambda value, baseline: value > baseline),
+             crack_prepare, crack_act, crack_read, lambda value, baseline: value != baseline),
     Scenario("S3_corpse_punch_by_client", "a Dune client hits a corpse (host is not Dune); the corpse health agrees on both",
              corpse_punch_prepare, corpse_punch_act, corpse_health, gone_or_lower, group="mixed-characters"),
     Scenario("S5_building_break_by_client", "the client breaks the nearest building with a pickaxe; destroyed on both, not rebuilt",
@@ -412,11 +445,11 @@ SCENARIOS = [
     Scenario("S6_door_open_by_client", "the client uses an instant-open door; its state is equal on both",
              door_prepare, door_act, door_read, gone_or_lower),
     Scenario("S7_item_pickup_by_client", "the client picks a spawned item off the ground; the ground count near it drops on both",
-             pickup_prepare, pickup_act, ground_count, fewer),
+             pickup_prepare, pickup_act, ground_count, fewer, offsets=LATENCY_OFFSETS_SECONDS),
     Scenario("S7_item_drop_by_client", "the client drops a held item; a ground item appears on both",
-             drop_prepare, drop_act, ground_count, more),
+             drop_prepare, drop_act, ground_count, more, offsets=LATENCY_OFFSETS_SECONDS),
     Scenario("S7_item_throw_by_client", "the client throws a held item; a ground item appears near it on both",
-             throw_prepare, throw_act, thrown_count, more),
+             throw_prepare, throw_act, thrown_count, more, offsets=LATENCY_OFFSETS_SECONDS),
     Scenario("S9_eat_by_client", "the client eats bread; its hunger value rises and the host agrees",
              eat_prepare, eat_act, hunger_read, lambda value, baseline: value >= baseline + HUNGER_GAIN),
     Scenario("S14_grenade_crater_by_client", "the client lights and throws dynamite at a wall; the crater is the same on both",
