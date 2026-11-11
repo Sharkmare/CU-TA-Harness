@@ -226,6 +226,8 @@ def describe(observation, build, dll_hash, game_version=None, launch_id=None, re
         "actedOnClient": observation.acted,
         "verdict": verdict,
         "measurements": observation.context.get("measurements"),
+        "target": observation.context.get("target"),
+        "missedAttempts": observation.context.get("missedAttempts"),
         "issues": observation.scenario.check(observation.context) if observation.scenario.check else [],
         "baseline": {"host": observation.baseline_host, "client": observation.baseline_client},
         "samples": [sample.as_dict() for sample in observation.samples],
@@ -243,6 +245,10 @@ def format_report(report):
     for sample in report["samples"]:
         marker = "" if sample["host"] == sample["client"] else "  <- instances disagree"
         lines.append("  t=%4.1fs   host=%s client=%s%s" % (sample["offset"], sample["host"], sample["client"], marker))
+    if report.get("target"):
+        lines.append("  target %s" % report["target"])
+    if report.get("missedAttempts"):
+        lines.append("  attempts before the first landed punch that changed nothing: %s" % report["missedAttempts"])
     for entry in (report.get("measurements") or [])[:40]:
         lines.append("  measurement %s" % entry)
     for issue in report.get("issues", []):

@@ -13,10 +13,19 @@ FIRST_SWING_LANDED_MINIMUM = 0.0
 EXACTLY_ONCE_TOLERANCE = 0.35
 
 
-def pick_target(candidates, anchor, health_range=BUILDING_HEALTH_RANGE):
+USED_TARGETS = set()
+FIRST_PUNCH_ATTEMPTS = 3
+
+
+def target_key(position):
+    return (round(position["x"], 1), round(position["y"], 1))
+
+
+def pick_target(candidates, anchor, health_range=BUILDING_HEALTH_RANGE, exclude=()):
     low, high = health_range
     usable = [item for item in candidates
-              if "corpse" not in item["name"].lower() and not item["indestructible"] and not item["cantHit"] and low <= item["health"] <= high]
+              if "corpse" not in item["name"].lower() and not item["indestructible"] and not item["cantHit"] and low <= item["health"] <= high
+              and target_key(item["position"]) not in exclude]
     if not usable:
         return None
     return min(usable, key=lambda item: base.distance(item["position"], anchor))
@@ -63,8 +72,14 @@ def once_per_swing_issues(entries):
     return issues
 
 
-def measure_until_invalid(client, read_host, read_client, target_of, extra=None, count=hooks.REGRESSION_SWINGS):
+def measure_until_invalid(client, read_host, read_client, target_of, extra=None, count=hooks.REGRESSION_SWINGS, attempts=1, missed=None):
     first = hooks.measure_swings(None, client, read_host, read_client, target_of, count=1, extra=extra)
+    tries = 1
+    while first and landing_issues(first) and tries < attempts:
+        if missed is not None:
+            missed.append(first[0])
+        first = hooks.measure_swings(None, client, read_host, read_client, target_of, count=1, extra=extra)
+        tries += 1
     if not first or landing_issues(first):
         return first
     rest = hooks.measure_swings(None, client, read_host, read_client, target_of, count=count - 1, extra=extra)
@@ -77,17 +92,19 @@ def building_prepare(host, client):
     base.empty_the_hand(client)
     anchor = base.player_position(client)
     candidates = read_candidates(client, anchor)
-    chosen = pick_target(candidates, anchor)
+    chosen = pick_target(candidates, anchor, exclude=USED_TARGETS)
     if chosen is None:
         raise AssertionError("no destructible building with health %s among the %d nearest; saw %s" % (
             BUILDING_HEALTH_RANGE, len(candidates), sorted(set((item["name"], item["health"]) for item in candidates))[:8]))
+    USED_TARGETS.add(target_key(chosen["position"]))
     base.wait_for_rows(host, "BuildingEntity", chosen["position"], radius=0.5)
     client.set("player", base.BODY_PATH, {"x": chosen["position"]["x"] - REACH_OFFSET, "y": chosen["position"]["y"], "z": 0.0})
     time.sleep(hooks.SETTLE_AFTER_SWING_SECONDS * 2)
     after = base.player_position(client)
     if base.distance(after, chosen["position"]) > hooks.UNARMED_REACH:
         raise AssertionError("the client is %.1f from the building after the move, beyond the reach %.1f" % (base.distance(after, chosen["position"]), hooks.UNARMED_REACH))
-    return {"position": chosen["position"], "name": None, "host": host, "building": {"name": chosen["name"], "health": chosen["health"]}, "measurements": []}
+    return {"position": chosen["position"], "name": None, "host": host, "building": {"name": chosen["name"], "health": chosen["health"]}, "measurements": [],
+            "target": {"name": chosen["name"], "healthBefore": chosen["health"], "distance": round(base.distance(after, chosen["position"]), 2), "position": chosen["position"]}}
 
 
 def building_act(client, context):
@@ -104,7 +121,13 @@ def regression_check(context):
 
 
 def pvp_prepare(host, client):
+    try:
+        host.console("heal")
+        time.sleep(hooks.SETTLE_AFTER_SWING_SECONDS * 2)
+    except Exception:
+        pass
     context = hooks.pvp_prepare(host, client)
+    context["missedAttempts"] = []
     try:
         context["pvpRule"] = host.get("static:Together.Multiplayer", "rules.PVP", depth=0)
     except Exception as exception:
@@ -121,7 +144,8 @@ def pvp_act(client, context):
 
     context["measurements"] = measure_until_invalid(
         client, lambda: hooks.limb_total(host, context["hostVictim"]), lambda: hooks.limb_total(client, context["clientVictim"]), victim_position,
-        extra=lambda: round(float(host.get(context["hostVictim"], base.BODY_PATH, depth=0)["x"]), 3))
+        extra=lambda: round(float(host.get(context["hostVictim"], base.BODY_PATH, depth=0)["x"]), 3),
+        attempts=FIRST_PUNCH_ATTEMPTS, missed=context["missedAttempts"])
 
 
 def pvp_check(context):

@@ -173,5 +173,79 @@ class BuildAndGroupTests(unittest.TestCase):
         self.assertEqual(sorted(scenarios.counts_by_group(["regress_"])), ["hook-regression"])
 
 
+class RepeatTests(unittest.TestCase):
+    anchor = {"x": 0.0, "y": 0.0}
+
+    def test_a_target_already_used_in_the_launch_is_excluded(self):
+        near = candidate("crate", 200.0, {"x": 2.0, "y": 0.0})
+        far = candidate("box", 200.0, {"x": 9.0, "y": 0.0})
+        found = regress.pick_target([near, far], self.anchor, exclude={regress.target_key(near["position"])})
+        self.assertEqual(found["name"], "box")
+        self.assertIsNone(regress.pick_target([near], self.anchor, exclude={regress.target_key(near["position"])}))
+
+    def test_the_first_punch_is_retried_up_to_the_attempt_limit_and_misses_are_kept(self):
+        from tests import hook_scenarios as hooks
+        outcomes = [[entry(1, 0.0, 0.0)], [entry(1, 0.0, 0.0)], [entry(1, 18.0, 18.0)], [entry(1, 18.0, 18.0) for _ in range(4)]]
+        calls = []
+
+        def fake_measure(host, client, read_host, read_client, target_of, count=5, extra=None):
+            calls.append(count)
+            return outcomes[len(calls) - 1]
+
+        missed = []
+        with mock.patch.object(hooks, "measure_swings", fake_measure):
+            result = regress.measure_until_invalid(None, lambda: 0, lambda: 0, lambda: {}, attempts=3, missed=missed)
+        self.assertEqual(calls, [1, 1, 1, 4])
+        self.assertEqual(len(missed), 2)
+        self.assertEqual([item["swing"] for item in result], [1, 2, 3, 4, 5])
+
+    def test_three_misses_in_a_row_leave_the_run_invalid(self):
+        from tests import hook_scenarios as hooks
+        with mock.patch.object(hooks, "measure_swings", lambda *a, **k: [entry(1, 0.0, 0.0)]):
+            missed = []
+            result = regress.measure_until_invalid(None, lambda: 0, lambda: 0, lambda: {}, attempts=3, missed=missed)
+        self.assertEqual(len(missed), 2)
+        self.assertTrue(regress.landing_issues(result))
+
+    def test_without_attempts_a_miss_ends_the_run_at_once(self):
+        from tests import hook_scenarios as hooks
+        calls = []
+
+        def fake_measure(*arguments, **keywords):
+            calls.append(1)
+            return [entry(1, 0.0, 0.0)]
+
+        with mock.patch.object(hooks, "measure_swings", fake_measure):
+            regress.measure_until_invalid(None, lambda: 0, lambda: 0, lambda: {})
+        self.assertEqual(len(calls), 1)
+
+    def test_the_report_shows_the_target_and_the_missed_attempts(self):
+        scenario = regress.REGRESSION_SCENARIOS[0]
+        observation = desync.Observation(scenario, 0, 0, [desync.Sample(0.0, 0, 0)], True,
+                                         {"measurements": [entry(1, 19.0, 19.0)], "target": {"name": "crate", "healthBefore": 150.0, "distance": 1.6},
+                                          "missedAttempts": [entry(1, 0.0, 0.0)]})
+        report = desync.describe(observation, "fork", "ab" * 32)
+        text = desync.format_report(report)
+        self.assertIn("target {'name': 'crate', 'healthBefore': 150.0, 'distance': 1.6}", text)
+        self.assertIn("attempts before the first landed punch that changed nothing", text)
+
+    def test_the_heal_before_a_punch_run_is_attempted_and_its_failure_is_not_fatal(self):
+        from tests import hook_scenarios as hooks
+        calls = []
+
+        class Host:
+            def console(self, line):
+                calls.append(line)
+                raise RuntimeError("console busy")
+
+            def get(self, *arguments, **keywords):
+                return True
+
+        with mock.patch.object(hooks, "pvp_prepare", return_value={"host": None}), mock.patch.object(regress.time, "sleep", lambda seconds: None):
+            context = regress.pvp_prepare(Host(), None)
+        self.assertEqual(calls, ["heal"])
+        self.assertEqual(context["missedAttempts"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
