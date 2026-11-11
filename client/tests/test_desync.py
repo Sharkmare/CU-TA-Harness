@@ -27,9 +27,9 @@ def expected_hash(build):
 
 BUILD = desync.parse_build(os.environ.get(desync.BUILD_ENVIRONMENT_VARIABLE))
 EXPECTED_HASH = expected_hash(BUILD)
-BUILDS_WITHOUT_PROBE = (desync.OFFICIAL_BUILD,)
+BUILDS_WITHOUT_PROBE = (desync.OFFICIAL_BUILD, desync.SPECTATOR_FIX_BUILD)
 BUILD_HAS_PROBE = BUILD not in BUILDS_WITHOUT_PROBE
-RECORD_ONLY_BUILDS = (desync.OFFICIAL_BUILD, desync.FULLBUILD_CONTROL_BUILD)
+RECORD_ONLY_BUILDS = (desync.OFFICIAL_BUILD, desync.FULLBUILD_CONTROL_BUILD, desync.SPECTATOR_FIX_BUILD)
 RECORD_ONLY_LAUNCH_CHECKS = BUILD in RECORD_ONLY_BUILDS
 PROFILES = desync.profiles_from_environment()
 REPEAT = desync.repeat_from_environment()
@@ -222,10 +222,10 @@ PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
                           "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                           "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": []}
+                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": []}
 GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                         "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": []}
+                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": []}
 GROUP_CLIENT_CHARACTER = {"hook-dune": 2}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
 PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune")
