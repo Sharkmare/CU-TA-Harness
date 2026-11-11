@@ -545,9 +545,18 @@ AIM_DRIFT_PERIOD_SECONDS = 4.0
 NEIGHBOUR_OFFSETS = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
 
 
-def aim_point(pattern, center, elapsed):
+AIM_NEAR_X_SWAY = 0.3
+AIM_NEAR_X_PERIOD_SECONDS = 2.0
+
+
+def aim_point(pattern, center, elapsed, anchor_x=None):
     if pattern == "fixed":
         return dict(center)
+    if pattern == "near_x":
+        if anchor_x is None:
+            raise ValueError("the near_x pattern needs the character's x")
+        sway = AIM_NEAR_X_SWAY * math.sin(2 * math.pi * elapsed / AIM_NEAR_X_PERIOD_SECONDS)
+        return {"x": anchor_x + sway, "y": center["y"]}
     if pattern == "circle":
         angle = 2 * math.pi * elapsed / AIM_CIRCLE_PERIOD_SECONDS
         return {"x": center["x"] + AIM_CIRCLE_RADIUS * math.cos(angle), "y": center["y"] + AIM_CIRCLE_RADIUS * math.sin(angle)}
@@ -621,12 +630,12 @@ def remove_fresh_block(host, client, context):
 def aimed_hold_hit(client, context):
     if context["firstCall"] is None:
         context["firstCall"] = time.time()
-    target = aim_point(context["aimPattern"], context["position"], time.time() - context["firstCall"])
     if context.get("walk"):
         walk_a_little(client, context)
+    real = player_position(client)
+    target = aim_point(context["aimPattern"], context["position"], time.time() - context["firstCall"], real["x"])
     before = float(client.get("player", "attackCooldown", depth=0))
     is_right = client.get("player", "isRight", depth=0)
-    real = player_position(client)
     copy = context["hostGame"].get(context["hostBodyHandle"], BODY_PATH, depth=0)
     client.call("invoke", target="player", method="UseItemInHand",
                 sets=[{"target": "player", "path": "targetLookPos", "value": {"x": target["x"], "y": target["y"], "z": 0.0}}])
@@ -650,14 +659,14 @@ def tile_read(game, context):
 
 
 SERIES_SCENARIOS = [
-    SeriesScenario("aim_above_mining_cracks", "held-click bare hand mining of a block straight above the client with the aim circling it; neighbours are read on both games",
-                   fresh_block_prepare_with("circle", "above"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
-    SeriesScenario("aim_below_mining_cracks", "the same for a block below the client",
-                   fresh_block_prepare_with("circle", "below"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
+    SeriesScenario("aim_vertical_up_mining_cracks", "held-click bare hand mining of a block straight above the client with the cursor within 0.3 block of the character's x; the block and its neighbours are read on both games",
+                   fresh_block_prepare_with("near_x", "above"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
+    SeriesScenario("aim_vertical_down_mining_cracks", "the same for a block below the client",
+                   fresh_block_prepare_with("near_x", "below"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
     SeriesScenario("aim_cross_mining_cracks", "the same for a block one column from the client with the aim drifting across the character's x",
                    fresh_block_prepare_with("drift", "adjacent"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
-    SeriesScenario("aim_walk_mining_cracks", "the aim drifts and the client character takes short steps left and right (keys A and D, unverified) while mining a side block",
-                   fresh_block_prepare_with("drift", "side", walk=True), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
+    SeriesScenario("aim_walk_mining_cracks", "the client character takes short steps left and right across the column of a block above it (keys A and D, unverified) while the held click runs and the cursor stays on the block",
+                   fresh_block_prepare_with("fixed", "above", walk=True), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
     SeriesScenario("aim_circle_mining_cracks", "held-click bare hand mining of a block the host placed, the client's aim circles the block; the crack counters of the block and its eight neighbours are read on both games",
                    fresh_block_prepare_with("circle"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
     SeriesScenario("dune_client_aim_circle_mining", "the same moving-aim mining with a Dune client and an Experiment host",

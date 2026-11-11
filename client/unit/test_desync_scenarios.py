@@ -379,6 +379,23 @@ class AimTests(unittest.TestCase):
         self.assertAlmostEqual(max(xs) - min(xs), scenarios.AIM_DRIFT_BLOCKS, places=6)
         self.assertTrue(all(scenarios.aim_point("drift", self.centre, step * 0.3)["y"] == 7.0 for step in range(20)))
 
+    def test_the_near_x_aim_stays_within_the_sway_of_the_characters_x_at_the_blocks_height(self):
+        for step in range(0, 60):
+            point = scenarios.aim_point("near_x", self.centre, step * 0.13, anchor_x=12.34)
+            self.assertLessEqual(abs(point["x"] - 12.34), scenarios.AIM_NEAR_X_SWAY + 1e-9)
+            self.assertEqual(point["y"], 7.0)
+        xs = [scenarios.aim_point("near_x", self.centre, step * 0.1, anchor_x=0.0)["x"] for step in range(21)]
+        self.assertGreater(max(xs) - min(xs), 0.5)
+
+    def test_the_near_x_aim_follows_a_walking_character(self):
+        first = scenarios.aim_point("near_x", self.centre, 0.0, anchor_x=1.0)
+        later = scenarios.aim_point("near_x", self.centre, 0.0, anchor_x=3.0)
+        self.assertEqual(later["x"] - first["x"], 2.0)
+
+    def test_the_near_x_aim_needs_the_characters_x(self):
+        with self.assertRaises(ValueError):
+            scenarios.aim_point("near_x", self.centre, 0.0)
+
     def test_an_unknown_pattern_is_refused(self):
         with self.assertRaises(ValueError):
             scenarios.aim_point("spiral", self.centre, 0.0)
@@ -472,7 +489,7 @@ class LayoutAndWalkTests(unittest.TestCase):
         self.assertEqual(taps, [("A", scenarios.WALK_TAP_FRAMES), ("D", scenarios.WALK_TAP_FRAMES)])
 
     def test_the_new_aim_scenarios_are_selectable_one_at_a_time(self):
-        for fragment in ("aim_above_mining_cracks", "aim_below_mining_cracks", "aim_cross_mining_cracks", "aim_walk_mining_cracks", "aim_circle_mining_cracks"):
+        for fragment in ("aim_vertical_up_mining_cracks", "aim_vertical_down_mining_cracks", "aim_cross_mining_cracks", "aim_walk_mining_cracks", "aim_circle_mining_cracks"):
             self.assertEqual(scenarios.matching_scenario_names([fragment]), [fragment], fragment)
 
 
