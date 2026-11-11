@@ -205,6 +205,37 @@ PARSED3 = ("[Info   :  Together] [diagblock] t=%s HOST_PARSED seq=%d didhit=Fals
 AFTER3 = "[Info   :  Together] [diagblock] t=%s HOST_AFTER seq=%d copy cd=0.13 blockDamageSumDelta=0 limb1After=(0.5,2) isRightAfter=True"
 
 
+class FlipSuspectTests(unittest.TestCase):
+    def summary(self, would_flip, after_limb):
+        parsed3 = PARSED3.replace("wouldFlip=True", "wouldFlip=%s" % would_flip)
+        after3 = AFTER3.replace("limb1After=(0.5,2)", "limb1After=%s" % after_limb)
+        host = "\n".join([recv("10.1", 1), parsed3 % ("10.1", 1), decided("10.1", 1, "applied"), after3 % ("10.1", 1)])
+        return diagblock.summarise_run(client_line("10.0", 1), host)
+
+    def test_a_would_flip_swing_is_a_flip_suspect_and_a_lost_one_is_counted_as_such(self):
+        summary = self.summary("True", "(0.5,2)")
+        self.assertEqual(summary["flipSuspects"], [{"index": 1, "seq": "1", "limb1Shift": 0.5, "lost": True}])
+        self.assertIn("flip suspects (wouldFlip true) at swings [1]; lost among them 1", "\n".join(summary["textLines"]))
+
+    def test_no_flip_means_no_suspect(self):
+        self.assertEqual(self.summary("False", "(1,2)")["flipSuspects"], [])
+
+    def test_the_limb_shift_is_the_distance_between_the_sent_and_the_after_position(self):
+        self.assertEqual(self.summary("True", "(4,6)")["rows"][0]["limb1Shift"], 5.0)
+
+    def test_a_lost_swing_line_says_whether_the_limb_moved_far(self):
+        far = "\n".join(self.summary("True", "(4,6)")["textLines"])
+        near = "\n".join(self.summary("True", "(1.1,2)")["textLines"])
+        self.assertIn("(shift 5.0, far True)", far)
+        self.assertIn("(shift 0.1, far False)", near)
+
+    def test_missing_fields_give_no_shift(self):
+        rows = diagblock.swing_table(diagblock.parse_lines(client_line("10.0", 1)), diagblock.parse_lines(recv("10.1", 1)))
+        diagblock.mark_flip_suspects(rows)
+        self.assertIsNone(rows[0]["limb1Shift"])
+        self.assertFalse(rows[0]["flipSuspect"])
+
+
 class FlipFieldTests(unittest.TestCase):
     def rows(self, swing_log=None):
         client = client_line("10.0", 1)
@@ -221,7 +252,7 @@ class FlipFieldTests(unittest.TestCase):
         client, host, _ = self.rows()
         summary = diagblock.summarise_run(client, host, [1.0], [{"isRight": True, "aim": {"x": 1.0, "y": 2.0}}])
         text = "\n".join(summary["textLines"])
-        self.assertIn("lost swing 1 seq 1: wouldFlip=True hostIsRight=False clientIsRight=True hostStanding=True hostRootX=0.25, sentLimb1=(1,2) limb1After=(0.5,2), isRightAfter=True", text)
+        self.assertIn("lost swing 1 seq 1: wouldFlip=True hostIsRight=False clientIsRight=True hostStanding=True hostRootX=0.25, sentLimb1=(1,2) limb1After=(0.5,2) (shift 0.5, far False), isRightAfter=True", text)
 
     def test_a_swing_log_of_another_length_is_ignored_rather_than_misjoined(self):
         client, host, _ = self.rows()

@@ -123,6 +123,33 @@ def inter_arrival(rows):
     return [round(later - earlier, 3) for earlier, later in zip(times, times[1:])]
 
 
+LIMB_SHIFT_FAR = 0.5
+
+
+def vector_of(text):
+    if not text:
+        return None
+    try:
+        x, y = text.strip("()").split(",")
+        return float(x), float(y)
+    except ValueError:
+        return None
+
+
+def limb_shift(row):
+    sent = vector_of((row.get("hostAim") or {}).get("sentLimb1"))
+    after = vector_of((row.get("hostAfter") or {}).get("limb1After"))
+    if sent is None or after is None:
+        return None
+    return round(((sent[0] - after[0]) ** 2 + (sent[1] - after[1]) ** 2) ** 0.5, 3)
+
+
+def mark_flip_suspects(rows):
+    for row in rows:
+        row["limb1Shift"] = limb_shift(row)
+        row["flipSuspect"] = (row.get("hostAim") or {}).get("wouldFlip") == "True"
+
+
 def damage_check(rows):
     for row in rows:
         decided = row.get("decided")
@@ -151,6 +178,7 @@ def summarise_run(client_log, host_log, hit_times=None, swing_log=None):
     host_entries = parse_lines(host_log)
     rows = swing_table(client_entries, host_entries)
     attach_client_side(rows, swing_log)
+    mark_flip_suspects(rows)
     outcomes = {}
     for row in rows:
         outcomes[row["outcome"]] = outcomes.get(row["outcome"], 0) + 1
@@ -163,6 +191,7 @@ def summarise_run(client_log, host_log, hit_times=None, swing_log=None):
         "lost": [{"index": row["index"], "seq": row["seq"], "outcome": row["outcome"]} for row in lost],
         "shortestHostArrivalGap": min(gaps) if gaps else None,
         "arrivalGapsUnder0124": [gap for gap in gaps if gap < 0.124],
+        "flipSuspects": [{"index": row["index"], "seq": row["seq"], "limb1Shift": row["limb1Shift"], "lost": bool(row.get("hostRaycastMiss"))} for row in rows if row["flipSuspect"]],
         "hostRaycastMisses": [{"index": row["index"], "seq": row["seq"], "outcome": row["outcome"]} for row in rows if row.get("hostRaycastMiss")],
         "fieldDifferences": differences(rows),
         "firstDamageCheck": damage_check(rows),
@@ -183,13 +212,16 @@ def text_lines(summary):
             (", host cooldown copy=%s" % row["refusedAtHostCooldown"]) if "refusedAtHostCooldown" in row else ""))
     if summary["hostRaycastMisses"]:
         lines.append("diagblock: received swings that changed no block damage on the host (blockDamageSumDelta 0): %s" % [item["index"] for item in summary["hostRaycastMisses"]])
+    if summary["flipSuspects"]:
+        lines.append("diagblock: flip suspects (wouldFlip true) at swings %s; lost among them %d" % (
+            [item["index"] for item in summary["flipSuspects"]], sum(1 for item in summary["flipSuspects"] if item["lost"])))
     for row in summary["rows"]:
         if row.get("hostRaycastMiss"):
             aim = row.get("hostAim") or {}
             after = row.get("hostAfter") or {}
-            lines.append("diagblock lost swing %d seq %s: wouldFlip=%s hostIsRight=%s clientIsRight=%s hostStanding=%s hostRootX=%s, sentLimb1=%s limb1After=%s, isRightAfter=%s" % (
+            lines.append("diagblock lost swing %d seq %s: wouldFlip=%s hostIsRight=%s clientIsRight=%s hostStanding=%s hostRootX=%s, sentLimb1=%s limb1After=%s (shift %s, far %s), isRightAfter=%s" % (
                 row["index"], row["seq"], aim.get("wouldFlip"), aim.get("hostIsRight"), row.get("clientIsRight"), aim.get("hostStanding"), aim.get("hostRootX"),
-                aim.get("sentLimb1"), after.get("limb1After"), after.get("isRightAfter")))
+                aim.get("sentLimb1"), after.get("limb1After"), row["limb1Shift"], row["limb1Shift"] is not None and row["limb1Shift"] > LIMB_SHIFT_FAR, after.get("isRightAfter")))
     check = summary.get("firstDamageCheck")
     if check:
         lines.append("diagblock first decided swing %(swing)d: STR client %(clientSTR)s host %(hostSTR)s (equal %(strEqual)s), charType client %(clientCharType)s host %(hostCharType)s, "
