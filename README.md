@@ -50,7 +50,7 @@ The client adds `--link-port` for you. Leave `BepInEx/plugins/CasualtiesLink/` o
 | Bodies | `bodies`, `body_visuals` (sprite names, limb children and angles, arm animator angle, animator controller names) |
 | Input | `keybinds`, `input`, `mouse`, `input_probe`, `release_input` |
 | Time and view | `timescale`, `step`, `screenshot`, `log` |
-| Reflection | `find`, `get`, `set` |
+| Reflection | `find`, `get`, `set`, `invoke` (calls a method by name; `types` picks an overload, for example `["Vector2Int","UInt16"]`) |
 
 `get` and `set` take a target (`player`, `camera`, `world`, `console`, `static:Type`, `type:Type[#n]`, `name:GameObject`, or `id:N` from a handle in an earlier reply) and a dotted path with `[index]` steps, for example `limbs[3].bleedAmount`, or `main.currentMinigame` on `static:MinigameBase`. Values are converted to the field's type: enums by name, vectors as `{x,y}`, object references as `id:N`. Pass `nonpublic:true` to reach non public members.
 

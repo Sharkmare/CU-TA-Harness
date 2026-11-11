@@ -222,6 +222,7 @@ namespace CasualtiesLink
         {
             if (type == typeof(Vector2)) return new Vector2(Num(token, "x", 0), Num(token, "y", 1));
             if (type == typeof(Vector3)) return new Vector3(Num(token, "x", 0), Num(token, "y", 1), Num(token, "z", 2));
+            if (type == typeof(Vector2Int)) return new Vector2Int((int)Num(token, "x", 0), (int)Num(token, "y", 1));
             if (type == typeof(Color)) return new Color(Num(token, "r", 0), Num(token, "g", 1), Num(token, "b", 2), token.Type == JTokenType.Array && token.Count() < 4 ? 1f : (token["a"] != null || token.Type == JTokenType.Array ? Num(token, "a", 3) : 1f));
             if (type.IsEnum) return token.Type == JTokenType.String ? Enum.Parse(type, (string)token, true) : Enum.ToObject(type, (int)token);
             if (typeof(UnityEngine.Object).IsAssignableFrom(type))
@@ -232,6 +233,34 @@ namespace CasualtiesLink
             }
             if (type == typeof(object)) return token.Type == JTokenType.Integer ? (object)(int)token : token.ToObject<object>();
             return token.ToObject(type);
+        }
+
+        public static object Invoke(string target, string methodName, JArray arguments, string[] parameterTypes, bool nonPublic)
+        {
+            object root = ResolveTarget(target, out bool isStatic);
+            Type type = isStatic ? (Type)root : root.GetType();
+            BindingFlags flags = BindingFlags.Public | (isStatic ? BindingFlags.Static : BindingFlags.Instance) | (nonPublic ? BindingFlags.NonPublic : 0);
+            var candidates = type.GetMethods(flags | BindingFlags.FlattenHierarchy).Where(method => method.Name == methodName).ToList();
+            if (candidates.Count == 0) throw new Exception(type.Name + " has no " + (isStatic ? "static " : "") + "method " + methodName);
+            var failures = new List<string>();
+            foreach (MethodInfo method in candidates)
+            {
+                ParameterInfo[] parameters = method.GetParameters();
+                if (parameterTypes != null && (parameterTypes.Length != parameters.Length || !parameters.Select(p => p.ParameterType.Name).SequenceEqual(parameterTypes))) continue;
+                int required = parameters.Count(p => !p.IsOptional);
+                if (arguments.Count < required || arguments.Count > parameters.Length) continue;
+                try
+                {
+                    var values = new object[parameters.Length];
+                    for (int i = 0; i < parameters.Length; i++)
+                        values[i] = i < arguments.Count ? Convert(arguments[i], parameters[i].ParameterType) : parameters[i].DefaultValue;
+                    return Serialize(method.Invoke(isStatic ? null : root, values), 1);
+                }
+                catch (TargetInvocationException exception) { throw exception.InnerException ?? exception; }
+                catch (Exception exception) { failures.Add(exception.Message); }
+            }
+            string overloads = string.Join(" / ", candidates.Select(m => "(" + string.Join(",", m.GetParameters().Select(p => p.ParameterType.Name)) + ")"));
+            throw new Exception("no overload of " + methodName + " fits " + arguments.Count + " arguments; overloads: " + overloads + (failures.Count > 0 ? "; " + string.Join("; ", failures) : "") + "; pass 'types' to choose one");
         }
 
         private static float Num(JToken token, string name, int position)

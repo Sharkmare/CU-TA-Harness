@@ -37,6 +37,16 @@ namespace CasualtiesLink
                 Arg("target", "string", "Object selector", true), Arg("path", "string", "Dotted path with [index] steps; empty reads the target itself"),
                 Arg("depth", "int", "How many levels of object fields to expand", false, 1), Arg("nonpublic", "bool", "Allow non public members", false, false));
 
+            Add("invoke", "Calls a method by name (same target rules as get). Arguments convert like set values. Give 'types' (parameter type names, e.g. [\"Vector2Int\",\"UInt16\"]) to pick one overload.", args =>
+            {
+                JToken types = args["types"];
+                string[] typeNames = types == null || types.Type == JTokenType.Null ? null : types.Select(token => (string)token).ToArray();
+                return Reflect.Invoke(Str(args, "target", null, true), Str(args, "method", null, true), args["args"] as JArray ?? new JArray(), typeNames, Bool(args, "nonpublic", false));
+            }, false,
+                Arg("target", "string", "Object selector", true), Arg("method", "string", "Method name", true),
+                Arg("args", "any", "JSON array of arguments", false, null), Arg("types", "any", "JSON array of parameter type names to choose an overload", false, null),
+                Arg("nonpublic", "bool", "Allow non public methods", false, false));
+
             Add("set", "Writes a value by path (same target and path rules as get). Values convert to the field type: numbers, bools, strings, enums by name, Vector2/3 as {x,y,z}, object references as 'id:N'.", args =>
                 Reflect.Write(Str(args, "target", null, true), Str(args, "path", null, true), args["value"] ?? throw new Exception("argument 'value' is required"), Bool(args, "nonpublic", false)), false,
                 Arg("target", "string", "Object selector", true), Arg("path", "string", "Path to the field", true),
