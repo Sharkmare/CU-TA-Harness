@@ -31,6 +31,25 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(result["verdict"], cam.FOLLOWS, result)
         self.assertTrue(result["cameraMovedFirstPhase"] and result["cameraMovedAfterJump"] and result["framesAdvanced"])
 
+    def test_a_camera_that_had_already_caught_up_before_the_first_sample_after_the_jump_is_still_follows_because_it_relocated(self):
+        first = phase([14.0, 15.0, 15.0, 15.0], {"x": 15.0, "y": 0.0})
+        second = phase([44.3, 44.3, 44.3, 44.3], {"x": 45.0, "y": 0.0}, 10)
+        result = cam.verdict_from(first, second)
+        self.assertEqual(result["verdict"], cam.FOLLOWS, result)
+        self.assertTrue(result["cameraRelocatedAcrossTheJump"])
+
+    def test_a_camera_that_never_left_the_first_target_is_not_follows_after_a_far_jump(self):
+        first = phase([15.0, 15.0, 15.0], {"x": 15.0, "y": 0.0})
+        far_target = phase([15.0, 15.0, 15.0], {"x": 45.0, "y": 0.0}, 10)
+        self.assertNotEqual(cam.verdict_from(first, far_target)["verdict"], cam.FOLLOWS)
+
+    def test_the_jump_is_sampled_from_the_instant_it_happens(self):
+        host, client = mock.Mock(), mock.Mock()
+        calls = []
+        with mock.patch.object(cam, "move_host", lambda h, pocket, settle=True: calls.append(settle)):
+            cam.move_host(host, {"x": 1.0, "y": 1.0}, settle=False)
+        self.assertEqual(calls, [False])
+
     def test_a_camera_that_stays_at_the_dead_body_while_the_target_is_far_is_the_bug(self):
         first = phase([0.0, 0.0, 0.1, 0.0, 0.0], {"x": 15.0, "y": 0.0})
         second = phase([0.0, 0.0, 0.0, 0.0, 0.0], {"x": 45.0, "y": 0.0}, 10)

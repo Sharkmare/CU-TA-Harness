@@ -109,7 +109,10 @@ def verdict_from(before_jump, after_jump):
                             "lastTargetToDeadBody": end_c["targetToDeadBody"]},
               "cameraMovedFirstPhase": camera_moved(before_jump), "cameraMovedAfterJump": camera_moved(after_jump),
               "framesAdvanced": frames_advanced(before_jump) and frames_advanced(after_jump)}
-    follows = (end_b["cameraToTarget"] <= CLOSE_TO_TARGET and end_c["cameraToTarget"] <= CLOSE_AFTER_JUMP and end_c["cameraToTarget"] < start_c["cameraToTarget"])
+    relocated = distance(end_b["camera"], end_c["camera"]) is not None and distance(end_b["camera"], end_c["camera"]) > FAR_FROM_TARGET
+    detail["cameraRelocatedAcrossTheJump"] = relocated
+    follows = (end_b["cameraToTarget"] <= CLOSE_TO_TARGET and end_c["cameraToTarget"] <= CLOSE_AFTER_JUMP
+               and (end_c["cameraToTarget"] < start_c["cameraToTarget"] or relocated))
     bug = (end_b["cameraToDeadBody"] <= CLOSE_TO_TARGET and end_b["cameraToTarget"] > FAR_FROM_TARGET
            and end_c["cameraToDeadBody"] <= CLOSE_TO_TARGET and end_c["cameraToTarget"] > FAR_FROM_TARGET)
     if follows and bug:
@@ -131,9 +134,10 @@ def find_pocket(host, origin, columns):
         static.FAR_COLUMNS = saved
 
 
-def move_host(host, pocket):
+def move_host(host, pocket, settle=True):
     host.set("player", base.BODY_PATH, {"x": pocket["x"], "y": pocket["y"], "z": 0.0})
-    time.sleep(SETTLE_AFTER_MOVE_SECONDS)
+    if settle:
+        time.sleep(SETTLE_AFTER_MOVE_SECONDS)
 
 
 def is_dead(client):
@@ -217,7 +221,7 @@ def act(client, context):
         log["setupError"] = "no open pocket 40 to 55 tiles from the client body for the host"
         log["samplesFirst"] = first
         return
-    move_host(host, far)
+    move_host(host, far, settle=False)
     second = sample_phase(client, handles)
     log["samplesFirst"], log["samplesSecond"] = first, second
     log["result"] = verdict_from(first, second)
