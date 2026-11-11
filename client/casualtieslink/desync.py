@@ -6,6 +6,8 @@ import threading
 import time
 import zipfile
 
+from . import launchplan
+
 SAMPLE_OFFSETS_SECONDS = (0.0, 2.0, 10.0)
 FLAVOUR_BUILDS = ("stock-5.5.0", "stock-5.4.0", "fork")
 STAGE_BUILD = "upstream-fixes"
@@ -69,6 +71,8 @@ def class_suffix(build, dll_hash):
 
 
 class Scenario:
+    network_sensitive = False
+
     def __init__(self, name, description, prepare, act, read, changed, offsets=SAMPLE_OFFSETS_SECONDS, group="default"):
         self.offsets = offsets
         self.group = group
@@ -132,9 +136,13 @@ def judge(observation):
     return VERDICT_PERSISTED
 
 
-def describe(observation, build, dll_hash, game_version=None):
+def describe(observation, build, dll_hash, game_version=None, launch_id=None, repetition=1, network=None, proxy_seed=None):
     verdict = judge(observation)
     return {
+        "launchId": launch_id,
+        "repetition": repetition,
+        "network": network,
+        "proxySeed": proxy_seed,
         "gameVersion": game_version,
         "actionPerformedBy": "client",
         "build": build,
@@ -151,6 +159,7 @@ def describe(observation, build, dll_hash, game_version=None):
 def format_report(report):
     lines = [
         "desync %s [%s] sha256 %s" % (report["scenario"], report["build"], report["dllSha256"]),
+        "  launch %s, repetition %s, network %s" % (report.get("launchId"), report.get("repetition", 1), report.get("network")),
         "  %s" % report["description"],
         "  game version %s, action performed by the %s: %s" % (report.get("gameVersion"), report.get("actionPerformedBy", "client"), "yes" if report["actedOnClient"] else "SKIPPED (mutation)"),
         "  baseline  host=%s client=%s" % (report["baseline"]["host"], report["baseline"]["client"]),
@@ -174,6 +183,12 @@ def save_report(report, directory):
 
 
 
+NETS_ENVIRONMENT_VARIABLE = "CU_DESYNC_NETS"
+GROUP_ENVIRONMENT_VARIABLE = "CU_DESYNC_GROUP"
+SETTLE_AFTER_NETWORK_CHANGE_SECONDS = 1.0
+REPEAT_ENVIRONMENT_VARIABLE = "CU_DESYNC_REPEAT"
+LAUNCH_ENVIRONMENT_VARIABLE = "CU_LAUNCH_ID"
+SCENARIO_BUDGET_SECONDS = 120.0
 DELAY_ENVIRONMENT_VARIABLE = "CU_DESYNC_DELAY_MS"
 JITTER_ENVIRONMENT_VARIABLE = "CU_DESYNC_JITTER_MS"
 SERIES_INTERVAL_SECONDS = 0.25
@@ -194,11 +209,64 @@ def parse_delay(text):
     return value
 
 
+class Run:
+    def __init__(self, scenario, profile, repetition, name):
+        self.scenario = scenario
+        self.profile = profile
+        self.repetition = repetition
+        self.name = name
+
+
+def expand_runs(scenarios, profiles, repeat):
+    runs = []
+    for repetition in range(1, repeat + 1):
+        for scenario in scenarios:
+            chosen = profiles if scenario.network_sensitive else [launchplan.DIRECT]
+            for profile in chosen:
+                name = "test_" + scenario.name
+                if scenario.network_sensitive:
+                    name += "_" + profile.label()
+                name += repetition_suffix(repetition, repeat)
+                runs.append(Run(scenario, profile, repetition, name))
+    return runs
+
+
+def profiles_from_environment():
+    text = os.environ.get(NETS_ENVIRONMENT_VARIABLE)
+    if text:
+        return launchplan.parse_profiles(text.split(","))
+    delay, jitter = delay_from_environment()
+    if delay is not None:
+        return [launchplan.NetworkProfile(delay, jitter)]
+    return [launchplan.DIRECT]
+
+
+def group_from_environment():
+    return os.environ.get(GROUP_ENVIRONMENT_VARIABLE) or None
+
+
+def repeat_from_environment():
+    count = int(os.environ.get(REPEAT_ENVIRONMENT_VARIABLE) or 1)
+    if count < 1:
+        raise ValueError("repeat must be at least 1")
+    return count
+
+
+def launch_id_from_environment():
+    return os.environ.get(LAUNCH_ENVIRONMENT_VARIABLE) or None
+
+
+def repetition_suffix(repetition, repeat):
+    return "" if repeat <= 1 else "_r%d" % repetition
+
+
 def delay_from_environment():
     return parse_delay(os.environ.get(DELAY_ENVIRONMENT_VARIABLE)), float(os.environ.get(JITTER_ENVIRONMENT_VARIABLE) or 0.0)
 
 
 class SeriesScenario:
+    network_sensitive = True
+
     def __init__(self, name, description, prepare, hit, read, cadence_seconds, max_hits, group="default",
                  interval_seconds=SERIES_INTERVAL_SECONDS, tail_seconds=SERIES_TAIL_SECONDS):
         self.name = name
@@ -223,7 +291,7 @@ class SeriesObservation:
         self.acted = acted
 
 
-def observe_series(scenario, host, client, perform_action=True, clock=time.monotonic, sleep=time.sleep):
+def observe_series(scenario, host, client, perform_action=True, clock=time.monotonic, sleep=time.sleep, budget_seconds=SCENARIO_BUDGET_SECONDS):
     context = scenario.prepare(host, client)
     baseline = {"host": scenario.read(host, context), "client": scenario.read(client, context)}
     samples = []
@@ -242,6 +310,8 @@ def observe_series(scenario, host, client, perform_action=True, clock=time.monot
     try:
         if perform_action:
             for _ in range(scenario.max_hits):
+                if clock() - started > budget_seconds:
+                    break
                 moment = round(clock() - started, 3)
                 if scenario.hit(client, context) is not False:
                     hit_times.append(moment)
@@ -416,9 +486,13 @@ def swing_records(observation, delay_ms):
             "meanInterval": round(sum(intervals) / len(intervals), 3) if intervals else None}
 
 
-def describe_series(observation, build, dll_hash, game_version=None, delay_ms=None, jitter_ms=0.0, host_counts=None):
+def describe_series(observation, build, dll_hash, game_version=None, delay_ms=None, jitter_ms=0.0, host_counts=None, launch_id=None, repetition=1, network=None, proxy_seed=None):
     verdict, findings = judge_series(observation.samples)
     return {
+        "launchId": launch_id,
+        "repetition": repetition,
+        "network": network,
+        "proxySeed": proxy_seed,
         "block": {key: observation.context.get(key) for key in ("position", "blockId", "blockHealth", "cell")},
         "hostLog": host_counts,
         "swings": swing_records(observation, delay_ms),
@@ -441,9 +515,15 @@ def describe_series(observation, build, dll_hash, game_version=None, delay_ms=No
 
 
 def format_series_report(report):
-    delay = "no proxy" if report.get("delayMs") is None else "%g ms one way (+ jitter up to %g ms)" % (report["delayMs"], report.get("jitterMs") or 0.0)
+    delay = "no proxy"
+    if report.get("network"):
+        network = report["network"]
+        delay = "%g ms one way, jitter up to %g ms, loss %g, reorder %g, seed %s" % (network["delay_ms"], network["jitter_ms"], network["loss"], network["reorder"], report.get("proxySeed"))
+    elif report.get("delayMs") is not None:
+        delay = "%g ms one way (+ jitter up to %g ms)" % (report["delayMs"], report.get("jitterMs") or 0.0)
     lines = [
         "desync %s [%s] sha256 %s" % (report["scenario"], report["build"], report["dllSha256"]),
+        "  launch %s, repetition %s" % (report.get("launchId"), report.get("repetition", 1)),
         "  %s" % report["description"],
         "  game version %s, action performed by the %s, network: %s" % (report.get("gameVersion"), report.get("actionPerformedBy", "client"), delay),
         "  hits %d, first at %.2fs, last at %.2fs" % (len(report["hitTimes"]), report["hitTimes"][0] if report["hitTimes"] else 0.0, report["hitTimes"][-1] if report["hitTimes"] else 0.0),
@@ -476,9 +556,13 @@ def format_series_report(report):
 
 def save_series_report(report, directory):
     os.makedirs(directory, exist_ok=True)
-    delay = "none" if report.get("delayMs") is None else "%g" % report["delayMs"]
+    if report.get("network"):
+        network = report["network"]
+        label = "d%g-j%g" % (network["delay_ms"], network["jitter_ms"])
+    else:
+        label = "delay%s_jitter%g" % ("none" if report.get("delayMs") is None else "%g" % report["delayMs"], report.get("jitterMs") or 0.0)
     stamp = time.strftime("%H%M%S")
-    name = "%s__%s__delay%s_jitter%g__%s.json" % (report["scenario"], re.sub(r"[^A-Za-z0-9.\-]", "_", build_label(report["build"], report["dllSha256"])), delay, report.get("jitterMs") or 0.0, stamp)
+    name = "%s__%s__%s_r%s__%s.json" % (report["scenario"], re.sub(r"[^A-Za-z0-9.\-]", "_", build_label(report["build"], report["dllSha256"])), label, report.get("repetition", 1), stamp)
     path = os.path.join(directory, name)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, sort_keys=True)

@@ -13,7 +13,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, REPO_ROOT)
 
 import selection
-from casualtieslink import desync, Game, GameAlreadyRunning, GameProcess, mp_arguments
+from casualtieslink import desync, launchplan, Game, GameAlreadyRunning, GameProcess, mp_arguments
 from casualtieslink.lock import GameLock
 from casualtieslink.transport import default_port
 from tests import rig
@@ -22,6 +22,8 @@ CONFIG_PATH = os.path.join(HERE, "test_groups.json")
 STATE_PATH = os.path.join(HERE, selection.STATE_FILE_NAME)
 DEFAULT_MP_FLAGS = ["disable"]
 SLOW_UNIT_SECONDS = 5.0
+SCENARIO_BUDGET_SECONDS_PER_RUN = 60.0
+LAUNCH_STARTUP_SECONDS = 150.0
 
 
 def parse_args(argv):
@@ -38,6 +40,11 @@ def parse_args(argv):
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--mp", nargs="*", default=[], metavar="FLAG[=VALUE]", help="Together mod flags for the launched game (default: disable, because the mod blocks singleplayer)")
     parser.add_argument("--together", default=None, metavar="BUILD", help="Together build for the desync group: %s" % ", ".join(desync.KNOWN_BUILDS))
+    parser.add_argument("--builds", nargs="+", default=None, metavar="BUILD", help="desync group: run these Together builds, one game launch per build and startup group")
+    parser.add_argument("--net", nargs="+", default=None, metavar="DELAY:JITTER[:LOSS[:REORDER]]", help="desync group: network profiles in ms (direct = none), changed live inside a launch")
+    parser.add_argument("--repeat", type=int, default=1, help="desync group: run every scenario this many times inside one launch")
+    parser.add_argument("--launch-id", default=None, help="desync group: name of this launch in the reports")
+    parser.add_argument("--group", default=None, help="desync group: only the scenarios of this startup group")
     parser.add_argument("--delay-ms", default=None, metavar="MS", help="desync group: put a UDP delay proxy of this one way delay between client and host (0 keeps the proxy with no delay)")
     parser.add_argument("--jitter-ms", default="0", metavar="MS", help="desync group: extra random delay from 0 up to this many ms")
     parser.add_argument("--mutate", default=None, help="break a behaviour on purpose to prove a test can fail (corrupt-save, no-dune)")
@@ -125,6 +132,15 @@ def describe_selection(selected, config, offline):
 def main(argv=None):
     program_started = time.time()
     arguments = parse_args(argv)
+    os.environ[desync.REPEAT_ENVIRONMENT_VARIABLE] = str(arguments.repeat)
+    if arguments.launch_id:
+        os.environ[desync.LAUNCH_ENVIRONMENT_VARIABLE] = arguments.launch_id
+    if arguments.group:
+        os.environ[desync.GROUP_ENVIRONMENT_VARIABLE] = arguments.group
+    if arguments.net:
+        os.environ[desync.NETS_ENVIRONMENT_VARIABLE] = ",".join(arguments.net)
+    if arguments.builds:
+        return run_launch_plan(arguments)
     if arguments.delay_ms is not None:
         os.environ[desync.DELAY_ENVIRONMENT_VARIABLE] = str(desync.parse_delay(arguments.delay_ms))
         os.environ[desync.JITTER_ENVIRONMENT_VARIABLE] = str(desync.parse_delay(arguments.jitter_ms) or 0.0)
@@ -192,6 +208,33 @@ def main(argv=None):
     if arguments.budget_seconds is not None:
         print("time budget %.0fs: used %.0fs, %s" % (arguments.budget_seconds, elapsed, "OVER" if over_budget else "within"))
     return 1 if failed or over_budget else 0
+
+
+def run_launch_plan(arguments):
+    from tests.desync_scenarios import counts_by_group
+    builds = [desync.parse_build(build) for build in arguments.builds]
+    profiles = launchplan.parse_profiles(arguments.net)
+    counts = counts_by_group(arguments.match)
+    groups = [arguments.group] if arguments.group else sorted(counts)
+    launches = launchplan.plan_launches(builds, groups, profiles, arguments.repeat, arguments.match)
+    for line in launchplan.describe_launches(launches, counts):
+        print(line)
+    print("%d launches; one per scenario run would be %d" % (len(launches), launchplan.launches_without_grouping(launches, counts)))
+    if arguments.list or not arguments.pair:
+        return 0
+    failed = False
+    for launch in launches:
+        started = time.time()
+        runs = launchplan.runs_in_launch(launch, counts)
+        budget = SCENARIO_BUDGET_SECONDS_PER_RUN * runs + LAUNCH_STARTUP_SECONDS
+        command = [sys.executable, os.path.abspath(__file__), "--pair", "--only", "desync"] + launch.arguments() + ["--budget-seconds", str(budget)]
+        try:
+            code = subprocess.run(command, timeout=budget + LAUNCH_STARTUP_SECONDS).returncode
+        except subprocess.TimeoutExpired:
+            code = -1
+        failed = failed or code != 0
+        print("%s: exit %s in %.0fs" % (launch.identifier, code, time.time() - started), flush=True)
+    return 1 if failed else 0
 
 
 def flags_from(items):

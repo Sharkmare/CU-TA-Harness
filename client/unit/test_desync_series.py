@@ -3,8 +3,9 @@ import os
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
-from casualtieslink import desync
+from casualtieslink import desync, launchplan
 
 
 def sample(t, host, client):
@@ -118,7 +119,7 @@ class SeriesReportTests(unittest.TestCase):
         report = self.report()
         with tempfile.TemporaryDirectory() as directory:
             path = desync.save_series_report(report, directory)
-            self.assertRegex(os.path.basename(path), r"__upstream-fixes_cdcdcdcd__delay100_jitter20__\d{6}\.json$")
+            self.assertRegex(os.path.basename(path), r"__upstream-fixes_cdcdcdcd__delay100_jitter20_r1__\d{6}\.json$")
             with open(path, encoding="utf-8") as handle:
                 loaded = json.load(handle)
         self.assertEqual(loaded["delayMs"], 100.0)
@@ -234,6 +235,76 @@ class HeldClickTests(unittest.TestCase):
         self.assertIn("client swing intervals: shortest 0.200 s, mean 0.207 s; 3 of 3 could reach the host under the 0.124 s cooldown after jitter of up to 100 ms", hints)
         quiet = desync.verdict_hints(samples, hits, 100.0, None, findings, 50.0)
         self.assertIn("client swing intervals: shortest 0.200 s, mean 0.207 s; 0 of 3 could reach the host under the 0.124 s cooldown after jitter of up to 50 ms", quiet)
+
+
+class RunExpansionTests(unittest.TestCase):
+    def scenarios(self):
+        plain = desync.Scenario("block", "d", None, None, None, None)
+        series = desync.SeriesScenario("hold", "d", None, None, None, 0.0, 1)
+        return plain, series
+
+    def test_network_scenarios_run_once_per_profile_and_plain_ones_once(self):
+        profiles = launchplan.parse_profiles(["100:0", "100:60", "250:100"])
+        runs = desync.expand_runs(list(self.scenarios()), profiles, 1)
+        self.assertEqual([run.name for run in runs], ["test_block", "test_hold_d100-j0", "test_hold_d100-j60", "test_hold_d250-j100"])
+        self.assertTrue(runs[0].profile is launchplan.DIRECT)
+
+    def test_repetitions_repeat_the_whole_set_with_a_suffix(self):
+        profiles = launchplan.parse_profiles(["100:0"])
+        runs = desync.expand_runs(list(self.scenarios()), profiles, 2)
+        self.assertEqual([run.name for run in runs], ["test_block_r1", "test_hold_d100-j0_r1", "test_block_r2", "test_hold_d100-j0_r2"])
+        self.assertEqual([run.repetition for run in runs], [1, 1, 2, 2])
+
+    def test_the_names_are_unique_across_profiles_and_repetitions(self):
+        profiles = launchplan.parse_profiles(["100:0", "100:60", "250:100"])
+        names = [run.name for run in desync.expand_runs(list(self.scenarios()), profiles, 3)]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertEqual(len(names), 3 * (1 + 3))
+
+    def test_the_series_scenario_is_network_sensitive_and_the_plain_one_is_not(self):
+        plain, series = self.scenarios()
+        self.assertFalse(plain.network_sensitive)
+        self.assertTrue(series.network_sensitive)
+
+
+class EnvironmentTests(unittest.TestCase):
+    def test_profiles_come_from_the_nets_variable(self):
+        with mock.patch.dict(os.environ, {desync.NETS_ENVIRONMENT_VARIABLE: "100:0,250:100:0.1"}):
+            profiles = desync.profiles_from_environment()
+        self.assertEqual([p.key() for p in profiles], [(100.0, 0.0, 0.0, 0.0), (250.0, 100.0, 0.1, 0.0)])
+
+    def test_the_old_delay_variables_still_make_one_profile(self):
+        with mock.patch.dict(os.environ, {desync.DELAY_ENVIRONMENT_VARIABLE: "100", desync.JITTER_ENVIRONMENT_VARIABLE: "60"}, clear=False):
+            os.environ.pop(desync.NETS_ENVIRONMENT_VARIABLE, None)
+            profiles = desync.profiles_from_environment()
+        self.assertEqual([p.key() for p in profiles], [(100.0, 60.0, 0.0, 0.0)])
+
+    def test_nothing_set_means_the_direct_profile(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            for name in (desync.NETS_ENVIRONMENT_VARIABLE, desync.DELAY_ENVIRONMENT_VARIABLE):
+                os.environ.pop(name, None)
+            self.assertEqual([p.key() for p in desync.profiles_from_environment()], [launchplan.DIRECT.key()])
+
+    def test_repeat_defaults_to_one_and_refuses_zero(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(desync.REPEAT_ENVIRONMENT_VARIABLE, None)
+            self.assertEqual(desync.repeat_from_environment(), 1)
+        with mock.patch.dict(os.environ, {desync.REPEAT_ENVIRONMENT_VARIABLE: "0"}):
+            with self.assertRaises(ValueError):
+                desync.repeat_from_environment()
+
+    def test_the_series_report_names_launch_network_and_seed(self):
+        block = FakeBlock(hits_to_break=2)
+        scenario = desync.SeriesScenario("hold", "d", lambda host, client: {}, block.hit, block.read, cadence_seconds=0.01, max_hits=5, interval_seconds=0.01, tail_seconds=0.05)
+        observation = desync.observe_series(scenario, "host", "client")
+        report = desync.describe_series(observation, "fork", "ab" * 32, "1.0", 100.0, 60.0, None, "L2-fork-hand-mining", 3,
+                                        {"delay_ms": 100.0, "jitter_ms": 60.0, "loss": 0.0, "reorder": 0.0}, 4242)
+        text = desync.format_series_report(report)
+        self.assertIn("launch L2-fork-hand-mining, repetition 3", text)
+        self.assertIn("100 ms one way, jitter up to 60 ms, loss 0, reorder 0, seed 4242", text)
+        with tempfile.TemporaryDirectory() as directory:
+            path = desync.save_series_report(report, directory)
+        self.assertRegex(os.path.basename(path), r"__d100-j60_r3__\d{6}\.json$")
 
 
 class DelayParsingTests(unittest.TestCase):

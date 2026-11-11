@@ -38,6 +38,30 @@ class RunArgumentTests(unittest.TestCase):
             run_tests.main(["--list", "--only", "desync", "--delay-ms", "0"])
             self.assertEqual(desync.delay_from_environment()[0], 0.0)
 
+    def test_the_launch_plan_lists_one_launch_per_build_and_group_whatever_the_networks(self):
+        import io
+        from contextlib import redirect_stdout
+        buffer = io.StringIO()
+        with redirect_stdout(buffer), mock.patch.dict(os.environ, {}, clear=False):
+            code = run_tests.main(["--list", "--only", "desync", "--builds", "upstream-fixes", "stock-5.5.0", "--net", "100:0", "100:60", "250:100",
+                                   "--repeat", "3", "--match", "hold_mining"])
+        text = buffer.getvalue()
+        self.assertEqual(code, 0)
+        self.assertIn("launches (2):", text)
+        self.assertIn("L1-upstream-fixes-hand-mining", text)
+        self.assertIn("L2-stock-5.5.0-hand-mining", text)
+        self.assertIn("9 scenario runs", text)
+        self.assertIn("2 launches; one per scenario run would be 18", text)
+
+    def test_a_group_option_restricts_the_plan_to_that_startup_group(self):
+        import io
+        from contextlib import redirect_stdout
+        buffer = io.StringIO()
+        with redirect_stdout(buffer), mock.patch.dict(os.environ, {}, clear=False):
+            run_tests.main(["--list", "--only", "desync", "--builds", "fork", "--group", "default"])
+        self.assertIn("launches (1):", buffer.getvalue())
+        self.assertIn("L1-fork-default", buffer.getvalue())
+
     def test_an_unknown_build_is_refused_before_anything_starts(self):
         with self.assertRaises(ValueError):
             run_tests.main(["--list", "--only", "desync", "--together", "stock-1.0"])

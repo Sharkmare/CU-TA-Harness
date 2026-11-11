@@ -545,6 +545,24 @@ def try_ready(game):
         return False
 
 
+def counts_by_group(fragments):
+    counts = {}
+    for scenario in SCENARIOS + SERIES_SCENARIOS:
+        if fragments and not any(fragment in scenario.name for fragment in fragments):
+            continue
+        entry = counts.setdefault(scenario.group, {"plain": 0, "network": 0})
+        entry["network" if scenario.network_sensitive else "plain"] += 1
+    return counts
+
+
+def reset_between_scenarios(host, client):
+    try:
+        client.call("release_input")
+    except Exception:
+        pass
+    empty_the_hand(client)
+
+
 def ready_up(games, timeout=READY_TIMEOUT_SECONDS, step=1.0):
     pending = list(games)
     deadline = time.time() + timeout

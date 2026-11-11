@@ -317,7 +317,7 @@ class ScenarioGames:
         ensure_mp_enabled()
         self.prepared = True
 
-    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock", host_together=None, client_together=None, delay_ms=None, jitter_ms=0.0):
+    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock", host_together=None, client_together=None, delay_ms=None, jitter_ms=0.0, control_port=None):
         host_together = host_together or together
         client_together = client_together or together
         configure_instance(self.host_copy, host_plugins, together=host_together)
@@ -329,6 +329,8 @@ class ScenarioGames:
         client_address = SESSION_ADDRESS
         if delay_ms is not None:
             self.proxy = DelayProxy(PROXY_PORT, int(SESSION_ADDRESS.rpartition(":")[2]), delay_ms, jitter_ms).start()
+            if control_port is not None:
+                self.proxy.start_control(control_port)
             client_address = "%s:%d" % (SESSION_ADDRESS.rpartition(":")[0], PROXY_PORT)
         self.client = GameProcess(CLIENT_PORT, client_arguments(client_extra, client_address), directory=self.client_copy, manage_save=False,
                                   window_args=["-screen-fullscreen", "0", "-screen-width", "640", "-screen-height", "360"])
@@ -343,6 +345,11 @@ class ScenarioGames:
             self.stop()
             raise
         return self.host.game, self.client.game
+
+    def apply_network(self, profile):
+        if self.proxy is None:
+            raise RuntimeError("these games were started without the delay proxy")
+        self.proxy.set(**profile.as_dict())
 
     def stop(self):
         if self.proxy is not None:

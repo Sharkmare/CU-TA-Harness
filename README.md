@@ -190,22 +190,33 @@ Not written: S4 (a physics corpse, no verified way to make one dynamic), S8, S10
 
 The engine is `casualtieslink/desync.py`. Each scenario ends in one verdict: `persisted` (both agree and the change is there from 0 s), `reverted-by-host` (the client had the change and it was overwritten with the old value), `diverged` (the games disagree), `not-there-from-the-start` or `never-changed`. The test passes only on `persisted`. The report prints the baseline and the host and client value at each time, marks rows where the games disagree, names the build and the SHA-256 of its `CasualtiesMP.dll`, and is saved as JSON in `.state/desync_reports/<scenario>__<build>@<hash8>.json`.
 
-The same scenarios run against one Together build per run, chosen with `--together`:
+Scenarios that share a Together build and startup flags run inside one launch of the host and the client, one after another. Each scenario picks its own target again and starts by emptying the client's hand and releasing input, so the verdicts are independent. A scenario that fails in its setup fails alone; the launch goes on. Only a different build, flavour or startup flag needs another launch. The startup groups are `default`, `mixed-characters` (a Dune client) and `hand-mining` (both games with `--mp-verbose`).
+
+Builds, chosen with `--together` or listed with `--builds`:
 
 | Build | What is installed |
 |---|---|
 | `stock-5.5.0`, `stock-5.4.0`, `fork` | the flavour package (`CU_FLAVOUR_ZIP`), started with `--mp-flavour` |
 | `upstream-fixes` | `plugins/Together` from `casualties-together-upstream/build/stage` (`CU_UPSTREAM_STAGE`), without the updater |
 
-The test class name carries the build and the first eight hex digits of the DLL hash (`Desync_stock_5_5_0_9bb980b8`), and a test checks that both games run the DLL with that hash.
+The test class name carries the build and the first eight hex digits of the DLL hash (`Desync_stock_5_5_0_9bb980b8_default`), and a test checks that both games run the DLL with that hash. Every report names its launch, repetition, game version, network profile and proxy seed.
+
+The client connects to the host through a UDP proxy (`casualtieslink/udpproxy.py`, client port 7791, host 7790). Its network profile changes while the games run, without dropping the connection: `delay_ms`, `jitter_ms`, `loss` and `reorder` (the share of packets that get 30 ms extra, so they can arrive late). Jitter, loss and reorder draw from a generator seeded per launch, and the seed is in the report. Packets keep their order in each direction while jitter and reorder are 0 and the delay does not change; jitter, reorder and lowering the delay mid stream can let a later packet overtake an earlier one. `proxy.set(delay_ms=100, jitter_ms=60)` is the Python interface. A loopback only HTTP control (`GET /get`, `POST /set` with a JSON object) is off unless the launcher starts it with `proxy.start_control(port)`; it refuses any peer that is not loopback and any other `Host` header.
+
+A scenario that depends on the network (the series scenarios) runs once per profile of `--net DELAY:JITTER[:LOSS[:REORDER]]`; the other scenarios run once. The runner applies the profile before each scenario and restores a direct link after it. `--repeat N` runs every scenario N times inside the same launch.
 
 ```bash
+python run_tests.py --pair --only desync --builds upstream-fixes stock-5.5.0 --net 100:0 100:60 250:100 --repeat 3 --match hold_mining
+python run_tests.py --only desync --builds fork stock-5.5.0 --net 100:0 --list
 python run_tests.py --pair --only desync --together stock-5.5.0 --budget-seconds 600
-python run_tests.py --pair --only desync --together fork --match block_removal
 python run_tests.py --pair --only desync --together stock-5.5.0 --mutate skip-client-action
 ```
 
-`--mutate skip-client-action` leaves out the client's action, so every scenario reports `never-changed` and fails. The offline tests (`unit/test_desync.py`, `unit/test_desync_scenarios.py`) cover the verdicts, the report text, the file names, the build and hash handling, and the scenario helpers against the fake game server. The game-side reads (for example that a held item has a transform parent and a ground item has none) are untested until the scenarios have run once on a game.
+`--builds` plans one launch per build and startup group and prints the launches, their scenario runs and how many launches one launch per run would have needed; with `--pair` it runs them, each launch as its own process with a time budget of 60 s per scenario run plus the startup. `--list` stops after the plan. `--together` runs a single launch. A series scenario also has its own 120 s budget for the hits. `--mutate skip-client-action` leaves out the client's action, so every scenario reports `never-changed` and fails.
+
+The hand mining scenarios (`hand_mining_cracks`, one click every 0.75 s, and `hold_mining_cracks`, `Body.UseItemInHand` every 20 ms so the game's own attack cooldown gates each swing) record the crack counter and the tile id on both games every 0.25 s from the first swing until 10 s after the break. Verdicts: `persisted`, `crack-reset` (the counter dropped while the block was still there), `reappeared-after-break` (the block was back on a machine after it had been gone) and `never-broke`. The report also gives the block id and health, the swings the client sent, the swings the host took (read from the host's crack steps), the host log counts for `hit server cooldown`, `range`, `unresolved` and `drop`, the host copy of the client body against its real position at each swing, and hints that name the divergence pattern.
+
+The offline tests (`unit/test_desync.py`, `unit/test_desync_series.py`, `unit/test_desync_scenarios.py`, `unit/test_launchplan.py`, `unit/test_udpproxy.py`, `unit/test_run_arguments.py`) cover the verdicts, the report text, the file names, the build and hash handling, the launch plan, the run expansion, the proxy and its control, and the scenario helpers against the fake game server. The game-side reads are untested until the scenarios have run on a game.
 
 ### Checking that the tests can fail
 

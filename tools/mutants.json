@@ -187,5 +187,47 @@
     "old": "def stage_dll_hash(stage_directory):\n    path = os.path.join(stage_directory, \"plugins\", \"Together\", \"CasualtiesMP.dll\")",
     "new": "def stage_dll_hash(stage_directory):\n    path = os.path.join(stage_directory, \"plugins\", \"CasualtiesMP.dll\")",
     "label": "desync hashes the wrong stage file"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/launchplan.py",
+    "old": "            if (build, group) in seen:",
+    "new": "            if False:",
+    "label": "launch plan keeps duplicate build and group"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/launchplan.py",
+    "old": "    return (steady[\"plain\"] + steady[\"network\"] * len(launch.profiles)) * launch.repetitions",
+    "new": "    return (steady[\"plain\"] + steady[\"network\"]) * launch.repetitions",
+    "label": "run count ignores the network profiles"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/desync.py",
+    "old": "            chosen = profiles if scenario.network_sensitive else [launchplan.DIRECT]",
+    "new": "            chosen = profiles",
+    "label": "plain scenarios run once per network profile"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/udpproxy.py",
+    "old": "            self.delay_ms, self.jitter_ms, self.loss, self.reorder = new",
+    "new": "            self.jitter_ms, self.loss, self.reorder = new[1:]",
+    "label": "proxy set ignores a new delay"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/udpproxy.py",
+    "old": "    return address in (LOOPBACK, \"::1\", \"::ffff:127.0.0.1\")",
+    "new": "    return True",
+    "label": "control accepts any peer"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/udpproxy.py",
+    "old": "    return host in ALLOWED_CONTROL_HOSTS and (not given_port or given_port == str(port))",
+    "new": "    return True",
+    "label": "control accepts any Host header"
   }
 ]
