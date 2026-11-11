@@ -6,7 +6,7 @@ from casualtieslink import desync
 from casualtieslink.instances import ScenarioGames, flavour_zip, stage_directory
 
 from . import rig
-from .desync_scenarios import SCENARIOS
+from .desync_scenarios import SCENARIOS, ready_up
 from .test_pair import PAIR_ENABLED, SKIP_REASON, wait_for_bodies
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
@@ -52,14 +52,24 @@ class DesyncMixin:
             raise unittest.SkipTest(SKIP_REASON)
         if EXPECTED_HASH == desync.UNKNOWN_HASH:
             raise unittest.SkipTest("no DLL found for build %s (set CU_FLAVOUR_ZIP or CU_UPSTREAM_STAGE)" % BUILD)
-        cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD))
-        cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
-        cls.client.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
-        wait_for_bodies(cls.host, 2)
-        wait_for_bodies(cls.client, 2)
-        cls.host.call("close_console")
-        cls.client.call("close_console")
-        time.sleep(SETTLE_SECONDS)
+        try:
+            cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD))
+            if not ready_up([cls.host, cls.client]):
+                raise AssertionError("the lobby ready gate did not accept both players")
+            cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
+            cls.client.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
+            wait_for_bodies(cls.host, 2)
+            wait_for_bodies(cls.client, 2)
+            cls.host.call("close_console")
+            cls.client.call("close_console")
+            time.sleep(SETTLE_SECONDS)
+        except BaseException:
+            for which in ("host", "client"):
+                print("\n%s log tail:" % which)
+                for line in GAMES.log_text(which).splitlines()[-40:]:
+                    print("  " + line[:200])
+            GAMES.stop()
+            raise
 
     @classmethod
     def tearDownClass(cls):

@@ -214,3 +214,27 @@ SCENARIOS = [
     Scenario("container_unload_by_client", "the client takes an item out of a container; the container's item count falls on both",
              unload_prepare, unload_act, container_children, fewer),
 ]
+
+
+READY_TYPE = "static:Together.CharacterSelectWait"
+READY_TIMEOUT_SECONDS = 90.0
+
+
+def try_ready(game):
+    try:
+        game.call("invoke", target=READY_TYPE, method="SetLocalReady", args=[True])
+        return bool(game.get(READY_TYPE, "LocalConfirmed", depth=0))
+    except Exception as exception:
+        if "no type named" in str(exception):
+            return None
+        return False
+
+
+def ready_up(games, timeout=READY_TIMEOUT_SECONDS, step=1.0):
+    pending = list(games)
+    deadline = time.time() + timeout
+    while pending and time.time() < deadline:
+        pending = [game for game in pending if try_ready(game) is False]
+        if pending:
+            time.sleep(step)
+    return not pending

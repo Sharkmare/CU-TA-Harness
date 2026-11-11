@@ -118,6 +118,32 @@ class ItemHelperTests(unittest.TestCase):
         self.assertFalse(scenarios.more(1, None))
 
 
+class ReadyUpTests(unittest.TestCase):
+    def test_both_games_are_readied_through_the_lobby_gate(self):
+        states = {"ready": False}
+
+        def invoke(arguments):
+            self.assertEqual((arguments["target"], arguments["method"], arguments["args"]), (scenarios.READY_TYPE, "SetLocalReady", [True]))
+            states["ready"] = True
+
+        def get(arguments):
+            return states["ready"]
+
+        with FakeLink({"invoke": invoke, "get": get}) as link:
+            self.assertTrue(scenarios.ready_up([Game(link.port)], timeout=2.0, step=0.05))
+
+    def test_a_build_without_the_gate_needs_no_ready_up(self):
+        def invoke(arguments):
+            raise FakeFailure("no type named 'Together.CharacterSelectWait'")
+
+        with FakeLink({"invoke": invoke}) as link:
+            self.assertTrue(scenarios.ready_up([Game(link.port)], timeout=2.0, step=0.05))
+
+    def test_a_gate_that_never_confirms_times_out(self):
+        with FakeLink({"invoke": lambda arguments: None, "get": lambda arguments: False}) as link:
+            self.assertFalse(scenarios.ready_up([Game(link.port)], timeout=0.3, step=0.05))
+
+
 class ScenarioListTests(unittest.TestCase):
     def test_every_scenario_is_complete_and_uniquely_named(self):
         names = [scenario.name for scenario in scenarios.SCENARIOS]
