@@ -186,6 +186,17 @@ class ConfigureInstanceTests(InstanceFixture):
         self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "diag two")
         self.assertIn("upstream-diag2", desync.DIAG_BUILDS)
 
+    def test_the_third_diag_stage_has_its_own_folder_and_build_name(self):
+        from casualtieslink import desync
+        stage = os.path.join(self.directory.name, "diag3")
+        os.makedirs(os.path.join(stage, "plugins", "Together"))
+        with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
+            handle.write("diag three")
+        with mock.patch.dict(os.environ, {instances.DIAG_STAGE3_ENVIRONMENT_VARIABLE: stage}):
+            instances.configure_instance(self.copy, [], together=desync.together_choice("upstream-diag3"))
+        self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "diag three")
+        self.assertIn("upstream-diag3", desync.DIAG_BUILDS)
+
     def test_the_diag_choice_follows_the_build_name(self):
         from casualtieslink import desync
         self.assertEqual(desync.together_choice("upstream-diag"), "diag-stage")

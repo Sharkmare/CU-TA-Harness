@@ -13,7 +13,8 @@ HOST_AFTER = "HOST_AFTER"
 COMPARED_FIELDS = ("cd", "cons", "overEnc", "stim", "stamina", "charType", "STR", "RES", "INT", "armPow", "bonusStr", "claw")
 DIFFERENCE_FIELDS = ("cons", "overEnc", "stim", "charType", "STR", "RES", "INT", "armPow", "bonusStr", "claw")
 GEOMETRY_FIELDS = ("pos", "limb1", "look")
-PARSED_FIELDS = ("sentLimb1", "sentLook", "hostLimb1Before", "hostLookBefore", "hitPos")
+PARSED_FIELDS = ("sentLimb1", "sentLook", "hostLimb1Before", "hostLookBefore", "hitPos", "hostIsRight", "hostStanding", "hostRootX", "wouldFlip")
+AFTER_FIELDS = ("limb1After", "isRightAfter")
 APPLIED_REASON = "applied"
 
 
@@ -94,6 +95,7 @@ def swing_table(client_entries, host_entries):
                                   "attackpower": fields.get("attackpower"), "blockId": fields.get("blockId")}
             if record["after"] is not None:
                 row["hostCooldownAfter"] = record["after"]["fields"].get("cd")
+                row["hostAfter"] = {name: record["after"]["fields"].get(name) for name in AFTER_FIELDS}
                 delta = record["after"]["fields"].get("blockDamageSumDelta")
                 if delta is not None:
                     row["hostBlockDamageDelta"] = delta
@@ -136,10 +138,19 @@ def damage_check(rows):
     return None
 
 
-def summarise_run(client_log, host_log, hit_times=None):
+def attach_client_side(rows, swing_log):
+    if not swing_log or len(swing_log) != len(rows):
+        return
+    for row, entry in zip(rows, swing_log):
+        row["clientIsRight"] = entry.get("isRight")
+        row["clientAim"] = entry.get("aim")
+
+
+def summarise_run(client_log, host_log, hit_times=None, swing_log=None):
     client_entries = parse_lines(client_log)
     host_entries = parse_lines(host_log)
     rows = swing_table(client_entries, host_entries)
+    attach_client_side(rows, swing_log)
     outcomes = {}
     for row in rows:
         outcomes[row["outcome"]] = outcomes.get(row["outcome"], 0) + 1
@@ -172,6 +183,13 @@ def text_lines(summary):
             (", host cooldown copy=%s" % row["refusedAtHostCooldown"]) if "refusedAtHostCooldown" in row else ""))
     if summary["hostRaycastMisses"]:
         lines.append("diagblock: received swings that changed no block damage on the host (blockDamageSumDelta 0): %s" % [item["index"] for item in summary["hostRaycastMisses"]])
+    for row in summary["rows"]:
+        if row.get("hostRaycastMiss"):
+            aim = row.get("hostAim") or {}
+            after = row.get("hostAfter") or {}
+            lines.append("diagblock lost swing %d seq %s: wouldFlip=%s hostIsRight=%s clientIsRight=%s hostStanding=%s hostRootX=%s, sentLimb1=%s limb1After=%s, isRightAfter=%s" % (
+                row["index"], row["seq"], aim.get("wouldFlip"), aim.get("hostIsRight"), row.get("clientIsRight"), aim.get("hostStanding"), aim.get("hostRootX"),
+                aim.get("sentLimb1"), after.get("limb1After"), after.get("isRightAfter")))
     check = summary.get("firstDamageCheck")
     if check:
         lines.append("diagblock first decided swing %(swing)d: STR client %(clientSTR)s host %(hostSTR)s (equal %(strEqual)s), charType client %(clientCharType)s host %(hostCharType)s, "

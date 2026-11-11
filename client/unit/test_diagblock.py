@@ -200,5 +200,34 @@ class RaycastMissTests(unittest.TestCase):
         self.assertEqual(diagblock.summarise_run(client, host)["hostRaycastMisses"], [])
 
 
+PARSED3 = ("[Info   :  Together] [diagblock] t=%s HOST_PARSED seq=%d didhit=False hitobj=nothing isBlock=False isNothing=True hitPos=(0,0) sentLimb1=(1,2) sentLook=(3,4) unarmed=True "
+           "hostLimb1Before=(1.5,2) hostLookBefore=(9,9) hostIsRight=False hostStanding=True hostRootX=0.25 wouldFlip=True")
+AFTER3 = "[Info   :  Together] [diagblock] t=%s HOST_AFTER seq=%d copy cd=0.13 blockDamageSumDelta=0 limb1After=(0.5,2) isRightAfter=True"
+
+
+class FlipFieldTests(unittest.TestCase):
+    def rows(self, swing_log=None):
+        client = client_line("10.0", 1)
+        host = "\n".join([recv("10.1", 1), PARSED3 % ("10.1", 1), decided("10.1", 1, "applied"), AFTER3 % ("10.1", 1)])
+        return client, host, diagblock.swing_table(diagblock.parse_lines(client), diagblock.parse_lines(host))
+
+    def test_the_flip_fields_of_the_parse_and_the_after_line_are_kept(self):
+        _, _, rows = self.rows()
+        self.assertEqual(rows[0]["hostAim"]["wouldFlip"], "True")
+        self.assertEqual((rows[0]["hostAim"]["hostIsRight"], rows[0]["hostAim"]["hostRootX"]), ("False", "0.25"))
+        self.assertEqual((rows[0]["hostAfter"]["limb1After"], rows[0]["hostAfter"]["isRightAfter"]), ("(0.5,2)", "True"))
+
+    def test_a_lost_swing_line_names_flip_side_and_limb_data_with_the_client_side(self):
+        client, host, _ = self.rows()
+        summary = diagblock.summarise_run(client, host, [1.0], [{"isRight": True, "aim": {"x": 1.0, "y": 2.0}}])
+        text = "\n".join(summary["textLines"])
+        self.assertIn("lost swing 1 seq 1: wouldFlip=True hostIsRight=False clientIsRight=True hostStanding=True hostRootX=0.25, sentLimb1=(1,2) limb1After=(0.5,2), isRightAfter=True", text)
+
+    def test_a_swing_log_of_another_length_is_ignored_rather_than_misjoined(self):
+        client, host, _ = self.rows()
+        summary = diagblock.summarise_run(client, host, [1.0], [{"isRight": True}, {"isRight": False}])
+        self.assertNotIn("clientIsRight", summary["rows"][0])
+
+
 if __name__ == "__main__":
     unittest.main()

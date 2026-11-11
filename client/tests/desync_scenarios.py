@@ -527,6 +527,15 @@ MIXED_HAND_MINING_GROUP = "mixed-hand-mining"
 
 FRESH_BLOCK_ID = 8
 FRESH_BLOCK_COLUMNS = (2, -2, 3, -3)
+FRESH_BLOCK_LAYOUTS = {
+    "side": [(2, 0), (-2, 0), (3, 0), (-3, 0)],
+    "above": [(0, 3), (0, 4)],
+    "below": [(0, -2), (0, -3)],
+    "adjacent": [(1, 0), (-1, 0)],
+}
+WALK_KEYS = ("A", "D")
+WALK_TAP_FRAMES = 6
+WALK_PERIOD_SECONDS = 0.9
 FRESH_BLOCK_VERIFY_SECONDS = 6.0
 FRESH_BLOCK_HEALTH_RANGE = (60.0, 150.0)
 AIM_CIRCLE_RADIUS = 0.4
@@ -565,12 +574,12 @@ def wait_for_block_on_both(host, client, centre, expected, timeout=FRESH_BLOCK_V
         expected, centre["x"], centre["y"], timeout, block_value(host, centre), block_value(client, centre)))
 
 
-def place_fresh_block(host, client):
+def place_fresh_block(host, client, layout="side"):
     base = block_cell(client, player_position(client))
     low, high = FRESH_BLOCK_HEALTH_RANGE
     seen = []
-    for column in FRESH_BLOCK_COLUMNS:
-        cell = {"x": base["x"] + column, "y": base["y"]}
+    for column, rise in FRESH_BLOCK_LAYOUTS[layout]:
+        cell = {"x": base["x"] + column, "y": base["y"] + rise}
         centre = world_centre_of_cell(client, cell)
         existing = block_value(host, centre)
         if existing == 0:
@@ -580,17 +589,27 @@ def place_fresh_block(host, client):
             if not low <= health <= high:
                 raise AssertionError("block %d has health %s, outside %s" % (FRESH_BLOCK_ID, health, FRESH_BLOCK_HEALTH_RANGE))
             return cell, centre, FRESH_BLOCK_ID, health, True
-        seen.append((column, existing))
-    raise AssertionError("no free cell for a fresh block next to the client; occupied (column, block) %s" % seen)
+        seen.append((column, rise, existing))
+    raise AssertionError("no free cell for a %s block next to the client; occupied (column, rise, block) %s" % (layout, seen))
 
 
-def fresh_block_prepare_with(pattern):
+def fresh_block_prepare_with(pattern, layout="side", walk=False):
     def prepare(host, client):
         empty_the_hand(client)
-        cell, centre, block, health, placed = place_fresh_block(host, client)
-        return {"position": centre, "blockId": block, "blockHealth": health, "cell": cell, "placedByHost": placed, "aimPattern": pattern,
-                "hostGame": host, "hostBodyHandle": body_handle_by_name(host, CLIENT_BODY_NAME), "swingLog": [], "firstCall": None}
+        cell, centre, block, health, placed = place_fresh_block(host, client, layout)
+        return {"position": centre, "blockId": block, "blockHealth": health, "cell": cell, "placedByHost": placed, "aimPattern": pattern, "layout": layout, "walk": walk,
+                "hostGame": host, "hostBodyHandle": body_handle_by_name(host, CLIENT_BODY_NAME), "swingLog": [], "firstCall": None, "lastWalk": 0.0, "walkIndex": 0}
     return prepare
+
+
+def walk_a_little(client, context):
+    now = time.time()
+    if now - context["lastWalk"] < WALK_PERIOD_SECONDS:
+        return
+    context["lastWalk"] = now
+    key = WALK_KEYS[context["walkIndex"] % len(WALK_KEYS)]
+    context["walkIndex"] += 1
+    client.call("input", key=key, mode="tap", frames=WALK_TAP_FRAMES)
 
 
 def remove_fresh_block(host, client, context):
@@ -603,7 +622,10 @@ def aimed_hold_hit(client, context):
     if context["firstCall"] is None:
         context["firstCall"] = time.time()
     target = aim_point(context["aimPattern"], context["position"], time.time() - context["firstCall"])
+    if context.get("walk"):
+        walk_a_little(client, context)
     before = float(client.get("player", "attackCooldown", depth=0))
+    is_right = client.get("player", "isRight", depth=0)
     real = player_position(client)
     copy = context["hostGame"].get(context["hostBodyHandle"], BODY_PATH, depth=0)
     client.call("invoke", target="player", method="UseItemInHand",
@@ -612,7 +634,7 @@ def aimed_hold_hit(client, context):
     if after <= before + COOLDOWN_RISE_EPSILON:
         return False
     copy = {"x": float(copy["x"]), "y": float(copy["y"])}
-    context["swingLog"].append({"clientPosition": real, "hostCopyPosition": copy, "gap": round(distance(real, copy), 3), "aim": target})
+    context["swingLog"].append({"clientPosition": real, "hostCopyPosition": copy, "gap": round(distance(real, copy), 3), "aim": target, "isRight": is_right})
     return True
 
 
@@ -628,6 +650,14 @@ def tile_read(game, context):
 
 
 SERIES_SCENARIOS = [
+    SeriesScenario("aim_above_mining_cracks", "held-click bare hand mining of a block straight above the client with the aim circling it; neighbours are read on both games",
+                   fresh_block_prepare_with("circle", "above"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
+    SeriesScenario("aim_below_mining_cracks", "the same for a block below the client",
+                   fresh_block_prepare_with("circle", "below"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
+    SeriesScenario("aim_cross_mining_cracks", "the same for a block one column from the client with the aim drifting across the character's x",
+                   fresh_block_prepare_with("drift", "adjacent"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
+    SeriesScenario("aim_walk_mining_cracks", "the aim drifts and the client character takes short steps left and right (keys A and D, unverified) while mining a side block",
+                   fresh_block_prepare_with("drift", "side", walk=True), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
     SeriesScenario("aim_circle_mining_cracks", "held-click bare hand mining of a block the host placed, the client's aim circles the block; the crack counters of the block and its eight neighbours are read on both games",
                    fresh_block_prepare_with("circle"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
     SeriesScenario("dune_client_aim_circle_mining", "the same moving-aim mining with a Dune client and an Experiment host",

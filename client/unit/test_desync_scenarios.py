@@ -402,6 +402,8 @@ class AimedHoldTests(unittest.TestCase):
         def get(arguments):
             if arguments["path"] == "attackCooldown":
                 return state["cooldown"]
+            if arguments["path"] == "isRight":
+                return True
             if arguments["path"] == scenarios.BODY_PATH:
                 return {"x": 1.0, "y": 2.0}
             raise FakeFailure("unexpected " + str(arguments))
@@ -426,6 +428,52 @@ class AimedHoldTests(unittest.TestCase):
         self.assertEqual(context["swingLog"][0]["gap"], 0.1)
         self.assertEqual(len(state["sets"]), 2)
         self.assertNotEqual(state["sets"][0], {"x": 5.0, "y": 7.0, "z": 0.0})
+
+
+class LayoutAndWalkTests(unittest.TestCase):
+    def games(self, blocks):
+        client_world = FakeWorld({})
+        host_world = FakeWorld(blocks, replicate_to=[client_world])
+        return host_world, client_world
+
+    def place(self, layout, blocks=None):
+        host_world, client_world = self.games(blocks or {})
+        with FakeLink(host_world.handlers()) as host_link, FakeLink(client_world.handlers()) as client_link:
+            cell = scenarios.place_fresh_block(Game(host_link.port), Game(client_link.port), layout)[0]
+        return cell
+
+    def test_the_layouts_put_the_block_above_below_beside_and_next_to_the_client(self):
+        self.assertEqual(self.place("above"), {"x": 110, "y": 73})
+        self.assertEqual(self.place("below"), {"x": 110, "y": 68})
+        self.assertEqual(self.place("adjacent"), {"x": 111, "y": 70})
+        self.assertEqual(self.place("side"), {"x": 112, "y": 70})
+
+    def test_an_occupied_below_cell_falls_back_to_the_next_one(self):
+        self.assertEqual(self.place("below", {(110, 68): 6}), {"x": 110, "y": 67})
+
+    def test_every_layout_has_cells_and_none_is_the_players_own_cell(self):
+        for layout, cells in scenarios.FRESH_BLOCK_LAYOUTS.items():
+            self.assertTrue(cells, layout)
+            self.assertNotIn((0, 0), cells, layout)
+
+    def test_walking_taps_alternate_keys_and_respect_the_period(self):
+        taps = []
+
+        def record(arguments):
+            taps.append((arguments["key"], arguments["frames"]))
+
+        with FakeLink({"input": record}) as link:
+            client = Game(link.port)
+            context = {"lastWalk": 0.0, "walkIndex": 0}
+            scenarios.walk_a_little(client, context)
+            scenarios.walk_a_little(client, context)
+            context["lastWalk"] -= scenarios.WALK_PERIOD_SECONDS
+            scenarios.walk_a_little(client, context)
+        self.assertEqual(taps, [("A", scenarios.WALK_TAP_FRAMES), ("D", scenarios.WALK_TAP_FRAMES)])
+
+    def test_the_new_aim_scenarios_are_selectable_one_at_a_time(self):
+        for fragment in ("aim_above_mining_cracks", "aim_below_mining_cracks", "aim_cross_mining_cracks", "aim_walk_mining_cracks", "aim_circle_mining_cracks"):
+            self.assertEqual(scenarios.matching_scenario_names([fragment]), [fragment], fragment)
 
 
 class ScenarioListTests(unittest.TestCase):
