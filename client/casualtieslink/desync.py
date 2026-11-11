@@ -12,8 +12,15 @@ SAMPLE_OFFSETS_SECONDS = (0.0, 2.0, 10.0)
 FLAVOUR_BUILDS = ("stock-5.5.0", "stock-5.4.0", "fork")
 STAGE_BUILD = "upstream-fixes"
 DIAG_BUILD = "upstream-diag"
-STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage"}
-KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD)
+DIAG2_BUILD = "upstream-diag2"
+STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage", DIAG2_BUILD: "diag-stage2"}
+KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD)
+DIAG_BUILDS = (DIAG_BUILD, DIAG2_BUILD)
+TRANSPILER_MARKER = "TRANSPILER"
+
+
+def transpiler_lines(log_text):
+    return [line.strip() for line in log_text.splitlines() if TRANSPILER_MARKER in line]
 DEFAULT_BUILD = "stock-5.5.0"
 BUILD_ENVIRONMENT_VARIABLE = "CU_DESYNC_TOGETHER"
 SKIP_ACTION_MUTATION = "skip-client-action"
@@ -585,6 +592,9 @@ def format_series_report(report):
         other_host = sum(count for cell, count in hits["host"].items() if cell != TARGET_CELL_KEY)
         other_client = sum(count for cell, count in hits["client"].items() if cell != TARGET_CELL_KEY)
         lines.append("  increases on tiles other than the target: client %d, host %d" % (other_client, other_host))
+    if report.get("transpilerLines"):
+        for which in ("host", "client"):
+            lines.append("  %s Body.Attack transpiler lines: %s" % (which, report["transpilerLines"][which] or "none"))
     if report.get("cleanupError"):
         lines.append("  cleanup error: %s" % report["cleanupError"])
     if report.get("crackSteps"):

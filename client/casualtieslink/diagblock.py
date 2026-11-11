@@ -94,6 +94,10 @@ def swing_table(client_entries, host_entries):
                                   "attackpower": fields.get("attackpower"), "blockId": fields.get("blockId")}
             if record["after"] is not None:
                 row["hostCooldownAfter"] = record["after"]["fields"].get("cd")
+                delta = record["after"]["fields"].get("blockDamageSumDelta")
+                if delta is not None:
+                    row["hostBlockDamageDelta"] = delta
+                    row["hostRaycastMiss"] = record["outcome"] != "refused-cooldown" and float(delta) == 0.0
             if record["refuse"] is not None:
                 row["refusedAtHostCooldown"] = record["refuse"]["fields"].get("copy")
         rows.append(row)
@@ -148,6 +152,7 @@ def summarise_run(client_log, host_log, hit_times=None):
         "lost": [{"index": row["index"], "seq": row["seq"], "outcome": row["outcome"]} for row in lost],
         "shortestHostArrivalGap": min(gaps) if gaps else None,
         "arrivalGapsUnder0124": [gap for gap in gaps if gap < 0.124],
+        "hostRaycastMisses": [{"index": row["index"], "seq": row["seq"], "outcome": row["outcome"]} for row in rows if row.get("hostRaycastMiss")],
         "fieldDifferences": differences(rows),
         "firstDamageCheck": damage_check(rows),
         "rows": rows,
@@ -165,6 +170,8 @@ def text_lines(summary):
             row["index"], row["seq"], row["outcome"], row["client"].get("cd"), row["client"].get("cons"), (row.get("host") or {}).get("cons"),
             (", counter=%s health=%s" % (decided.get("counter"), decided.get("health"))) if decided else "",
             (", host cooldown copy=%s" % row["refusedAtHostCooldown"]) if "refusedAtHostCooldown" in row else ""))
+    if summary["hostRaycastMisses"]:
+        lines.append("diagblock: received swings that changed no block damage on the host (blockDamageSumDelta 0): %s" % [item["index"] for item in summary["hostRaycastMisses"]])
     check = summary.get("firstDamageCheck")
     if check:
         lines.append("diagblock first decided swing %(swing)d: STR client %(clientSTR)s host %(hostSTR)s (equal %(strEqual)s), charType client %(clientCharType)s host %(hostCharType)s, "

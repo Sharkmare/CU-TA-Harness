@@ -24,6 +24,8 @@ FLAVOUR_PREFIX = "flavour:"
 STAGE_ENVIRONMENT_VARIABLE = "CU_UPSTREAM_STAGE"
 STAGE_CHOICE = "stage"
 DIAG_STAGE_CHOICE = "diag-stage"
+DIAG_STAGE2_CHOICE = "diag-stage2"
+DIAG_STAGE2_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE2"
 DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE"
 TOGETHER_CONFIG_NAME = "CasualtiesMP.cfg"
 PROBE_CONFIG_TEXT = "[Probe]\n\nFindTheBug = true\n"
@@ -224,6 +226,13 @@ def diag_stage_directory():
     return os.path.join(mods_root(), "casualties-together-local", "build", "diag_stage")
 
 
+def diag_stage2_directory():
+    explicit = os.environ.get(DIAG_STAGE2_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(mods_root(), "casualties-together-local", "build", "diag_stage2")
+
+
 def install_stage_together(copy, directory=None):
     source = os.path.join(directory or stage_directory(), "plugins", TOGETHER_FOLDER)
     if not os.path.isfile(os.path.join(source, "CasualtiesMP.dll")):
@@ -288,6 +297,8 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy)
     elif together == DIAG_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, diag_stage_directory())
+    elif together == DIAG_STAGE2_CHOICE:
+        installed["together"] = install_stage_together(copy, diag_stage2_directory())
     elif flavour_name(together):
         installed["together"] = install_flavour_package(copy)
     elif together != "keep":

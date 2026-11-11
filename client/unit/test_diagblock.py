@@ -170,5 +170,35 @@ class ExtraFieldTests(unittest.TestCase):
         self.assertIn("charType client 2 host 0", text)
 
 
+def after_delta(t, seq, delta):
+    return "[Info   :  Together] [diagblock] t=%s HOST_AFTER seq=%d copy cd=0.13 blockDamageSumDelta=%s" % (t, seq, delta)
+
+
+class RaycastMissTests(unittest.TestCase):
+    def rows(self, deltas):
+        client = "\n".join(client_line("10.%d" % index, index + 1) for index in range(len(deltas)))
+        lines = []
+        for index, delta in enumerate(deltas):
+            lines += [recv("10.%d" % index, index + 1), parsed("10.%d" % index, index + 1), decided("10.%d" % index, index + 1, "applied"), after_delta("10.%d" % index, index + 1, delta)]
+        return client, "\n".join(lines)
+
+    def test_a_received_swing_with_no_block_damage_change_is_a_host_raycast_miss(self):
+        client, host = self.rows(["19.33", "0", "19.33"])
+        summary = diagblock.summarise_run(client, host)
+        self.assertEqual([item["index"] for item in summary["hostRaycastMisses"]], [2])
+        rows = diagblock.swing_table(diagblock.parse_lines(client), diagblock.parse_lines(host))
+        self.assertEqual([row["hostBlockDamageDelta"] for row in rows], ["19.33", "0", "19.33"])
+        self.assertIn("blockDamageSumDelta 0): [2]", "\n".join(summary["textLines"]))
+
+    def test_a_refused_swing_is_not_counted_as_a_raycast_miss(self):
+        client = client_line("10.0", 1)
+        host = "\n".join([recv("10.1", 1), refuse("10.1"), after_delta("10.1", 1, "0")])
+        self.assertEqual(diagblock.summarise_run(client, host)["hostRaycastMisses"], [])
+
+    def test_older_lines_without_the_delta_give_no_misses(self):
+        client, host = CLIENT_LOG, HOST_LOG
+        self.assertEqual(diagblock.summarise_run(client, host)["hostRaycastMisses"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

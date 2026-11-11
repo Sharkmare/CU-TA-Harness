@@ -293,6 +293,26 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(desync.describe_series(observation, "fork", "ab" * 32)["cleanupError"], "no host")
 
 
+class TranspilerLineTests(unittest.TestCase):
+    def test_lines_naming_the_transpiler_are_collected(self):
+        log = "[Info] fine\n[Warning:  Together] Body.Attack TRANSPILER: hit-loop markers not found, leaving stock IL\n[Info] TRANSPILER: Body.Attack TRANSPILER SUCCESS :) \n"
+        found = desync.transpiler_lines(log)
+        self.assertEqual(len(found), 2)
+        self.assertTrue(found[0].startswith("[Warning:  Together] Body.Attack TRANSPILER: hit-loop markers not found"))
+
+    def test_a_log_without_them_gives_none(self):
+        self.assertEqual(desync.transpiler_lines("nothing"), [])
+
+    def test_the_report_shows_the_lines_per_machine(self):
+        block = FakeBlock(hits_to_break=1)
+        scenario = desync.SeriesScenario("hold", "d", lambda host, client: {}, block.hit, block.read, cadence_seconds=0.01, max_hits=3, interval_seconds=0.01, tail_seconds=0.02)
+        report = desync.describe_series(desync.observe_series(scenario, "host", "client"), "fork", "ab" * 32)
+        report["transpilerLines"] = {"host": ["TRANSPILER: hit-loop markers not found"], "client": []}
+        text = desync.format_series_report(report)
+        self.assertIn("host Body.Attack transpiler lines: ['TRANSPILER: hit-loop markers not found']", text)
+        self.assertIn("client Body.Attack transpiler lines: none", text)
+
+
 class CrackStepTests(unittest.TestCase):
     def test_each_rise_of_the_counter_is_one_step_per_side(self):
         samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 19.33], [8, 24.7]), sample(0.5, [8, 38.66], [8, 49.4]), sample(0.75, [8, 58.0], [0, 0.0]), sample(1.0, [0, 0.0], [0, 0.0])]

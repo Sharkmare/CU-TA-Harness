@@ -44,7 +44,9 @@ def add_report(summary, report):
         for row in diag["rows"]:
             if row["outcome"] != "never-received":
                 summary["swingsReceived"] += 1
-            if row["outcome"] == APPLIED_OUTCOME:
+            if row.get("hostRaycastMiss"):
+                summary["lossByReason"]["host raycast miss"] = summary["lossByReason"].get("host raycast miss", 0) + 1
+            elif row["outcome"] == APPLIED_OUTCOME or row["outcome"] == "decided:non-block":
                 summary["swingsAccepted"] += 1
             else:
                 reason = row["outcome"][len(LOST_OUTCOME_PREFIX):] if row["outcome"].startswith(LOST_OUTCOME_PREFIX) else row["outcome"]

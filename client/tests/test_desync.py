@@ -3,7 +3,7 @@ import time
 import unittest
 
 from casualtieslink import desync, diagblock, launchplan
-from casualtieslink.instances import ScenarioGames, diag_stage_directory, flavour_zip, stage_directory
+from casualtieslink.instances import ScenarioGames, diag_stage2_directory, diag_stage_directory, flavour_zip, stage_directory
 from casualtieslink.launcher import mp_arguments
 
 from . import rig
@@ -21,6 +21,8 @@ def expected_hash(build):
         return desync.stage_dll_hash(stage_directory())
     if build == desync.DIAG_BUILD:
         return desync.stage_dll_hash(diag_stage_directory())
+    if build == desync.DIAG2_BUILD:
+        return desync.stage_dll_hash(diag_stage2_directory())
     return desync.flavour_dll_hash(flavour_zip(), build)
 
 
@@ -120,7 +122,8 @@ def series_method(run):
         report["proxyObserved"] = proxy_observed
         report["gamesAnswerAfterRun"] = games_answer(self)
         report["clientBody"] = body_identity(self)
-        if BUILD == desync.DIAG_BUILD:
+        report["transpilerLines"] = {which: desync.transpiler_lines(GAMES.log_text(which)) for which in ("host", "client")}
+        if BUILD in desync.DIAG_BUILDS:
             report["diagBlock"] = diagblock.summarise_run(run_logs["client"], run_logs["host"], observation.hit_times)
         text = desync.format_series_report(report)
         print("\n" + text)

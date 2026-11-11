@@ -36,6 +36,13 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual((found["swingsSent"], found["swingsReceived"], found["swingsAccepted"]), (4, 3, 1))
         self.assertEqual(found["lossByReason"], {"out of reach": 1, "refused-cooldown": 1, "never-received": 1})
 
+    def test_host_raycast_misses_are_a_loss_reason_and_not_accepted(self):
+        rows = [{"outcome": "decided:non-block", "hostRaycastMiss": True}, {"outcome": "decided:non-block"}, {"outcome": "decided:applied"}]
+        report_with_rows = report("persisted", 100, 0, 1, [])
+        report_with_rows["diagBlock"] = {"clientSends": 3, "rows": rows}
+        found = launchsummary.summarise_launch([report_with_rows])["d100-j0"]
+        self.assertEqual((found["swingsAccepted"], found["lossByReason"]), (2, {"host raycast miss": 1}))
+
     def test_reports_without_diag_lines_still_count_blocks_and_harness_swings(self):
         found = launchsummary.summarise_launch([report("persisted", 0, 0, 1, None, hits=5)])["d0-j0"]
         self.assertEqual((found["blocksMined"], found["swingsHarness"], found["swingsSent"]), (1, 5, 0))
