@@ -393,6 +393,17 @@ def counter_increases(samples, side):
     return increases
 
 
+def crack_steps(samples, side):
+    steps = []
+    previous = 0.0
+    for sample in samples:
+        block, counter = sample[side]
+        if block != EMPTY_BLOCK and counter > previous + COUNTER_DROP_EPSILON:
+            steps.append(round(counter - previous, 4))
+        previous = counter if block != EMPTY_BLOCK else 0.0
+    return steps
+
+
 def host_step_times(samples):
     times = []
     previous = 0.0
@@ -499,6 +510,7 @@ def describe_series(observation, build, dll_hash, game_version=None, delay_ms=No
         "block": {key: observation.context.get(key) for key in ("position", "blockId", "blockHealth", "cell")},
         "hostLog": host_counts,
         "swings": swing_records(observation, delay_ms),
+        "crackSteps": {"client": crack_steps(observation.samples, "client"), "host": crack_steps(observation.samples, "host")},
         "hints": verdict_hints(observation.samples, observation.hit_times, delay_ms, host_counts, findings, jitter_ms),
         "gameVersion": game_version,
         "actionPerformedBy": "client",
@@ -545,6 +557,8 @@ def format_series_report(report):
             len(report["hitTimes"]), swings["acceptedCount"], swings["droppedCount"], swings.get("afterHostBreakCount", 0)))
         for label, found in (swings.get("gaps") or {}).items():
             lines.append("  %s swings: %d, host copy of the client body to its real position, mean %s, max %s world units" % (label, found["count"], found["meanGap"], found["maxGap"]))
+    if report.get("crackSteps"):
+        lines.append("  crack steps per sample, client %s, host %s" % (report["crackSteps"]["client"], report["crackSteps"]["host"]))
     for hint in report.get("hints", []):
         lines.append("  hint: %s" % hint)
     if report.get("proxyObserved"):

@@ -122,5 +122,53 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual((summary["clientSends"], summary["shortestHostArrivalGap"], summary["lost"]), (0, None, []))
 
 
+NEW_CLIENT = ("[Info   :  Together] [diagblock] t=20.0 CLIENT_SEND seq=7 clientAttackPower=19.330000877380371 victim=blk latchedBlock=True hitPos=(1,1) atkCooldown=0.2 "
+              "cd=0.2 charType=%s STR=%s RES=8 INT=7 armPow=1 bonusStr=0 claw=1 cons=100 overEnc=0 stim=0 stamina=95 conscious=True pos=(0,1) limb1=(0.2,1) look=(1,1) handSlot=0 holding=False")
+NEW_RECV = ("[Info   :  Together] [diagblock] t=20.1 HOST_RECV n=1 client=2 worldReady=True gotAttacker=True awake=True "
+            "cd=0 charType=%s STR=%s RES=8 INT=7 armPow=1 bonusStr=0 claw=1 cons=100 overEnc=0 stim=0 stamina=95 conscious=True pos=(0,1) limb1=(0.2,1) look=(1,1) handSlot=0 holding=False")
+NEW_DECIDED = ("[Info   :  Together] [diagblock] t=20.1 HOST_DECIDED seq=7 block applied attackpower=%s counter=19.33 blockId=8 health=60 dLimb=1 totals applied=1 missed=0")
+
+
+class ExtraFieldTests(unittest.TestCase):
+    def rows(self, client_str, host_str, power, host_power):
+        client = NEW_CLIENT % ("2", client_str)
+        host = "\n".join([NEW_RECV % ("0", host_str), parsed("20.1", 7), NEW_DECIDED % host_power])
+        client = client.replace("clientAttackPower=19.330000877380371", "clientAttackPower=" + power)
+        return diagblock.swing_table(diagblock.parse_lines(client), diagblock.parse_lines(host))
+
+    def test_the_new_attacker_fields_are_read_by_key_whatever_their_order(self):
+        row = self.rows("17", "9", "24.68", "19.33")[0]
+        self.assertEqual(row["client"]["STR"], "17")
+        self.assertEqual(row["host"]["STR"], "9")
+        self.assertEqual((row["client"]["charType"], row["host"]["charType"]), ("2", "0"))
+        self.assertEqual(row["client"]["cons"], "100")
+        self.assertEqual(row["clientAttackPower"], "24.68")
+
+    def test_a_str_and_chartype_difference_is_listed_for_the_swing(self):
+        found = diagblock.differences(self.rows("17", "9", "24.68", "19.33"))
+        self.assertEqual(sorted((item["field"], item["client"], item["host"]) for item in found), [("STR", "17", "9"), ("charType", "2", "0")])
+
+    def test_equal_strength_and_attack_power_settle_the_damage_question(self):
+        check = diagblock.damage_check(self.rows("9", "9", "19.330000877380371", "19.330000877380371"))
+        self.assertTrue(check["strEqual"])
+        self.assertTrue(check["attackPowerEqual"])
+
+    def test_different_attack_power_is_reported_as_not_equal(self):
+        check = diagblock.damage_check(self.rows("17", "9", "24.68", "19.33"))
+        self.assertFalse(check["strEqual"])
+        self.assertFalse(check["attackPowerEqual"])
+        self.assertEqual((check["clientAttackPower"], check["hostAttackpower"]), ("24.68", "19.33"))
+
+    def test_no_decided_swing_means_no_check(self):
+        rows = diagblock.swing_table(diagblock.parse_lines(NEW_CLIENT % ("2", "17")), diagblock.parse_lines(NEW_RECV % ("0", "9")))
+        self.assertIsNone(diagblock.damage_check(rows))
+
+    def test_the_summary_text_states_the_first_swings_strength_and_power(self):
+        host = "\n".join([NEW_RECV % ("0", "9"), parsed("20.1", 7), NEW_DECIDED % "19.33"])
+        text = "\n".join(diagblock.summarise_run(NEW_CLIENT % ("2", "17"), host)["textLines"])
+        self.assertIn("STR client 17 host 9 (equal False)", text)
+        self.assertIn("charType client 2 host 0", text)
+
+
 if __name__ == "__main__":
     unittest.main()

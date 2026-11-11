@@ -10,7 +10,8 @@ HOST_DROP = "HOST_DROP"
 HOST_PARSED = "HOST_PARSED"
 HOST_DECIDED = "HOST_DECIDED"
 HOST_AFTER = "HOST_AFTER"
-COMPARED_FIELDS = ("cd", "cons", "overEnc", "stim", "stamina")
+COMPARED_FIELDS = ("cd", "cons", "overEnc", "stim", "stamina", "charType", "STR", "RES", "INT", "armPow", "bonusStr", "claw")
+DIFFERENCE_FIELDS = ("cons", "overEnc", "stim", "charType", "STR", "RES", "INT", "armPow", "bonusStr", "claw")
 GEOMETRY_FIELDS = ("pos", "limb1", "look")
 PARSED_FIELDS = ("sentLimb1", "sentLook", "hostLimb1Before", "hostLookBefore", "hitPos")
 APPLIED_REASON = "applied"
@@ -74,7 +75,7 @@ def swing_table(client_entries, host_entries):
     rows = []
     for index, send in enumerate(sends):
         record = records[index] if index < len(records) else None
-        row = {"index": index + 1, "seq": send["fields"].get("seq"), "clientT": send["t"],
+        row = {"index": index + 1, "seq": send["fields"].get("seq"), "clientT": send["t"], "clientAttackPower": send["fields"].get("clientAttackPower"),
                "client": {name: send["fields"].get(name) for name in COMPARED_FIELDS},
                "clientGeometry": {name: send["fields"].get(name) for name in GEOMETRY_FIELDS}}
         if record is None:
@@ -105,7 +106,7 @@ def differences(rows):
         host = row.get("host")
         if not host:
             continue
-        for name in ("cons", "overEnc", "stim"):
+        for name in DIFFERENCE_FIELDS:
             if row["client"].get(name) != host.get(name):
                 found.append({"swing": row["index"], "field": name, "client": row["client"].get(name), "host": host.get(name)})
     return found
@@ -114,6 +115,21 @@ def differences(rows):
 def inter_arrival(rows):
     times = [row["hostT"] for row in rows if "hostT" in row]
     return [round(later - earlier, 3) for earlier, later in zip(times, times[1:])]
+
+
+def damage_check(rows):
+    for row in rows:
+        decided = row.get("decided")
+        if not decided or "host" not in row:
+            continue
+        client_power = row.get("clientAttackPower")
+        host_power = decided.get("attackpower")
+        return {"swing": row["index"], "clientSTR": row["client"].get("STR"), "hostSTR": row["host"].get("STR"),
+                "strEqual": row["client"].get("STR") == row["host"].get("STR"),
+                "clientCharType": row["client"].get("charType"), "hostCharType": row["host"].get("charType"),
+                "clientAttackPower": client_power, "hostAttackpower": host_power,
+                "attackPowerEqual": client_power is not None and host_power is not None and float(client_power) == float(host_power)}
+    return None
 
 
 def summarise_run(client_log, host_log, hit_times=None):
@@ -133,6 +149,7 @@ def summarise_run(client_log, host_log, hit_times=None):
         "shortestHostArrivalGap": min(gaps) if gaps else None,
         "arrivalGapsUnder0124": [gap for gap in gaps if gap < 0.124],
         "fieldDifferences": differences(rows),
+        "firstDamageCheck": damage_check(rows),
         "rows": rows,
     }
     summary["textLines"] = text_lines(summary)
@@ -148,6 +165,10 @@ def text_lines(summary):
             row["index"], row["seq"], row["outcome"], row["client"].get("cd"), row["client"].get("cons"), (row.get("host") or {}).get("cons"),
             (", counter=%s health=%s" % (decided.get("counter"), decided.get("health"))) if decided else "",
             (", host cooldown copy=%s" % row["refusedAtHostCooldown"]) if "refusedAtHostCooldown" in row else ""))
+    check = summary.get("firstDamageCheck")
+    if check:
+        lines.append("diagblock first decided swing %(swing)d: STR client %(clientSTR)s host %(hostSTR)s (equal %(strEqual)s), charType client %(clientCharType)s host %(hostCharType)s, "
+                     "clientAttackPower %(clientAttackPower)s host attackpower %(hostAttackpower)s (equal %(attackPowerEqual)s)" % check)
     for difference in summary["fieldDifferences"]:
         lines.append("diagblock difference at swing %(swing)d: %(field)s client %(client)s host %(host)s" % difference)
     return lines

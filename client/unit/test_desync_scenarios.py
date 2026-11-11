@@ -224,6 +224,24 @@ class DigLoopTests(unittest.TestCase):
         self.assertEqual(state["swings"], scenarios.MAX_SWINGS)
 
 
+class MixedHandMiningTests(unittest.TestCase):
+    def test_the_dune_client_group_has_its_own_held_click_scenario(self):
+        found = [item for item in scenarios.SERIES_SCENARIOS if item.group == scenarios.MIXED_HAND_MINING_GROUP]
+        self.assertEqual([item.name for item in found], ["hold_mining_cracks_dune_client"])
+        self.assertTrue(found[0].network_sensitive)
+
+    def test_the_group_starts_a_dune_client_with_verbose_logging_and_the_probe_config(self):
+        from tests import test_desync
+        self.assertEqual(test_desync.GROUP_CLIENT_ARGUMENTS["mixed-hand-mining"], ["--mp-setchar", "2", "--mp-verbose"])
+        self.assertEqual(test_desync.GROUP_HOST_ARGUMENTS["mixed-hand-mining"], ["--mp-verbose"])
+        self.assertIn("mixed-hand-mining", test_desync.PROBE_GROUPS)
+
+    def test_the_plain_hold_match_would_plan_both_hand_mining_groups(self):
+        counts = scenarios.counts_by_group(["hold_mining"])
+        self.assertEqual(sorted(counts), ["hand-mining", "mixed-hand-mining"])
+        self.assertEqual(sorted(scenarios.counts_by_group(["dune_client"])), ["mixed-hand-mining"])
+
+
 class ScenarioListTests(unittest.TestCase):
     def test_every_scenario_is_complete_and_uniquely_named(self):
         names = [scenario.name for scenario in scenarios.SCENARIOS]

@@ -523,7 +523,11 @@ def hand_read(game, context):
     return [block_value(game, context["position"]), crack_counter(game, context)]
 
 
+MIXED_HAND_MINING_GROUP = "mixed-hand-mining"
+
 SERIES_SCENARIOS = [
+    SeriesScenario("hold_mining_cracks_dune_client", "the same held-click bare hand mining with a Dune client and an Experiment host: per-hit damage uses the attacker's strength, so the two crack counters can step differently",
+                   hand_prepare, hold_hit, hand_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group=MIXED_HAND_MINING_GROUP),
     SeriesScenario("hold_mining_cracks", "the client mines a multi-hit block with bare hands like a held mouse button: Body.UseItemInHand every 20 ms, the game's own attack cooldown decides which calls swing",
                    hand_prepare, hold_hit, hand_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining"),
     SeriesScenario("hand_mining_cracks", "the client mines a multi-hit block with bare hands (Body.UseItemInHand with an empty hand); crack counter and block on both games every 0.25 s until 10 s after the break",

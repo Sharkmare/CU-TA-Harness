@@ -80,7 +80,8 @@
         "unit.test_udpproxy",
         "unit.test_desync_series",
         "unit.test_launchplan",
-        "unit.test_diagblock"
+        "unit.test_diagblock",
+        "unit.test_launchsummary"
       ],
       "needs_game": false
     },

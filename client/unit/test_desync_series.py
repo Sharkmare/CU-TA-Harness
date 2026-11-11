@@ -237,6 +237,20 @@ class HeldClickTests(unittest.TestCase):
         self.assertIn("client swing intervals: shortest 0.200 s, mean 0.207 s; 0 of 3 could reach the host under the 0.124 s cooldown after jitter of up to 50 ms", quiet)
 
 
+class CrackStepTests(unittest.TestCase):
+    def test_each_rise_of_the_counter_is_one_step_per_side(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 19.33], [8, 24.7]), sample(0.5, [8, 38.66], [8, 49.4]), sample(0.75, [8, 58.0], [0, 0.0]), sample(1.0, [0, 0.0], [0, 0.0])]
+        self.assertEqual(desync.crack_steps(samples, "host"), [19.33, 19.33, 19.34])
+        self.assertEqual(desync.crack_steps(samples, "client"), [24.7, 24.7])
+
+    def test_a_report_carries_the_steps_of_both_sides(self):
+        block = FakeBlock(hits_to_break=2)
+        scenario = desync.SeriesScenario("hold", "d", lambda host, client: {}, block.hit, block.read, cadence_seconds=0.01, max_hits=5, interval_seconds=0.01, tail_seconds=0.05)
+        report = desync.describe_series(desync.observe_series(scenario, "host", "client"), "fork", "ab" * 32)
+        self.assertEqual(set(report["crackSteps"]), {"client", "host"})
+        self.assertIn("crack steps per sample, client", desync.format_series_report(report))
+
+
 class RunExpansionTests(unittest.TestCase):
     def scenarios(self):
         plain = desync.Scenario("block", "d", None, None, None, None)

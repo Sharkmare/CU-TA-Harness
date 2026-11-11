@@ -168,8 +168,10 @@ class DesyncMixin:
             self.assertEqual(desync.sha256_of_file(os.path.join(copy, TOGETHER_DLL_RELATIVE)), EXPECTED_HASH, "%s runs another Together DLL than %s" % (which, BUILD))
 
 
-GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"]}
-GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"]}
+GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
+                          "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"]}
+GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"]}
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining")
 
 
 def build_classes():
@@ -178,7 +180,7 @@ def build_classes():
     for group in groups:
         if ONLY_GROUP and group != ONLY_GROUP:
             continue
-        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group == "hand-mining"}
+        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS}
         for run in desync.expand_runs([scenario for scenario in SCENARIOS if scenario.group == group], PROFILES, REPEAT):
             members[run.name] = scenario_method(run)
         for run in desync.expand_runs([scenario for scenario in SERIES_SCENARIOS if scenario.group == group], PROFILES, REPEAT):
