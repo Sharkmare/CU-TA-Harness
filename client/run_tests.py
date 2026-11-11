@@ -125,6 +125,9 @@ def describe_selection(selected, config, offline):
 def main(argv=None):
     program_started = time.time()
     arguments = parse_args(argv)
+    if arguments.delay_ms is not None:
+        os.environ[desync.DELAY_ENVIRONMENT_VARIABLE] = str(desync.parse_delay(arguments.delay_ms))
+        os.environ[desync.JITTER_ENVIRONMENT_VARIABLE] = str(desync.parse_delay(arguments.jitter_ms) or 0.0)
     if arguments.together:
         os.environ[desync.BUILD_ENVIRONMENT_VARIABLE] = desync.parse_build(arguments.together)
     with open(CONFIG_PATH, encoding="utf-8") as handle:
@@ -135,9 +138,6 @@ def main(argv=None):
     describe_selection(selected, config, arguments.offline)
     if arguments.list or not selected:
         return 0
-    if arguments.delay_ms is not None:
-        os.environ[desync.DELAY_ENVIRONMENT_VARIABLE] = str(desync.parse_delay(arguments.delay_ms))
-        os.environ[desync.JITTER_ENVIRONMENT_VARIABLE] = str(desync.parse_delay(arguments.jitter_ms) or 0.0)
     if arguments.pair:
         os.environ[rig.PAIR_ENABLED_ENVIRONMENT_VARIABLE] = "1"
     if arguments.mutate:
