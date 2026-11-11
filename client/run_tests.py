@@ -220,8 +220,15 @@ def run_launch_plan(arguments):
     for line in launchplan.describe_launches(launches, counts):
         print(line)
     print("%d launches; one per scenario run would be %d" % (len(launches), launchplan.launches_without_grouping(launches, counts)))
+    from tests.desync_scenarios import preflight_problems
+    problems = preflight_problems(arguments.match, arguments.repeat)
+    for problem in problems:
+        print("PREFLIGHT: " + problem)
+    print("preflight: %s" % ("%d problems, no launch" % len(problems) if problems else "ok"))
     if arguments.list or not arguments.pair:
-        return 0
+        return 1 if problems else 0
+    if problems:
+        return 2
     failed = False
     for launch in launches:
         started = time.time()

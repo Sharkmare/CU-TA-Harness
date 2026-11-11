@@ -96,18 +96,42 @@ class SpawnTests(unittest.TestCase):
         self.assertEqual((target["reseated"], target["reseatTries"], target["distanceBeforeReseat"]), (False, 0, 2.9))
         self.client.set.assert_not_called()
 
-    def test_the_distances_seen_in_the_baseline_launch_are_re_seated_to_within_two(self):
-        for distance in (3.01, 3.05, 3.11, 3.21, 3.31, 3.39, 3.52):
+    def test_the_distances_seen_in_the_baseline_launches_are_inside_the_gate_and_not_re_seated(self):
+        for distance in (3.01, 3.05, 3.11, 3.21, 3.23, 3.24, 3.31, 3.39, 3.48, 3.52):
+            with self.subTest(distance=distance):
+                crates.reset_launch_state()
+                self.player = dict(ANCHOR)
+                self.place_crate_away(distance)
+                target = crates.spawn_crate(self.host, self.client)
+                self.assertFalse(target["reseated"])
+                self.assertEqual(target["distance"], round(distance, 2))
+        self.client.set.assert_not_called()
+
+    def test_a_crate_just_beyond_the_gate_is_re_seated_to_the_target_and_the_distance_reached_is_recorded(self):
+        for distance in (3.64, 3.9, 3.7):
             with self.subTest(distance=distance):
                 crates.reset_launch_state()
                 self.player = dict(ANCHOR)
                 self.place_crate_away(distance)
                 self.teleport_follows_set()
                 target = crates.spawn_crate(self.host, self.client)
-                self.assertTrue(target["reseated"])
-                self.assertEqual(target["reseatTries"], 1)
-                self.assertEqual(target["distanceBeforeReseat"], round(distance, 2))
-                self.assertLessEqual(target["distance"], crates.RESEAT_DISTANCE)
+                self.assertEqual((target["reseated"], target["reseatTries"], target["distanceBeforeReseat"]), (True, 1, round(distance, 2)))
+                self.assertLessEqual(target["reseatReached"], crates.RESEAT_DISTANCE)
+
+    def test_a_client_pushed_back_to_three_after_the_re_seat_is_accepted_because_the_gate_is_what_counts(self):
+        self.place_crate_away(3.64)
+        crate_x = ANCHOR["x"] + 3.64
+
+        def pushed_back(target, path, value):
+            self.player = {"x": crate_x - 3.0, "y": 5.0}
+
+        self.client.set.side_effect = pushed_back
+        target = crates.spawn_crate(self.host, self.client)
+        self.assertEqual((target["reseated"], target["reseatTries"], target["reseatReached"]), (True, crates.RESEAT_TRIES, 3.0))
+        self.assertEqual(target["distance"], 3.0)
+
+    def test_the_gate_is_the_reach_minus_the_margin(self):
+        self.assertAlmostEqual(crates.START_GATE, 3.6)
 
     def test_a_client_displaced_far_from_the_anchor_is_put_back_before_the_spawn(self):
         crates.spawn_crate(self.host, self.client)
@@ -119,12 +143,12 @@ class SpawnTests(unittest.TestCase):
         self.assertLessEqual(target["distance"], crates.world.MAX_START_DISTANCE)
 
     def test_a_client_that_cannot_be_moved_fails_after_the_set_number_of_re_seats_with_its_category(self):
-        self.place_crate_away(3.52)
+        self.place_crate_away(3.9)
         with self.assertRaises(crates.SetupFailure) as caught:
             crates.spawn_crate(self.host, self.client)
         self.assertEqual(caught.exception.category, "client-too-far-after-reseat")
         self.assertEqual(self.client.set.call_count, crates.RESEAT_TRIES)
-        self.assertIn("3.52", str(caught.exception))
+        self.assertIn("3.90", str(caught.exception))
 
     def test_the_client_is_put_back_at_the_first_anchor_before_the_second_spawn(self):
         crates.spawn_crate(self.host, self.client)
@@ -138,6 +162,46 @@ class SpawnTests(unittest.TestCase):
         self.described["health"] = 20.0
         with self.assertRaises(AssertionError):
             crates.spawn_crate(self.host, self.client)
+
+
+class PreflightTests(unittest.TestCase):
+    def test_the_planned_gates_and_counts_are_consistent(self):
+        self.assertEqual(crates.preflight(["spawned_crate"], 20), [])
+
+    def test_a_launch_that_does_not_select_the_scenario_is_not_checked(self):
+        self.assertEqual(crates.preflight(["worldhit_building"], 1), [])
+
+    def test_a_reseat_target_stricter_than_the_gate_is_refused(self):
+        with mock.patch.object(crates, "RESEAT_DISTANCE", 5.0):
+            problems = crates.preflight(["spawned_crate"], 20)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("re-seat target", problems[0])
+
+    def test_too_few_attempts_for_the_valid_runs_and_the_early_stop_are_refused(self):
+        problems = crates.preflight(["spawned_crate"], 4)
+        self.assertEqual(len(problems), 2)
+
+    def test_a_gate_at_or_beyond_the_reach_is_refused(self):
+        with mock.patch.object(crates, "START_GATE", 4.0):
+            self.assertTrue(any("bare-hand reach" in problem for problem in crates.preflight(["spawned_crate"], 20)))
+
+    def test_the_launch_runner_refuses_before_any_game_starts(self):
+        import io
+        import run_tests
+        arguments = run_tests.parse_args(["--pair", "--only", "desync", "--builds", "upstream-baseline", "--repeat", "4", "--match", "spawned_crate"])
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as output, mock.patch.object(run_tests.subprocess, "run", side_effect=AssertionError("a game was started")):
+            code = run_tests.run_launch_plan(arguments)
+        self.assertEqual(code, 2)
+        self.assertIn("PREFLIGHT: the setup early stop 5 is not below the 4 planned attempts", output.getvalue())
+
+    def test_the_launch_runner_reports_ok_for_the_planned_command(self):
+        import io
+        import run_tests
+        arguments = run_tests.parse_args(["--list", "--only", "desync", "--builds", "upstream-baseline", "--repeat", "20", "--match", "spawned_crate", "launch_log_checks"])
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            code = run_tests.run_launch_plan(arguments)
+        self.assertEqual(code, 0)
+        self.assertIn("preflight: ok", output.getvalue())
 
 
 class RunControlTests(unittest.TestCase):

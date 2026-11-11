@@ -22,6 +22,9 @@ POLL_SECONDS = 0.5
 VALID_RUNS_WANTED = 10
 STOP_AFTER_FAILED_RUNS = 3
 MIN_HEALTH = 100.0
+BARE_HAND_REACH = 4.0
+REACH_MARGIN = 0.4
+START_GATE = BARE_HAND_REACH - REACH_MARGIN
 RESEAT_DISTANCE = 2.0
 RESEAT_TRIES = 4
 RESEAT_OFFSET = 1.0
@@ -127,20 +130,22 @@ def spawn_crate(host, client):
         raise SetupFailure("low-health", "the spawned %s has health %.1f, below %.0f" % (CRATE_ID, described["health"], MIN_HEALTH))
     distance_before = base.distance(base.player_position(client), settled)
     reseat_tries = 0
-    if distance_before > world.MAX_START_DISTANCE:
-        reseat_tries, settled, reached = reseat_client(host, client, handle, settled)
-        if reached > RESEAT_DISTANCE:
-            raise SetupFailure("client-too-far-after-reseat", "the client is %.2f from the spawned %s after %d re-seats (was %.2f)" % (reached, CRATE_ID, reseat_tries, distance_before))
+    reseat_reached = None
+    if distance_before > START_GATE:
+        reseat_tries, settled, reseat_reached = reseat_client(host, client, handle, settled)
+        if reseat_reached > START_GATE:
+            raise SetupFailure("client-too-far-after-reseat", "the client is %.2f from the spawned %s after %d re-seats (was %.2f, gate %.1f)" % (
+                reseat_reached, CRATE_ID, reseat_tries, distance_before, START_GATE))
     client_row = wait_for_client_listing(client, settled)
     if client_row is None:
         raise SetupFailure("client-does-not-list-crate", "the client does not list the spawned %s %s within %.1f of the host position (%.2f, %.2f) after %.0f s" % (
             CRATE_ID, handle, LISTED_TOGETHER_RADIUS, settled["x"], settled["y"], FIND_TIMEOUT_SECONDS))
     distance = base.distance(base.player_position(client), settled)
-    if distance > world.MAX_START_DISTANCE:
-        raise SetupFailure("client-too-far-after-reseat", "the client is %.2f from the spawned %s, beyond %.1f" % (distance, CRATE_ID, world.MAX_START_DISTANCE))
+    if distance > START_GATE:
+        raise SetupFailure("client-too-far-after-reseat", "the client is %.2f from the spawned %s, beyond %.1f" % (distance, CRATE_ID, START_GATE))
     return dict(described, position=settled, startHealth=described["health"], healthBefore=described["health"], distance=round(distance, 2), spawnOffset=SPAWN_OFFSET,
                 spawnedAt=spot, clientHandle="id:%d" % client_row["object"]["id"], spawnNumber=STATE["spawned"], teleports=reseat_tries, reseated=reseat_tries > 0,
-                reseatTries=reseat_tries, distanceBeforeReseat=round(distance_before, 2), skippedPicks=[], timesUsedBefore=0)
+                reseatTries=reseat_tries, reseatReached=None if reseat_reached is None else round(reseat_reached, 2), distanceBeforeReseat=round(distance_before, 2), skippedPicks=[], timesUsedBefore=0)
 
 
 def prepare(host, client):
@@ -182,8 +187,33 @@ def check(context):
     return issues
 
 
+def preflight(fragments, attempts):
+    selected = base.matching_scenario_names(fragments)
+    if "spawned_crate_hit_by_client" not in selected:
+        return []
+    problems = []
+    checks = [
+        (RESEAT_DISTANCE <= START_GATE, "the re-seat target %.1f is stricter than the start gate %.1f" % (RESEAT_DISTANCE, START_GATE)),
+        (START_GATE < BARE_HAND_REACH, "the start gate %.1f is not inside the bare-hand reach %.1f" % (START_GATE, BARE_HAND_REACH)),
+        (SPAWN_OFFSET <= START_GATE, "the spawn offset %.1f is beyond the start gate %.1f" % (SPAWN_OFFSET, START_GATE)),
+        (LISTED_TOGETHER_RADIUS <= LOOKUP_RADIUS, "the client listing radius %.1f exceeds the host lookup radius %.1f" % (LISTED_TOGETHER_RADIUS, LOOKUP_RADIUS)),
+        (RESEAT_TRIES >= 1, "no re-seat tries are allowed"),
+        (STOP_AFTER_SETUP_FAILURES >= 1 and STOP_AFTER_FAILED_RUNS >= 1, "an early stop is set to fire before any attempt"),
+        (STOP_AFTER_SETUP_FAILURES < attempts, "the setup early stop %d is not below the %d planned attempts" % (STOP_AFTER_SETUP_FAILURES, attempts)),
+        (STOP_AFTER_FAILED_RUNS < attempts, "the first-swing early stop %d is not below the %d planned attempts" % (STOP_AFTER_FAILED_RUNS, attempts)),
+        (VALID_RUNS_WANTED <= attempts, "%d valid runs are wanted but only %d attempts are planned" % (VALID_RUNS_WANTED, attempts)),
+        (world.SWINGS >= 1, "the swing count is below one"),
+    ]
+    for holds, message in checks:
+        if not holds:
+            problems.append(message)
+    return problems
+
+
+base.PREFLIGHTS.append(preflight)
+
 SCENARIOS = [
-    Scenario("spawned_crate_hit_by_client", "the host spawns a fresh medcrate 1.75 beside the client at the same offset every run and the client hits it bare handed five times, re-aiming each swing; the first runs decide whether a spawned crate is hittable at all",
+    Scenario("spawned_crate_hit_by_client", "the host spawns a fresh medcrate beside the client at the same offset every run and the client hits it bare handed five times, re-aiming each swing, from at most the start gate away",
              prepare, act, lambda game, context: 0, world.never_changes, group=GROUP, check=check),
 ]
 

@@ -694,6 +694,16 @@ def try_ready(game):
         return False
 
 
+PREFLIGHTS = []
+
+
+def preflight_problems(fragments, attempts):
+    problems = []
+    for check in PREFLIGHTS:
+        problems.extend(check(fragments, attempts))
+    return problems
+
+
 def matching_scenario_names(fragments):
     names = [scenario.name for scenario in SCENARIOS + SERIES_SCENARIOS]
     if not fragments:
