@@ -32,12 +32,14 @@ FULLGAME_DIAG_STAGE_CHOICE = "fullgame-diag-stage"
 FULLGAME_NOBUILD_STAGE_CHOICE = "fullgame-nobuild-stage"
 FULLGAME_V2_STAGE_CHOICE = "fullgame-v2-stage"
 FULLGAME_FINAL_STAGE_CHOICE = "fullgame-final-stage"
+OFFICIAL_STAGE_CHOICE = "official-stage"
 FULLGAME_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_STAGE"
 BASELINE_STAGE_ENVIRONMENT_VARIABLE = "CU_BASELINE_STAGE"
 FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_DIAG_STAGE"
 FULLGAME_NOBUILD_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_NOBUILD_STAGE"
 FULLGAME_V2_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_V2_STAGE"
 FULLGAME_FINAL_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_FINAL_STAGE"
+OFFICIAL_STAGE_ENVIRONMENT_VARIABLE = "CU_OFFICIAL_STAGE"
 DIAG_STAGE3_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE3"
 DIAG_STAGE2_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE2"
 DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE"
@@ -300,6 +302,13 @@ def fullgame_final_stage_directory():
     return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_final")
 
 
+def official_stage_directory():
+    explicit = os.environ.get(OFFICIAL_STAGE_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(testcopy.REPO_ROOT, ".state", "stages", "official-5.5.0")
+
+
 def baseline_stage_directory():
     explicit = os.environ.get(BASELINE_STAGE_ENVIRONMENT_VARIABLE)
     if explicit:
@@ -311,7 +320,7 @@ def stage_directory_by_build():
     return {"upstream-fixes": stage_directory, "upstream-diag": diag_stage_directory, "upstream-diag2": diag_stage2_directory,
             "upstream-diag3": diag_stage3_directory, "upstream-fixed": fullgame_stage_directory, "upstream-baseline": baseline_stage_directory,
             "upstream-fixed-diag": fullgame_diag_stage_directory, "upstream-fixed-nobuild": fullgame_nobuild_stage_directory,
-            "upstream-fixed-v2": fullgame_v2_stage_directory, "upstream-fixed-final": fullgame_final_stage_directory}
+            "upstream-fixed-v2": fullgame_v2_stage_directory, "upstream-fixed-final": fullgame_final_stage_directory, "official-5.5.0": official_stage_directory}
 
 
 def install_stage_together(copy, directory=None):
@@ -392,6 +401,8 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, fullgame_v2_stage_directory())
     elif together == FULLGAME_FINAL_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, fullgame_final_stage_directory())
+    elif together == OFFICIAL_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, official_stage_directory())
     elif together == BASELINE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, baseline_stage_directory())
     elif flavour_name(together):

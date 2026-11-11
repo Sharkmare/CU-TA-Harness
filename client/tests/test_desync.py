@@ -27,6 +27,9 @@ def expected_hash(build):
 
 BUILD = desync.parse_build(os.environ.get(desync.BUILD_ENVIRONMENT_VARIABLE))
 EXPECTED_HASH = expected_hash(BUILD)
+BUILDS_WITHOUT_PROBE = (desync.OFFICIAL_BUILD,)
+BUILD_HAS_PROBE = BUILD not in BUILDS_WITHOUT_PROBE
+RECORD_ONLY_LAUNCH_CHECKS = BUILD in BUILDS_WITHOUT_PROBE
 PROFILES = desync.profiles_from_environment()
 REPEAT = desync.repeat_from_environment()
 LAUNCH_ID = desync.launch_id_from_environment()
@@ -173,7 +176,7 @@ class DesyncMixin:
         try:
             cls.host, cls.client = GAMES.start(list(cls.host_plugins), [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=0.0, probe=cls.probe,
                                          after_client_link=choose_character(cls.client_character))
-            if not ready_up([cls.host, cls.client]):
+            if not ready_up([cls.host, cls.client], before_ready={cls.client: choose_character(cls.client_character)} if cls.client_character is not None else None):
                 raise AssertionError("the lobby ready gate did not accept both players")
             cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
             cls.client.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
@@ -203,7 +206,7 @@ class DesyncMixin:
         if self.host_plugins == [] and self.__class__.__name__.endswith("hand_mining"):
             self.skipTest("only the hook check group is expected to carry the repaired transpiler")
         checks = desync.launch_log_checks(GAMES.log_text("host"), GAMES.log_text("client"), expect_no_scatter=bool(self.host_plugins),
-                                          expect_success=BUILD != desync.BASELINE_BUILD)
+                                          expect_success=BUILD != desync.BASELINE_BUILD, record_only=RECORD_ONLY_LAUNCH_CHECKS)
         print("\nlaunch log checks: %s" % checks)
         desync.save_launch_checks(checks, REPORT_DIRECTORY, LAUNCH_ID)
         if any(group in self.__class__.__name__.replace("_", "-") for group in ("hook-check", "hook-regression", "hook-evidence", "hook-dune")):
@@ -234,7 +237,9 @@ def build_classes():
     for group in groups:
         if ONLY_GROUP and group != ONLY_GROUP:
             continue
-        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS, "client_character": GROUP_CLIENT_CHARACTER.get(group), "host_plugins": GROUP_HOST_PLUGINS.get(group, []), "require_find_the_bug": group in EVIDENCE_GROUPS}
+        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS and BUILD_HAS_PROBE,
+                   "client_character": GROUP_CLIENT_CHARACTER.get(group), "host_plugins": GROUP_HOST_PLUGINS.get(group, []),
+                   "require_find_the_bug": group in EVIDENCE_GROUPS and BUILD_HAS_PROBE}
         for run in desync.expand_runs([scenario for scenario in SCENARIOS if scenario.group == group], PROFILES, REPEAT):
             members[run.name] = scenario_method(run)
         for run in desync.expand_runs([scenario for scenario in SERIES_SCENARIOS if scenario.group == group], PROFILES, REPEAT):

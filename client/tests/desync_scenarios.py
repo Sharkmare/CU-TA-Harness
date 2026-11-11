@@ -746,10 +746,15 @@ def reset_between_scenarios(host, client):
     empty_the_hand(client)
 
 
-def ready_up(games, timeout=READY_TIMEOUT_SECONDS, step=1.0):
+def ready_up(games, timeout=READY_TIMEOUT_SECONDS, step=1.0, before_ready=None):
     pending = list(games)
     deadline = time.time() + timeout
     while pending and time.time() < deadline:
+        if before_ready:
+            for game in pending:
+                chooser = before_ready.get(game)
+                if chooser:
+                    chooser(game)
         pending = [game for game in pending if try_ready(game) is False]
         if pending:
             time.sleep(step)

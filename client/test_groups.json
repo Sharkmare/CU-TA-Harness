@@ -89,7 +89,8 @@
         "unit.test_spawned_crates",
         "unit.test_v2_suite",
         "unit.test_pvp_banded",
-        "unit.test_corpse_banded"
+        "unit.test_corpse_banded",
+        "unit.test_official_stage"
       ],
       "needs_game": false
     },

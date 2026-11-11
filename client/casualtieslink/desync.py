@@ -20,10 +20,11 @@ FIXED_DIAG_BUILD = "upstream-fixed-diag"
 FIXED_NOBUILD_BUILD = "upstream-fixed-nobuild"
 FIXED_V2_BUILD = "upstream-fixed-v2"
 FIXED_FINAL_BUILD = "upstream-fixed-final"
+OFFICIAL_BUILD = "official-5.5.0"
 STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage", DIAG2_BUILD: "diag-stage2", DIAG3_BUILD: "diag-stage3",
                  FIXED_BUILD: "fullgame-stage", BASELINE_BUILD: "baseline-stage", FIXED_DIAG_BUILD: "fullgame-diag-stage",
-                 FIXED_NOBUILD_BUILD: "fullgame-nobuild-stage", FIXED_V2_BUILD: "fullgame-v2-stage", FIXED_FINAL_BUILD: "fullgame-final-stage"}
-KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD, FIXED_BUILD, BASELINE_BUILD, FIXED_DIAG_BUILD, FIXED_NOBUILD_BUILD, FIXED_V2_BUILD, FIXED_FINAL_BUILD)
+                 FIXED_NOBUILD_BUILD: "fullgame-nobuild-stage", FIXED_V2_BUILD: "fullgame-v2-stage", FIXED_FINAL_BUILD: "fullgame-final-stage", OFFICIAL_BUILD: "official-stage"}
+KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD, FIXED_BUILD, BASELINE_BUILD, FIXED_DIAG_BUILD, FIXED_NOBUILD_BUILD, FIXED_V2_BUILD, FIXED_FINAL_BUILD, OFFICIAL_BUILD)
 DIAG_BUILDS = (DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD)
 TRANSPILER_MARKER = "TRANSPILER"
 
@@ -36,7 +37,7 @@ NO_SCATTER_COMPLETE = "(2 of 2 Together checks replaced)"
 EXCEPTION_PATTERN = re.compile(r"Exception|\[Error")
 
 
-def launch_log_checks(host_log, client_log, expect_no_scatter=True, expect_success=True):
+def launch_log_checks(host_log, client_log, expect_no_scatter=True, expect_success=True, record_only=False):
     checks = {}
     for which, text in (("host", host_log), ("client", client_log)):
         checks[which + "TranspilerSuccess"] = sum(1 for line in text.splitlines() if TRANSPILER_SUCCESS in line)
@@ -56,7 +57,8 @@ def launch_log_checks(host_log, client_log, expect_no_scatter=True, expect_succe
             issues.append("'%s' in the %s log: %s" % (FAILED_ATTACK_PATCH, which, checks[which + "FailedAttackPatch"][0][:120]))
     if expect_no_scatter and not any(NO_SCATTER_COMPLETE in line for line in scatter):
         issues.append("no 'NoScatterPunish ... (2 of 2 Together checks replaced)' line in the host log")
-    checks["issues"] = issues
+    checks["issues"] = [] if record_only else issues
+    checks["recordOnly"] = record_only
     return checks
 
 
