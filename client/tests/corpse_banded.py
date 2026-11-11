@@ -13,7 +13,7 @@ from . import world_building as world
 
 GROUP = "hook-dune"
 CORPSE_NAME = "dune2_corpse_hit_by_client"
-PVP_NAME = "dune1_pvp_banded_by_client"
+PVP_NAME = "dune1_punch_banded_by_client"
 CORPSE_ID = "corpse"
 DUNE = 2
 CLIENT_BODY_NAME = "Body_ClientD"

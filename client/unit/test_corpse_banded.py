@@ -213,9 +213,9 @@ class CharacterTests(unittest.TestCase):
 class WiringTests(unittest.TestCase):
     def test_both_scenarios_are_in_the_dune_group_and_run_pvp_first(self):
         self.assertEqual(sorted(scenarios.counts_by_group(["dune1_", "dune2_"])), ["hook-dune"])
-        self.assertEqual(sorted(scenarios.matching_scenario_names(["dune1_", "dune2_"])), ["dune1_pvp_banded_by_client", "dune2_corpse_hit_by_client"])
-        names = sorted(["test_00_launch_log_checks", "test_dune2_corpse_hit_by_client_r1", "test_dune1_pvp_banded_by_client_r1"])
-        self.assertEqual(names[1], "test_dune1_pvp_banded_by_client_r1")
+        self.assertEqual(sorted(scenarios.matching_scenario_names(["dune1_", "dune2_"])), ["dune1_punch_banded_by_client", "dune2_corpse_hit_by_client"])
+        names = sorted(["test_00_launch_log_checks", "test_dune2_corpse_hit_by_client_r1", "test_dune1_punch_banded_by_client_r1"])
+        self.assertEqual(names[1], "test_dune1_punch_banded_by_client_r1")
 
     def test_the_dune_group_starts_the_client_as_dune_with_the_pvp_rule_and_the_probe(self):
         self.assertEqual(test_desync.GROUP_CLIENT_CHARACTER, {"hook-dune": 2})
@@ -247,7 +247,7 @@ class WiringTests(unittest.TestCase):
 
     def test_the_pvp_copy_shares_the_banded_steps_and_the_original_stays_in_the_evidence_group(self):
         original = next(item for item in scenarios.SCENARIOS if item.name == "pvp_banded_by_client")
-        clone = next(item for item in scenarios.SCENARIOS if item.name == "dune1_pvp_banded_by_client")
+        clone = next(item for item in scenarios.SCENARIOS if item.name == "dune1_punch_banded_by_client")
         self.assertEqual((original.group, clone.group), ("hook-evidence", "hook-dune"))
         self.assertIs(clone.act, original.act)
         self.assertIs(clone.prepare, original.prepare)
@@ -257,7 +257,7 @@ class WiringTests(unittest.TestCase):
         profiles = [launchplan.DIRECT]
         runs = {item.name: len(desync.expand_runs([item], profiles, 8)) for item in scenarios.SCENARIOS if item.name.startswith("dune")}
         self.assertEqual(runs["dune2_corpse_hit_by_client"], 8)
-        self.assertEqual(runs["dune1_pvp_banded_by_client"], 3)
+        self.assertEqual(runs["dune1_punch_banded_by_client"], 3)
 
 
 class PreflightTests(unittest.TestCase):
