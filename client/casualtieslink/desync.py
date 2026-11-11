@@ -242,8 +242,9 @@ def observe_series(scenario, host, client, perform_action=True, clock=time.monot
     try:
         if perform_action:
             for _ in range(scenario.max_hits):
-                hit_times.append(round(clock() - started, 3))
-                scenario.hit(client, context)
+                moment = round(clock() - started, 3)
+                if scenario.hit(client, context) is not False:
+                    hit_times.append(moment)
                 sleep(scenario.cadence_seconds)
                 latest = samples[-1] if samples else None
                 if latest is not None and latest["client"][0] == EMPTY_BLOCK:
@@ -337,11 +338,19 @@ def classify_swings(hit_times, samples, delay_ms):
     delay = (delay_ms or 0.0) / MILLISECONDS_PER_SECOND
     arrivals = [hit_time + delay for hit_time in hit_times]
     accepted = [False] * len(hit_times)
-    for step in host_step_times(samples):
+    steps = host_step_times(samples)
+    for step in steps:
         owners = [index for index, arrival in enumerate(arrivals) if arrival <= step]
         if owners:
             accepted[owners[-1]] = True
+    host_break = next((sample["t"] for sample in samples if sample["host"][0] == EMPTY_BLOCK), None)
+    if host_break is not None:
+        accepted = [None if arrival > host_break else ok for arrival, ok in zip(arrivals, accepted)]
     return accepted
+
+
+def swing_intervals(hit_times):
+    return [round(later - earlier, 3) for earlier, later in zip(hit_times, hit_times[1:])]
 
 
 def gap_summary(swing_log, accepted):
@@ -355,8 +364,17 @@ def gap_summary(swing_log, accepted):
 MILLISECONDS_PER_SECOND = 1000.0
 
 
-def verdict_hints(samples, hit_times, delay_ms, host_counts, findings):
+HOST_ATTACK_COOLDOWN_SECONDS = 0.7
+
+
+def verdict_hints(samples, hit_times, delay_ms, host_counts, findings, jitter_ms=0.0):
     hints = []
+    intervals = swing_intervals(hit_times)
+    if intervals:
+        spread = (jitter_ms or 0.0) / MILLISECONDS_PER_SECOND
+        close = [value for value in intervals if value - spread < HOST_ATTACK_COOLDOWN_SECONDS]
+        hints.append("client swing intervals: shortest %.3f s, mean %.3f s; %d of %d could reach the host under the %.1f s cooldown after jitter of up to %.0f ms" % (
+            min(intervals), sum(intervals) / len(intervals), len(close), len(intervals), HOST_ATTACK_COOLDOWN_SECONDS, jitter_ms or 0.0))
     pairs = [(s["client"][1], s["host"][1]) for s in samples if s["client"][0] != EMPTY_BLOCK and s["host"][0] != EMPTY_BLOCK and s["client"][1] > 0 and s["host"][1] > 0]
     if pairs:
         ratios = [host / client for client, host in pairs]
@@ -388,8 +406,13 @@ def swing_records(observation, delay_ms):
     log = observation.context.get("swingLog") or []
     accepted = classify_swings(observation.hit_times, observation.samples, delay_ms)
     records = [dict(entry, t=hit_time, acceptedByHost=ok) for entry, hit_time, ok in zip(log, observation.hit_times, accepted)]
+    intervals = swing_intervals(observation.hit_times)
     return {"list": records, "gaps": gap_summary(log, accepted) if log else None,
-            "acceptedCount": sum(1 for ok in accepted if ok), "droppedCount": sum(1 for ok in accepted if not ok)}
+            "acceptedCount": sum(1 for ok in accepted if ok is True), "droppedCount": sum(1 for ok in accepted if ok is False),
+            "afterHostBreakCount": sum(1 for ok in accepted if ok is None),
+            "clientIntervals": intervals,
+            "shortestInterval": min(intervals) if intervals else None,
+            "meanInterval": round(sum(intervals) / len(intervals), 3) if intervals else None}
 
 
 def describe_series(observation, build, dll_hash, game_version=None, delay_ms=None, jitter_ms=0.0, host_counts=None):
@@ -398,7 +421,7 @@ def describe_series(observation, build, dll_hash, game_version=None, delay_ms=No
         "block": {key: observation.context.get(key) for key in ("position", "blockId", "blockHealth", "cell")},
         "hostLog": host_counts,
         "swings": swing_records(observation, delay_ms),
-        "hints": verdict_hints(observation.samples, observation.hit_times, delay_ms, host_counts, findings),
+        "hints": verdict_hints(observation.samples, observation.hit_times, delay_ms, host_counts, findings, jitter_ms),
         "gameVersion": game_version,
         "actionPerformedBy": "client",
         "build": build,
@@ -434,7 +457,8 @@ def format_series_report(report):
     lines.insert(4, "  block id %s, health %s, at %s" % (block.get("blockId"), block.get("blockHealth"), block.get("position")))
     swings = report.get("swings") or {}
     if swings:
-        lines.append("  swings accepted by the host (approximate, by crack steps): %d, dropped: %d" % (swings["acceptedCount"], swings["droppedCount"]))
+        lines.append("  swings sent %d; accepted by the host (approximate, by crack steps): %d, dropped: %d, sent after the host had already broken the block: %d" % (
+            len(report["hitTimes"]), swings["acceptedCount"], swings["droppedCount"], swings.get("afterHostBreakCount", 0)))
         for label, found in (swings.get("gaps") or {}).items():
             lines.append("  %s swings: %d, host copy of the client body to its real position, mean %s, max %s world units" % (label, found["count"], found["meanGap"], found["maxGap"]))
     for hint in report.get("hints", []):
@@ -452,7 +476,8 @@ def format_series_report(report):
 def save_series_report(report, directory):
     os.makedirs(directory, exist_ok=True)
     delay = "none" if report.get("delayMs") is None else "%g" % report["delayMs"]
-    name = "%s__%s__delay%s.json" % (report["scenario"], re.sub(r"[^A-Za-z0-9.\-]", "_", build_label(report["build"], report["dllSha256"])), delay)
+    stamp = time.strftime("%H%M%S")
+    name = "%s__%s__delay%s_jitter%g__%s.json" % (report["scenario"], re.sub(r"[^A-Za-z0-9.\-]", "_", build_label(report["build"], report["dllSha256"])), delay, report.get("jitterMs") or 0.0, stamp)
     path = os.path.join(directory, name)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, sort_keys=True)

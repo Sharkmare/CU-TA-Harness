@@ -500,11 +500,30 @@ def hand_hit(client, context):
     swing(client, context["position"])
 
 
+HOLD_CALL_PAUSE_SECONDS = 0.02
+HOLD_MAX_CALLS = 1500
+
+
+def hold_hit(client, context):
+    cooldown = float(client.get("player", "attackCooldown", depth=0))
+    real = player_position(client)
+    copy = context["hostGame"].get(context["hostBodyHandle"], BODY_PATH, depth=0)
+    client.call("invoke", target="player", method="UseItemInHand",
+                sets=[{"target": "player", "path": "targetLookPos", "value": {"x": context["position"]["x"], "y": context["position"]["y"], "z": 0.0}}])
+    if cooldown > 0:
+        return False
+    copy = {"x": float(copy["x"]), "y": float(copy["y"])}
+    context["swingLog"].append({"clientPosition": real, "hostCopyPosition": copy, "gap": round(distance(real, copy), 3)})
+    return True
+
+
 def hand_read(game, context):
     return [block_value(game, context["position"]), crack_counter(game, context)]
 
 
 SERIES_SCENARIOS = [
+    SeriesScenario("hold_mining_cracks", "the client mines a multi-hit block with bare hands like a held mouse button: Body.UseItemInHand every 20 ms, the game's own attack cooldown decides which calls swing",
+                   hand_prepare, hold_hit, hand_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining"),
     SeriesScenario("hand_mining_cracks", "the client mines a multi-hit block with bare hands (Body.UseItemInHand with an empty hand); crack counter and block on both games every 0.25 s until 10 s after the break",
                    hand_prepare, hand_hit, hand_read, cadence_seconds=0.0, max_hits=HAND_MAX_HITS, group="hand-mining"),
 ]

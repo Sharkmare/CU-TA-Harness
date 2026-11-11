@@ -118,7 +118,7 @@ class SeriesReportTests(unittest.TestCase):
         report = self.report()
         with tempfile.TemporaryDirectory() as directory:
             path = desync.save_series_report(report, directory)
-            self.assertTrue(os.path.basename(path).endswith("__upstream-fixes_cdcdcdcd__delay100.json"), path)
+            self.assertRegex(os.path.basename(path), r"__upstream-fixes_cdcdcdcd__delay100_jitter20__\d{6}\.json$")
             with open(path, encoding="utf-8") as handle:
                 loaded = json.load(handle)
         self.assertEqual(loaded["delayMs"], 100.0)
@@ -199,7 +199,38 @@ class SwingClassificationTests(unittest.TestCase):
         report = desync.describe_series(observation, "b", "00" * 32, "1.0", 100.0)
         self.assertEqual([item["acceptedByHost"] for item in report["swings"]["list"]], [True, True])
         self.assertEqual(report["swings"]["list"][0]["gap"], 0.5)
-        self.assertIn("swings accepted by the host", desync.format_series_report(report))
+        self.assertIn("accepted by the host (approximate, by crack steps): 2", desync.format_series_report(report))
+
+
+class HeldClickTests(unittest.TestCase):
+    def test_calls_the_game_refuses_are_not_counted_as_swings(self):
+        calls = {"n": 0}
+        block = FakeBlock(hits_to_break=2)
+
+        def hold(client, context):
+            calls["n"] += 1
+            if calls["n"] % 3:
+                return False
+            block.hit(client, context)
+            return True
+
+        scenario = desync.SeriesScenario("hold", "held", lambda host, client: {}, hold, block.read,
+                                         cadence_seconds=0.005, max_hits=100, interval_seconds=0.01, tail_seconds=0.05)
+        observation = desync.observe_series(scenario, "host", "client")
+        self.assertEqual(len(observation.hit_times), 2)
+        self.assertEqual(calls["n"], 6)
+
+    def test_swings_sent_after_the_host_broke_the_block_are_not_drops(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.4, [8, 19.0], [8, 19.0]), sample(1.0, [0, 0.0], [8, 58.0]), sample(1.6, [0, 0.0], [0, 0.0])]
+        accepted = desync.classify_swings([0.0, 0.7, 1.4], samples, 100.0)
+        self.assertEqual(accepted, [True, True, None])
+
+    def test_intervals_and_the_cooldown_hint_use_the_jitter_range(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(2.0, [0, 0.0], [0, 0.0])]
+        verdict, findings = desync.judge_series(samples)
+        hints = desync.verdict_hints(samples, [0.0, 0.72, 1.45, 2.4], 100.0, None, findings, 60.0)
+        self.assertEqual(desync.swing_intervals([0.0, 0.72, 1.45]), [0.72, 0.73])
+        self.assertIn("client swing intervals: shortest 0.720 s, mean 0.800 s; 2 of 3 could reach the host under the 0.7 s cooldown after jitter of up to 60 ms", hints)
 
 
 class DelayParsingTests(unittest.TestCase):
