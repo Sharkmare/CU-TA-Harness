@@ -279,15 +279,21 @@ def act(client, context):
     context["valid"] = bool(entries) and entries[0]["hostDelta"] > 0 and entries[0]["clientDelta"] > 0
 
 
-def check(context):
+def check_first_swing(context):
     entries = context.get("measurements") or []
     if not entries:
         return ["INVALID: no swing recorded"]
     first = entries[0]
     if first["hostDelta"] <= 0 or first["clientDelta"] <= 0:
         return ["INVALID: the first swing changed nothing (host %.2f, client %.2f); target %s" % (first["hostDelta"], first["clientDelta"], context.get("target", {}).get("name"))]
-    VALID_RUNS[0] += 1
     return []
+
+
+def check(context):
+    issues = check_first_swing(context)
+    if not issues:
+        VALID_RUNS[0] += 1
+    return issues
 
 
 def never_changes(value, baseline):
