@@ -11,7 +11,9 @@ from . import launchplan
 SAMPLE_OFFSETS_SECONDS = (0.0, 2.0, 10.0)
 FLAVOUR_BUILDS = ("stock-5.5.0", "stock-5.4.0", "fork")
 STAGE_BUILD = "upstream-fixes"
-KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD,)
+DIAG_BUILD = "upstream-diag"
+STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage"}
+KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD)
 DEFAULT_BUILD = "stock-5.5.0"
 BUILD_ENVIRONMENT_VARIABLE = "CU_DESYNC_TOGETHER"
 SKIP_ACTION_MUTATION = "skip-client-action"
@@ -33,7 +35,7 @@ def parse_build(text):
 
 
 def together_choice(build):
-    return "stage" if build == STAGE_BUILD else "flavour:" + build
+    return STAGE_CHOICES.get(build) or "flavour:" + build
 
 
 def sha256_of_bytes(content):
@@ -544,6 +546,8 @@ def format_series_report(report):
             lines.append("  %s swings: %d, host copy of the client body to its real position, mean %s, max %s world units" % (label, found["count"], found["meanGap"], found["maxGap"]))
     for hint in report.get("hints", []):
         lines.append("  hint: %s" % hint)
+    for line in report.get("diagBlock", {}).get("textLines", []):
+        lines.append("  " + line)
     previous = None
     for sample in report["samples"]:
         state = (sample["host"], sample["client"])

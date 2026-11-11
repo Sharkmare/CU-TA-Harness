@@ -2,8 +2,8 @@ import os
 import time
 import unittest
 
-from casualtieslink import desync, launchplan
-from casualtieslink.instances import ScenarioGames, flavour_zip, stage_directory
+from casualtieslink import desync, diagblock, launchplan
+from casualtieslink.instances import ScenarioGames, diag_stage_directory, flavour_zip, stage_directory
 from casualtieslink.launcher import mp_arguments
 
 from . import rig
@@ -16,8 +16,16 @@ WORLD_WAIT_SECONDS = 150.0
 SETTLE_SECONDS = 10.0
 TOGETHER_DLL_RELATIVE = os.path.join("BepInEx", "plugins", "Together", "CasualtiesMP.dll")
 
+def expected_hash(build):
+    if build == desync.STAGE_BUILD:
+        return desync.stage_dll_hash(stage_directory())
+    if build == desync.DIAG_BUILD:
+        return desync.stage_dll_hash(diag_stage_directory())
+    return desync.flavour_dll_hash(flavour_zip(), build)
+
+
 BUILD = desync.parse_build(os.environ.get(desync.BUILD_ENVIRONMENT_VARIABLE))
-EXPECTED_HASH = desync.stage_dll_hash(stage_directory()) if BUILD == desync.STAGE_BUILD else desync.flavour_dll_hash(flavour_zip(), BUILD)
+EXPECTED_HASH = expected_hash(BUILD)
 PROFILES = desync.profiles_from_environment()
 REPEAT = desync.repeat_from_environment()
 LAUNCH_ID = desync.launch_id_from_environment()
@@ -80,13 +88,17 @@ def series_method(run):
 
     def method(self):
         prepare_run(self, run.profile)
+        log_marks = {which: len(GAMES.log_text(which).splitlines()) for which in ("host", "client")}
         try:
             observation = desync.observe_series(scenario, self.host, self.client, perform_action=not rig.mutation_active(desync.SKIP_ACTION_MUTATION))
         finally:
             restore_network()
-        host_counts = desync.host_log_counts(GAMES.log_text("host"))
+        run_logs = {which: "\n".join(GAMES.log_text(which).splitlines()[log_marks[which]:]) for which in ("host", "client")}
+        host_counts = desync.host_log_counts(run_logs["host"])
         report = desync.describe_series(observation, BUILD, EXPECTED_HASH, self.game_version, run.profile.delay_ms, run.profile.jitter_ms, host_counts,
                                         LAUNCH_ID, run.repetition, run.profile.as_dict(), GAMES.proxy.seed)
+        if BUILD == desync.DIAG_BUILD:
+            report["diagBlock"] = diagblock.summarise_run(run_logs["client"], run_logs["host"], observation.hit_times)
         text = desync.format_series_report(report)
         print("\n" + text)
         desync.save_series_report(report, REPORT_DIRECTORY)
@@ -104,7 +116,7 @@ class DesyncMixin:
         if EXPECTED_HASH == desync.UNKNOWN_HASH:
             raise unittest.SkipTest("no DLL found for build %s (set CU_FLAVOUR_ZIP or CU_UPSTREAM_STAGE)" % BUILD)
         try:
-            cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=0.0)
+            cls.host, cls.client = GAMES.start([], [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=0.0, probe=cls.probe)
             if not ready_up([cls.host, cls.client]):
                 raise AssertionError("the lobby ready gate did not accept both players")
             cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
@@ -143,7 +155,7 @@ def build_classes():
     for group in groups:
         if ONLY_GROUP and group != ONLY_GROUP:
             continue
-        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group]}
+        members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group == "hand-mining"}
         for run in desync.expand_runs([scenario for scenario in SCENARIOS if scenario.group == group], PROFILES, REPEAT):
             members[run.name] = scenario_method(run)
         for run in desync.expand_runs([scenario for scenario in SERIES_SCENARIOS if scenario.group == group], PROFILES, REPEAT):

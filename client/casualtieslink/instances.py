@@ -23,6 +23,10 @@ FLAVOUR_ZIP_ENVIRONMENT_VARIABLE = "CU_FLAVOUR_ZIP"
 FLAVOUR_PREFIX = "flavour:"
 STAGE_ENVIRONMENT_VARIABLE = "CU_UPSTREAM_STAGE"
 STAGE_CHOICE = "stage"
+DIAG_STAGE_CHOICE = "diag-stage"
+DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE"
+TOGETHER_CONFIG_NAME = "CasualtiesMP.cfg"
+PROBE_CONFIG_TEXT = "[Probe]\n\nFindTheBug = true\n"
 FLAVOUR_OPTION = "--mp-flavour"
 FLAVOUR_PATCHER = os.path.join("BepInEx", "patchers", "CT_FlavourSwitch.dll")
 FLAVOUR_FOLDER = os.path.join("BepInEx", "together-flavours")
@@ -213,8 +217,15 @@ def stage_directory():
     return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage")
 
 
-def install_stage_together(copy):
-    source = os.path.join(stage_directory(), "plugins", TOGETHER_FOLDER)
+def diag_stage_directory():
+    explicit = os.environ.get(DIAG_STAGE_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(mods_root(), "casualties-together-local", "build", "diag_stage")
+
+
+def install_stage_together(copy, directory=None):
+    source = os.path.join(directory or stage_directory(), "plugins", TOGETHER_FOLDER)
     if not os.path.isfile(os.path.join(source, "CasualtiesMP.dll")):
         raise FileNotFoundError(os.path.join(source, "CasualtiesMP.dll"))
     target = os.path.join(copy, PLUGINS_RELATIVE, TOGETHER_FOLDER)
@@ -233,7 +244,17 @@ def remove_flavour_switch(copy):
         os.remove(patcher)
 
 
+def write_probe_config(copy):
+    folder = os.path.join(copy, CONFIG_RELATIVE)
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, TOGETHER_CONFIG_NAME), "w") as handle:
+        handle.write(PROBE_CONFIG_TEXT)
+
+
 def clear_managed_plugins(copy):
+    together_config = os.path.join(copy, CONFIG_RELATIVE, TOGETHER_CONFIG_NAME)
+    if os.path.exists(together_config):
+        os.remove(together_config)
     for name in MANAGED_FOLDERS:
         folder = os.path.join(copy, PLUGINS_RELATIVE, name)
         if os.path.isdir(folder):
@@ -265,6 +286,8 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_fork_together(copy)
     elif together == STAGE_CHOICE:
         installed["together"] = install_stage_together(copy)
+    elif together == DIAG_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, diag_stage_directory())
     elif flavour_name(together):
         installed["together"] = install_flavour_package(copy)
     elif together != "keep":
@@ -317,11 +340,14 @@ class ScenarioGames:
         ensure_mp_enabled()
         self.prepared = True
 
-    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock", host_together=None, client_together=None, delay_ms=None, jitter_ms=0.0, control_port=None):
+    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock", host_together=None, client_together=None, delay_ms=None, jitter_ms=0.0, control_port=None, probe=False):
         host_together = host_together or together
         client_together = client_together or together
         configure_instance(self.host_copy, host_plugins, together=host_together)
         configure_instance(self.client_copy, client_plugins, together=client_together)
+        if probe:
+            write_probe_config(self.host_copy)
+            write_probe_config(self.client_copy)
         host_extra = list(host_extra) + flavour_arguments(host_together)
         client_extra = list(client_extra) + flavour_arguments(client_together)
         self.host = GameProcess(HOST_PORT, host_arguments(host_extra), directory=self.host_copy, manage_save=False,

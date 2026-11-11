@@ -79,7 +79,8 @@
         "unit.test_run_arguments",
         "unit.test_udpproxy",
         "unit.test_desync_series",
-        "unit.test_launchplan"
+        "unit.test_launchplan",
+        "unit.test_diagblock"
       ],
       "needs_game": false
     },
