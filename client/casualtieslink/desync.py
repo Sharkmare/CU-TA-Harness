@@ -325,11 +325,11 @@ def host_step_times(samples):
         block, counter = sample["host"]
         if block != EMPTY_BLOCK and counter > previous + COUNTER_DROP_EPSILON:
             times.append(sample["t"])
-        if block != EMPTY_BLOCK:
-            previous = counter
-        elif previous > 0.0:
+        elif block != EMPTY_BLOCK and counter == 0.0 and previous > 0.0:
             times.append(sample["t"])
-            previous = 0.0
+        elif block == EMPTY_BLOCK and previous > 0.0:
+            times.append(sample["t"])
+        previous = counter if block != EMPTY_BLOCK else 0.0
     return times
 
 

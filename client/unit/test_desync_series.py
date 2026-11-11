@@ -174,6 +174,11 @@ class SwingClassificationTests(unittest.TestCase):
         samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.3, [8, 19.0], [8, 19.0]), sample(1.0, [0, 0.0], [0, 0.0])]
         self.assertEqual(desync.classify_swings([0.0, 0.7], samples, 0.0), [True, True])
 
+    def test_a_counter_cleared_before_the_block_reads_gone_still_counts_the_breaking_swing(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.4, [8, 58.0], [8, 0.0]), sample(1.5, [8, 0.0], [8, 58.0]), sample(1.9, [0, 0.0], [0, 58.0])]
+        self.assertEqual(desync.host_step_times(samples), [0.4, 1.5])
+        self.assertEqual(desync.classify_swings([0.0, 1.2], samples, 100.0), [True, True])
+
     def test_the_gap_summary_splits_accepted_from_dropped(self):
         log = [{"gap": 0.1}, {"gap": 0.9}, {"gap": 0.3}]
         summary = desync.gap_summary(log, [True, False, True])
