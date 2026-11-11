@@ -9,7 +9,7 @@ from .fake_link import FakeFailure, FakeLink
 
 def candidate(identifier, name="res: crate)", health=150.0, x=0.0, physics=True, animal=False, body="Dynamic", cant_hit=False, indestructible=False):
     return {"handle": "id:%d" % identifier, "id": identifier, "name": "SyncInfo(building, id: %d, %s" % (identifier, name), "position": {"x": x, "y": 0.0},
-            "health": health, "cantHit": cant_hit, "indestructible": indestructible, "animal": animal, "rigidbodyType": body, "layer": 8, "physicsActive": physics}
+            "health": health, "startHealth": health, "cantHit": cant_hit, "indestructible": indestructible, "animal": animal, "rigidbodyType": body, "layer": 8, "physicsActive": physics}
 
 
 class HostAttributes:
@@ -75,19 +75,35 @@ class UsableTests(unittest.TestCase):
     def test_each_exclusion_alone_makes_a_target_unusable(self):
         for item in (candidate(1, physics=False), candidate(2, physics=None), candidate(3, animal=True), candidate(4, body="Kinematic"),
                      candidate(5, "res: corpse(Clone))"), candidate(6, cant_hit=True), candidate(7, indestructible=True),
-                     candidate(8, health=20.0), candidate(9, health=900.0)):
-            self.assertFalse(world.usable(item, used=set()), item["id"])
-        self.assertTrue(world.usable(candidate(10), used=set()))
+                     candidate(8, health=20.0), candidate(9, health=3000.0)):
+            self.assertFalse(world.usable(item, skipped=set()), item["id"])
+        self.assertTrue(world.usable(candidate(10), skipped=set()))
 
-    def test_a_used_target_is_not_reused(self):
-        self.assertFalse(world.usable(candidate(11), used={11}))
+    def test_a_skipped_target_is_not_usable(self):
+        self.assertFalse(world.usable(candidate(11), skipped={11}))
+
+    def test_a_crate_with_a_thousand_health_is_in_range(self):
+        self.assertTrue(world.usable(candidate(12, health=1000.0), skipped=set()))
+        self.assertTrue(world.usable(candidate(13, health=2000.0), skipped=set()))
 
     def test_the_nearest_usable_one_is_chosen(self):
-        found = world.choose([candidate(1, x=9.0), candidate(2, x=2.0), candidate(3, x=1.0, animal=True)], {"x": 0.0, "y": 0.0}, used=set())
+        found = world.choose([candidate(1, x=9.0), candidate(2, x=2.0), candidate(3, x=1.0, animal=True)], {"x": 0.0, "y": 0.0}, skipped=set(), uses=world.collections.Counter())
         self.assertEqual(found["id"], 2)
 
+    def test_the_least_used_target_is_chosen_before_a_nearer_one(self):
+        uses = world.collections.Counter({1: 2, 2: 1})
+        found = world.choose([candidate(1, x=1.0), candidate(2, x=5.0), candidate(3, x=9.0)], {"x": 0.0, "y": 0.0}, skipped=set(), uses=uses)
+        self.assertEqual(found["id"], 3)
+
+    def test_four_targets_chosen_round_robin_cover_twelve_runs_evenly(self):
+        pool = [candidate(index, x=float(index)) for index in range(1, 5)]
+        uses = world.collections.Counter()
+        for _ in range(12):
+            uses[world.choose(pool, {"x": 0.0, "y": 0.0}, skipped=set(), uses=uses)["id"]] += 1
+        self.assertEqual(sorted(uses.values()), [3, 3, 3, 3])
+
     def test_nothing_usable_gives_none(self):
-        self.assertIsNone(world.choose([candidate(1, animal=True)], {"x": 0.0, "y": 0.0}, used=set()))
+        self.assertIsNone(world.choose([candidate(1, animal=True)], {"x": 0.0, "y": 0.0}, skipped=set(), uses=world.collections.Counter()))
 
 
 class GateTests(unittest.TestCase):
@@ -163,6 +179,99 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(target["position"], {"x": 0.3, "y": 0.0})
 
 
+class ReuseTests(unittest.TestCase):
+    def setUp(self):
+        world.reset_launch_state()
+        self.addCleanup(world.reset_launch_state)
+        self.state = {"host": 150.0, "client": 150.0}
+        self.host_game = mock.Mock()
+        self.client_game = mock.Mock()
+        self.host_game.set.side_effect = lambda handle, path, value: self.state.__setitem__("host", value)
+        self.client_game.set.side_effect = lambda handle, path, value: self.state.__setitem__("client", value) if path == "health" else None
+        clock = iter(x * 0.25 for x in range(1, 100000))
+
+        def optional_get(game, handle, path, nonpublic=False):
+            if path == "health":
+                return self.state["host" if game is self.host_game else "client"]
+            return None
+
+        for patch in (mock.patch.object(world.time, "sleep", lambda seconds: None), mock.patch.object(world.time, "time", lambda: next(clock)),
+                      mock.patch.object(world, "host_position", lambda host, handle: self.position),
+                      mock.patch.object(world.base, "player_position", lambda client: {"x": self.position["x"] - 1.5, "y": 0.0}),
+                      mock.patch.object(world.base, "rows_near", lambda *args, **kwargs: [{"object": {"id": 5}}]),
+                      mock.patch.object(world, "optional_get", optional_get)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.position = {"x": 0.0, "y": 0.0}
+
+    def setup_target(self):
+        return world.try_setup(self.host_game, self.client_game, candidate(5, health=150.0))
+
+    def test_a_depleted_target_is_reset_to_its_start_health_through_the_host(self):
+        self.state["host"] = 40.0
+        target, reason = self.setup_target()
+        self.assertIsNone(reason)
+        self.host_game.set.assert_called_once_with("id:5", "health", 150.0)
+        self.assertEqual((target["hostHealthReset"], target["hostHealthBeforeReset"], target["startHealth"]), (True, 40.0, 150.0))
+
+    def test_a_full_health_target_is_not_written_to(self):
+        target, reason = self.setup_target()
+        self.host_game.set.assert_not_called()
+        self.assertFalse(target["hostHealthReset"])
+
+    def test_a_host_that_refuses_the_reset_fails_the_setup(self):
+        self.state["host"] = 40.0
+        self.host_game.set.side_effect = lambda handle, path, value: None
+        target, reason = self.setup_target()
+        self.assertIsNone(target)
+        self.assertIn("stayed at 40.0", reason)
+
+    def test_a_client_whose_copy_is_still_depleted_is_aligned_and_it_is_recorded(self):
+        self.state["client"] = 40.0
+        target, reason = self.setup_target()
+        self.client_game.set.assert_any_call("id:5", "health", 150.0)
+        self.assertEqual((target["clientHealthReset"], target["clientHealthBeforeReset"]), (True, 40.0))
+
+    def test_a_target_shoved_over_half_a_unit_from_its_first_position_is_skipped_for_the_launch(self):
+        self.assertIsNone(self.setup_target()[1])
+        self.position = {"x": 0.9, "y": 0.0}
+        target, reason = self.setup_target()
+        self.assertIsNone(target)
+        self.assertIn("shoved", reason)
+        self.assertIn(5, world.SKIPPED)
+
+    def test_a_target_shoved_less_than_half_a_unit_is_reused(self):
+        self.assertIsNone(self.setup_target()[1])
+        self.position = {"x": 0.3, "y": 0.0}
+        self.assertIsNone(self.setup_target()[1])
+        self.assertNotIn(5, world.SKIPPED)
+
+
+class ActTests(unittest.TestCase):
+    def test_every_swing_records_the_displacement_of_the_target_and_the_probe(self):
+        positions = iter([{"x": 0.0, "y": 0.0}, {"x": 0.2, "y": 0.0}, {"x": 0.2, "y": 0.0}, {"x": 0.2, "y": 0.0}] + [{"x": 0.2, "y": 0.0}] * 20)
+        healths = {"host": 100.0, "client": 100.0}
+
+        def optional_get(game, handle, path, nonpublic=False):
+            return healths["host" if game is host else "client"]
+
+        host, client = mock.Mock(), mock.Mock()
+        client.get.return_value = 0.0
+
+        def swing(game, aim):
+            healths["host"] -= 19.0
+            healths["client"] -= 19.0
+            return True
+
+        context = {"host": host, "hostHandle": "id:5", "clientHandle": "id:5", "position": {"x": 0.0, "y": 0.0}, "measurements": []}
+        with mock.patch.object(world, "host_position", lambda game, handle: next(positions)), mock.patch.object(world, "optional_get", optional_get),                 mock.patch.object(world.hooks, "fire_one_swing", swing), mock.patch.object(world.time, "sleep", lambda seconds: None),                 mock.patch.object(world.evidence, "read_log", lambda which: ""), mock.patch.object(world, "collider_at", lambda game, point: {"name": "crate"}),                 mock.patch.object(world.base, "player_position", lambda game: {"x": -1.5, "y": 0.0}):
+            world.act(client, context)
+        first = context["measurements"][0]
+        self.assertEqual((first["hostDelta"], first["clientDelta"], first["displacement"], first["colliderAtAim"]), (19.0, 19.0, 0.2, {"name": "crate"}))
+        self.assertEqual(len(context["measurements"]), world.SWINGS)
+        self.assertTrue(context["valid"])
+
+
 class PrepareTests(unittest.TestCase):
     def setUp(self):
         world.reset_launch_state()
@@ -182,7 +291,7 @@ class PrepareTests(unittest.TestCase):
     def test_a_failed_pick_is_recorded_and_the_next_one_is_tried(self):
         context = self.prepared([(None, "first one moved"), self.good()])
         self.assertEqual(context["target"]["skippedPicks"], ["first one moved"])
-        self.assertEqual(len(world.USED), 2)
+        self.assertEqual(sum(world.USES.values()), 2)
 
     def test_every_pick_failing_raises_with_all_reasons(self):
         with self.assertRaises(AssertionError) as caught:

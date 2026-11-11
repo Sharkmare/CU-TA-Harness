@@ -10,7 +10,7 @@ from . import evidence_scenarios as evidence
 from . import hook_scenarios as hooks
 
 GROUP = "hook-evidence"
-HEALTH_RANGE = (100.0, 400.0)
+HEALTH_RANGE = (100.0, 2500.0)
 HOST_LIST_LIMIT = 400
 MAX_START_DISTANCE = 3.0
 MAX_TARGET_MOVE = 0.5
@@ -20,20 +20,26 @@ TELEPORT_WAIT_SECONDS = 4.0
 POLL_SECONDS = 0.25
 SETTLE_SECONDS = 0.6
 MAX_PICKS = 6
-MIN_CANDIDATES = 8
-VALID_RUNS_WANTED = 10
+MIN_CANDIDATES = 4
+VALID_RUNS_WANTED = 12
+HEALTH_SYNC_SECONDS = 0.5
+HEALTH_EPSILON = 0.01
 SWINGS = 5
 SYNCHRONIZER_TYPE = "static:ScavMPBuildingSynchronizer"
 PHYSICS_ENGINE_TYPE = "static:UnityEngine.Physics2D"
 KINEMATIC = "Kinematic"
-USED = set()
+USES = collections.Counter()
+SKIPPED = set()
+FIRST_POSITION = {}
 PHYSICS_COUNTS = collections.Counter()
 VALID_RUNS = [0]
 SURVEY = {"candidates": None, "rows": 0}
 
 
 def reset_launch_state():
-    USED.clear()
+    USES.clear()
+    SKIPPED.clear()
+    FIRST_POSITION.clear()
     PHYSICS_COUNTS.clear()
     VALID_RUNS[0] = 0
     SURVEY["candidates"] = None
@@ -63,7 +69,7 @@ def describe_candidate(host, row):
             "cantHit": bool(optional_get(host, handle, "cantHit")), "indestructible": bool(optional_get(host, handle, "indestructible")),
             "animal": bool(optional_get(host, handle, "animal")),
             "rigidbodyType": optional_get(host, handle, "rb.bodyType", nonpublic=True), "layer": optional_get(host, handle, "gameObject.layer"),
-            "physicsActive": physics_active(host, handle)}
+            "physicsActive": physics_active(host, handle), "startHealth": float(health)}
 
 
 def host_physics_candidates(host, anchor):
@@ -89,36 +95,36 @@ def kinds_summary(candidates):
     return sorted(([kind, health, animal, body, count] for (kind, health, animal, body), count in counts.items()), key=lambda row: (-row[4], row[0]))
 
 
-def usable(candidate, used=USED, health_range=HEALTH_RANGE):
+def usable(candidate, skipped=SKIPPED, health_range=HEALTH_RANGE):
     low, high = health_range
     return (candidate["physicsActive"] is True and not candidate["animal"] and candidate["rigidbodyType"] != KINEMATIC
             and "corpse" not in candidate["name"].lower() and not candidate["cantHit"] and not candidate["indestructible"]
-            and low <= candidate["health"] <= high and candidate["id"] not in used)
+            and low <= candidate["health"] <= high and candidate["id"] not in skipped)
 
 
 def survey(host, anchor):
     if SURVEY["candidates"] is None:
         SURVEY["candidates"], SURVEY["rows"] = host_physics_candidates(host, anchor)
         print("\nSURVEY: %d buildings in the host list, %d physics-active, %d usable" % (
-            SURVEY["rows"], len(SURVEY["candidates"]), len([item for item in SURVEY["candidates"] if usable(item, used=set())])))
+            SURVEY["rows"], len(SURVEY["candidates"]), len([item for item in SURVEY["candidates"] if usable(item, skipped=set())])))
         for row in kinds_summary(SURVEY["candidates"]):
             print("SURVEY kind %s health %s animal %s body %s count %d" % tuple(row))
     return SURVEY["candidates"]
 
 
 def enough_candidates(candidates):
-    usable_now = [item for item in candidates if usable(item, used=set())]
+    usable_now = [item for item in candidates if usable(item, skipped=set())]
     if len(usable_now) < MIN_CANDIDATES:
         raise AssertionError("SURVEY: only %d usable physics-active, non-animal buildings with health %s (need %d); %d physics-active in the host list; kinds %s" % (
             len(usable_now), HEALTH_RANGE, MIN_CANDIDATES, len(candidates), kinds_summary(candidates)[:12]))
     return usable_now
 
 
-def choose(candidates, anchor, used=USED):
-    pool = [item for item in candidates if usable(item, used)]
+def choose(candidates, anchor, skipped=SKIPPED, uses=USES):
+    pool = [item for item in candidates if usable(item, skipped)]
     if not pool:
         return None
-    return min(pool, key=lambda item: base.distance(item["position"], anchor))
+    return min(pool, key=lambda item: (uses[item["id"]], base.distance(item["position"], anchor)))
 
 
 def host_position(host, handle):
@@ -152,10 +158,37 @@ def bring_client_to(host, client, candidate):
     return None, TELEPORT_ATTEMPTS
 
 
+def restore_host_health(host, fresh):
+    start = fresh["startHealth"]
+    if fresh["health"] >= start - HEALTH_EPSILON:
+        return False, None
+    host.set(fresh["handle"], "health", start)
+    time.sleep(HEALTH_SYNC_SECONDS)
+    after = optional_get(host, fresh["handle"], "health")
+    if after is None or float(after) < start - HEALTH_EPSILON:
+        return False, "%s: the host health stayed at %s after setting %s" % (kind_of(fresh), after, start)
+    return True, None
+
+
+def align_client_health(client, client_handle, start):
+    seen = optional_get(client, client_handle, "health")
+    if seen is not None and abs(float(seen) - start) <= HEALTH_EPSILON:
+        return False, seen
+    client.set(client_handle, "health", start)
+    return True, seen
+
+
 def try_setup(host, client, chosen):
     fresh = refresh(host, chosen)
-    if fresh is None or not usable(fresh, used=set()):
-        return None, "%s could not be read or is no longer usable" % kind_of(chosen)
+    if fresh is None:
+        return None, "%s could not be read" % kind_of(chosen)
+    first_position = FIRST_POSITION.setdefault(chosen["id"], fresh["position"])
+    if base.distance(fresh["position"], first_position) > MAX_TARGET_MOVE:
+        SKIPPED.add(chosen["id"])
+        return None, "%s was shoved from %s to %s since it was first picked, skipped for the rest of the launch" % (kind_of(chosen), first_position, fresh["position"])
+    host_reset, failure = restore_host_health(host, fresh)
+    if failure:
+        return None, failure
     client_row, attempts = bring_client_to(host, client, fresh)
     if client_row is None:
         return None, "%s: the client never reached it within %.1f with it loaded after %d teleports (client at %s, building at %s)" % (
@@ -167,7 +200,11 @@ def try_setup(host, client, chosen):
     distance = base.distance(base.player_position(client), settled)
     if distance > MAX_START_DISTANCE:
         return None, "%s: the client is %.2f away at the first swing" % (kind_of(chosen), distance)
-    return dict(fresh, position=settled, distance=round(distance, 2), clientHandle="id:%d" % client_row["object"]["id"], teleports=attempts), None
+    client_handle = "id:%d" % client_row["object"]["id"]
+    client_reset, client_seen = align_client_health(client, client_handle, fresh["startHealth"])
+    return dict(fresh, position=settled, distance=round(distance, 2), clientHandle=client_handle, teleports=attempts, health=fresh["startHealth"],
+                hostHealthReset=host_reset, hostHealthBeforeReset=fresh["health"], clientHealthReset=client_reset, clientHealthBeforeReset=client_seen,
+                timesUsedBefore=USES[chosen["id"]] - 1), None
 
 
 def prepare(host, client):
@@ -182,13 +219,13 @@ def prepare(host, client):
         chosen = choose(candidates, base.player_position(client))
         if chosen is None:
             break
-        USED.add(chosen["id"])
+        USES[chosen["id"]] += 1
         target, reason = try_setup(host, client, chosen)
         if target is None:
             skipped.append(reason)
             continue
         PHYSICS_COUNTS[True] += 1
-        target = dict(target, healthBefore=target["health"], skippedPicks=skipped, surveyCandidates=len(candidates))
+        target = dict(target, healthBefore=target["startHealth"], skippedPicks=skipped, surveyCandidates=len(candidates), distinctTargets=len(USES))
         return {"position": target["position"], "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"],
                 "target": target, "measurements": []}
     raise AssertionError("no setup succeeded in %d picks: %s" % (MAX_PICKS, skipped))
@@ -225,11 +262,12 @@ def act(client, context):
         fired = hooks.fire_one_swing(client, aim)
         cooldown_after = float(client.get("player", "attackCooldown", depth=0))
         time.sleep(hooks.SETTLE_AFTER_SWING_SECONDS)
+        moved_to = current_position(host, context)
         after = (health_by_handle(host, context["hostHandle"]), health_by_handle(client, context["clientHandle"]))
         lines = {which: evidence.new_lines(marks[which], evidence.read_log(which)) for which in ("host", "client")}
         entries.append({"swing": index, "fired": fired, "aim": aim, "host": [before[0], after[0]], "client": [before[1], after[1]],
                         "hostDelta": round(before[0] - after[0], 3), "clientDelta": round(before[1] - after[1], 3),
-                        "cooldown": [round(cooldown_before, 3), round(cooldown_after, 3)], "colliderAtAim": probe,
+                        "cooldown": [round(cooldown_before, 3), round(cooldown_after, 3)], "colliderAtAim": probe, "displacement": round(base.distance(aim, moved_to), 3),
                         "clientDistance": round(base.distance(base.player_position(client), aim), 2),
                         "hostLines": evidence.evidence_lines(lines["host"]), "clientLines": evidence.evidence_lines(lines["client"]),
                         "hostExceptions": evidence.exception_lines(lines["host"]), "clientExceptions": evidence.exception_lines(lines["client"])})
