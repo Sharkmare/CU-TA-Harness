@@ -203,6 +203,28 @@ class RestoreTests(unittest.TestCase):
         self.assertEqual((result["hostTotalBefore"], result["hostTotal"], result["clientTotal"]), (18.0, 150.0, 150.0))
         self.assertEqual(self.client.sets, [])
 
+    def test_a_client_copy_that_sits_ten_below_the_host_at_full_health_is_restored_when_it_returns_to_that_level(self):
+        self.client = FakeBody([(45.0, 49.4), (30.0, 15.0)])
+        self.client.mirror = None
+        pvp_banded.restore_victim(self.host, self.client, self.context)
+        self.assertEqual(pvp_banded.FULL_HEALTH["clientTotal"], 139.4)
+        self.host.limbs = [[10.0, 5.0], [0.0, 3.0]]
+        self.client.limbs = [[10.0, 5.0], [0.0, 3.0]]
+        reads = {"count": 0}
+        original = self.client.get
+
+        def get_with_sync(handle, path, depth=0):
+            reads["count"] += 1
+            if reads["count"] > 12:
+                self.client.limbs = [[45.0, 49.4], [30.0, 15.0]]
+            return original(handle, path, depth)
+
+        self.client.get = get_with_sync
+        result = pvp_banded.restore_victim(self.host, self.client, self.context)
+        self.assertTrue(result["ok"])
+        self.assertAlmostEqual(result["clientTotal"], 139.4)
+        self.assertEqual(result["hostTotal"], 150.0)
+
     def test_a_client_copy_that_never_catches_up_is_reported_as_not_restored(self):
         pvp_banded.restore_victim(self.host, self.client, self.context)
         self.host.limbs = [[10.0, 5.0], [0.0, 3.0]]
@@ -210,7 +232,7 @@ class RestoreTests(unittest.TestCase):
         self.client.limbs = [[10.0, 5.0], [0.0, 3.0]]
         result = pvp_banded.restore_victim(self.host, self.client, self.context)
         self.assertFalse(result["ok"])
-        self.assertEqual((result["hostTotal"], result["clientTotal"]), (150.0, 18.0))
+        self.assertEqual((result["hostTotal"], result["clientTotal"], result["fullClientTotal"]), (150.0, 18.0, 150.0))
 
     def test_prepare_marks_the_run_when_the_restore_failed_and_records_the_state_in_the_target(self):
         pvp_banded.restore_victim(self.host, self.client, self.context)
@@ -234,7 +256,7 @@ class RestoreTests(unittest.TestCase):
         crates.reset_launch_state()
         self.addCleanup(crates.reset_launch_state)
         fired = []
-        context = {"host": mock.Mock(), "restoreFailure": {"fullTotal": 150.0, "hostTotal": 150.0, "clientTotal": 18.0}, "measurements": []}
+        context = {"host": mock.Mock(), "restoreFailure": {"fullTotal": 150.0, "hostTotal": 150.0, "fullClientTotal": 139.0, "clientTotal": 18.0}, "measurements": []}
         with mock.patch.object(pvp_banded.hooks, "fire_one_swing", lambda game, aim: fired.append(1)):
             pvp_banded.act(mock.Mock(), context)
         self.assertEqual(fired, [])

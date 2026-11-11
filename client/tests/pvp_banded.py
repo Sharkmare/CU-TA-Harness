@@ -28,11 +28,11 @@ RESTORE_SETTLE_SECONDS = 1.0
 RESTORE_SYNC_SECONDS = 4.0
 RESTORE_POLL_SECONDS = 0.5
 LIMB_SCAN_LIMIT = 30
-FULL_HEALTH = {"limbs": None, "total": None}
+FULL_HEALTH = {"limbs": None, "total": None, "clientTotal": None}
 
 
 def reset_launch_state():
-    FULL_HEALTH.update({"limbs": None, "total": None})
+    FULL_HEALTH.update({"limbs": None, "total": None, "clientTotal": None})
 
 
 def victim_position(game, handle):
@@ -59,7 +59,8 @@ def restore_victim(host, client, context):
     if FULL_HEALTH["limbs"] is None:
         FULL_HEALTH["limbs"] = read_limb_values(host, handle)
         FULL_HEALTH["total"] = hooks.limb_total(host, handle)
-        return {"restored": False, "firstRun": True, "fullTotal": FULL_HEALTH["total"], "hostTotal": FULL_HEALTH["total"], "clientTotal": hooks.limb_total(client, context["clientVictim"])}
+        FULL_HEALTH["clientTotal"] = hooks.limb_total(client, context["clientVictim"])
+        return {"restored": False, "firstRun": True, "fullTotal": FULL_HEALTH["total"], "fullClientTotal": FULL_HEALTH["clientTotal"], "hostTotal": FULL_HEALTH["total"], "clientTotal": FULL_HEALTH["clientTotal"]}
     before = hooks.limb_total(host, handle)
     for index, (skin, muscle) in enumerate(FULL_HEALTH["limbs"]):
         host.set(handle, "limbs[%d].skinHealth" % index, skin)
@@ -68,12 +69,12 @@ def restore_victim(host, client, context):
     deadline = time.time() + RESTORE_SYNC_SECONDS
     host_total = hooks.limb_total(host, handle)
     client_total = hooks.limb_total(client, context["clientVictim"])
-    while time.time() < deadline and abs(client_total - FULL_HEALTH["total"]) > RESTORE_TOLERANCE:
+    while time.time() < deadline and abs(client_total - FULL_HEALTH["clientTotal"]) > RESTORE_TOLERANCE:
         time.sleep(RESTORE_POLL_SECONDS)
         host_total = hooks.limb_total(host, handle)
         client_total = hooks.limb_total(client, context["clientVictim"])
-    return {"restored": True, "firstRun": False, "fullTotal": FULL_HEALTH["total"], "hostTotalBefore": before, "hostTotal": host_total, "clientTotal": client_total,
-            "ok": abs(host_total - FULL_HEALTH["total"]) <= RESTORE_TOLERANCE and abs(client_total - FULL_HEALTH["total"]) <= RESTORE_TOLERANCE}
+    return {"restored": True, "firstRun": False, "fullTotal": FULL_HEALTH["total"], "fullClientTotal": FULL_HEALTH["clientTotal"], "hostTotalBefore": before, "hostTotal": host_total,
+            "clientTotal": client_total, "ok": abs(host_total - FULL_HEALTH["total"]) <= RESTORE_TOLERANCE and abs(client_total - FULL_HEALTH["clientTotal"]) <= RESTORE_TOLERANCE}
 
 
 def prepare(host, client):
@@ -142,7 +143,8 @@ def act(client, context):
 def check(context):
     lost = context.get("restoreFailure")
     if lost:
-        message = "INVALID: the victim's limbs could not be restored before the run (full %.2f, host %.2f, client %.2f)" % (lost["fullTotal"], lost["hostTotal"], lost["clientTotal"])
+        message = "INVALID: the victim's limbs could not be restored before the run (full host %.2f, host %.2f; full client %.2f, client %.2f)" % (
+            lost["fullTotal"], lost["hostTotal"], lost["fullClientTotal"], lost["clientTotal"])
         crates.record_failure(RESTORE_FAILURE_CATEGORY, message)
         return [message]
     failure = context.get("bandFailure")
