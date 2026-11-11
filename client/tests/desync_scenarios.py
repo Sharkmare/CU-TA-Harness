@@ -2,7 +2,7 @@ import math
 import unittest
 import time
 
-from casualtieslink.desync import Scenario
+from casualtieslink.desync import Scenario, SeriesScenario
 
 SETTLE_SECONDS = 3.0
 APPEAR_TIMEOUT_SECONDS = 20.0
@@ -263,34 +263,22 @@ def crack_act(client, context):
     swing(client, context["position"])
 
 
-def numbers_in(value):
-    if isinstance(value, dict):
-        yield value
-        for child in value.values():
-            yield from numbers_in(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield from numbers_in(child)
-
-
 def block_cell(game, position):
     half_width = int(game.get("world", "halfWidth", depth=0))
     half_height = int(game.get("world", "halfHeight", depth=0))
     return {"x": int(position["x"] + half_width), "y": int(position["y"] + half_height)}
 
 
+def crack_counter(game, context):
+    cell = context.get("cell") or block_cell(game, context["position"])
+    found = game.call("invoke", target="world", method="GetBlockDamage", args=[cell], types=["Vector2Int"])
+    if not isinstance(found, dict) or "damage" not in found:
+        return 0.0
+    return round(float(found["damage"]), 2)
+
+
 def crack_read(game, context):
     return [block_value(game, context["position"]), crack_counter(game, context)]
-
-
-def crack_counter(game, context):
-    cell = block_cell(game, context["position"])
-    rows = game.get("world", "blockDamages", depth=3)
-    for node in numbers_in(rows):
-        cell_node = node.get("pos")
-        if isinstance(cell_node, dict) and cell_node.get("x") == cell["x"] and cell_node.get("y") == cell["y"] and "damage" in node:
-            return round(float(node["damage"]), 2)
-    return 0.0
 
 
 def nearest_building(game, anchor):
@@ -458,6 +446,59 @@ SCENARIOS = [
              container_prepare, load_act, container_children, more),
     Scenario("container_unload_by_client", "the client takes an item out of a container; the container's item count falls on both",
              unload_prepare, unload_act, container_children, fewer),
+]
+
+
+HAND_BLOCK_HEALTH_RANGE = (60.0, 400.0)
+HAND_MAX_HITS = 40
+HAND_REACH_COLUMNS = 3
+
+
+def block_health(game, block_id):
+    info = game.call("invoke", target="world", method="GetBlockInfo", args=[block_id], types=["UInt16"])
+    return float(info["health"])
+
+
+def empty_the_hand(client):
+    slot = hand_slot(client)
+    if client.call("invoke", target="player", method="GetItem", args=[slot], types=["Int32"]) is not None:
+        client.call("invoke", target="player", method="DropItem", args=[slot], types=["Int32"])
+        time.sleep(SETTLE_SECONDS_AFTER_PICKUP)
+
+
+def multi_hit_block(game, low, high):
+    base = player_position(game)
+    cells = [(dx, dy) for dx in range(-HAND_REACH_COLUMNS, HAND_REACH_COLUMNS + 1) for dy in range(-REACH_ROWS_BELOW, REACH_ROWS_ABOVE + 1) if (dx, dy) != (0, 0)]
+    seen = []
+    for dx, dy in sorted(cells, key=lambda cell: math.hypot(*cell)):
+        candidate = {"x": base["x"] + dx, "y": base["y"] + dy}
+        block = block_value(game, candidate)
+        if block <= 0:
+            continue
+        health = block_health(game, block)
+        seen.append((block, health))
+        if low <= health <= high:
+            return candidate, block, health
+    raise AssertionError("no block with health %s near the player at (%.1f, %.1f); saw (id, health) %s" % ((low, high), base["x"], base["y"], seen))
+
+
+def hand_prepare(host, client):
+    empty_the_hand(client)
+    position, block, health = multi_hit_block(client, *HAND_BLOCK_HEALTH_RANGE)
+    return {"position": position, "blockId": block, "blockHealth": health, "cell": block_cell(client, position)}
+
+
+def hand_hit(client, context):
+    swing(client, context["position"])
+
+
+def hand_read(game, context):
+    return [block_value(game, context["position"]), crack_counter(game, context)]
+
+
+SERIES_SCENARIOS = [
+    SeriesScenario("hand_mining_cracks", "the client mines a multi-hit block with bare hands (Body.UseItemInHand with an empty hand); crack counter and block on both games every 0.25 s until 10 s after the break",
+                   hand_prepare, hand_hit, hand_read, cadence_seconds=0.0, max_hits=HAND_MAX_HITS, group="hand-mining"),
 ]
 
 

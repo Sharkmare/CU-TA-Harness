@@ -76,7 +76,9 @@
         "unit.test_observe",
         "unit.test_desync",
         "unit.test_desync_scenarios",
-        "unit.test_run_arguments"
+        "unit.test_run_arguments",
+        "unit.test_udpproxy",
+        "unit.test_desync_series"
       ],
       "needs_game": false
     },

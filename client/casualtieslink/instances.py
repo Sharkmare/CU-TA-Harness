@@ -8,6 +8,7 @@ import zipfile
 from . import testcopy
 from .launcher import GameProcess, mp_arguments
 from .pair import PREFS_REGISTRY_KEY, ProfileGuard
+from .udpproxy import DelayProxy
 
 MODS_ROOT_ENVIRONMENT_VARIABLE = "CU_MODS_ROOT"
 STOCK_DIR_ENVIRONMENT_VARIABLE = "CU_STOCK_TOGETHER_DIR"
@@ -37,6 +38,7 @@ DEBUG_CONFIG_TEXT = "[Debug]\n\nEnabled = true\n"
 MP_DISABLE_VALUE_PATTERN = re.compile(r"^\s*(CasualtiesMP_FORCE_DISABLE_MP_MOD_h\d+)\s+REG_DWORD\s+(0x[0-9a-fA-F]+)\s*$", re.M)
 SESSION_ADDRESS = "127.0.0.1:7790"
 HOST_PORT = 7650
+PROXY_PORT = 7791
 CLIENT_PORT = 7651
 HOST_COPY_NAME = "CU-scenario-host"
 CLIENT_COPY_NAME = "CU-scenario-client"
@@ -289,8 +291,8 @@ def host_arguments(extra=()):
     return mp_arguments(flags) + list(extra)
 
 
-def client_arguments(extra=()):
-    flags = {"nosteam": True, "startclient": True, "setname": "ClientD", "ip-port": SESSION_ADDRESS}
+def client_arguments(extra=(), address=SESSION_ADDRESS):
+    flags = {"nosteam": True, "startclient": True, "setname": "ClientD", "ip-port": address}
     return mp_arguments(flags) + list(extra)
 
 
@@ -305,6 +307,7 @@ class ScenarioGames:
         self.client_copy = client_copy or copy_directory(CLIENT_COPY_NAME)
         self.host = None
         self.client = None
+        self.proxy = None
         self.prepared = False
 
     def prepare(self):
@@ -314,7 +317,7 @@ class ScenarioGames:
         ensure_mp_enabled()
         self.prepared = True
 
-    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock", host_together=None, client_together=None):
+    def start(self, host_plugins, client_plugins, host_extra=(), client_extra=(), after_host_link=None, after_client_link=None, together="stock", host_together=None, client_together=None, delay_ms=None, jitter_ms=0.0):
         host_together = host_together or together
         client_together = client_together or together
         configure_instance(self.host_copy, host_plugins, together=host_together)
@@ -323,7 +326,11 @@ class ScenarioGames:
         client_extra = list(client_extra) + flavour_arguments(client_together)
         self.host = GameProcess(HOST_PORT, host_arguments(host_extra), directory=self.host_copy, manage_save=False,
                                 window_args=["-screen-fullscreen", "0", "-screen-width", "640", "-screen-height", "360"])
-        self.client = GameProcess(CLIENT_PORT, client_arguments(client_extra), directory=self.client_copy, manage_save=False,
+        client_address = SESSION_ADDRESS
+        if delay_ms is not None:
+            self.proxy = DelayProxy(PROXY_PORT, int(SESSION_ADDRESS.rpartition(":")[2]), delay_ms, jitter_ms).start()
+            client_address = "%s:%d" % (SESSION_ADDRESS.rpartition(":")[0], PROXY_PORT)
+        self.client = GameProcess(CLIENT_PORT, client_arguments(client_extra, client_address), directory=self.client_copy, manage_save=False,
                                   window_args=["-screen-fullscreen", "0", "-screen-width", "640", "-screen-height", "360"])
         try:
             self.host.start(START_TIMEOUT_SECONDS, allow_existing=True)
@@ -338,6 +345,9 @@ class ScenarioGames:
         return self.host.game, self.client.game
 
     def stop(self):
+        if self.proxy is not None:
+            self.proxy.stop()
+            self.proxy = None
         for member in (self.client, self.host):
             if member is not None:
                 try:

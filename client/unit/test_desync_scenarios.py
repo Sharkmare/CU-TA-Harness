@@ -145,17 +145,21 @@ class ReadyUpTests(unittest.TestCase):
 
 
 class RealPathHelperTests(unittest.TestCase):
-    def test_the_crack_counter_is_found_by_block_cell_in_a_nested_dump(self):
-        world = {"halfWidth": 100, "halfHeight": 50, "blockDamages": [
-            {"pos": {"x": 1, "y": 1}, "damage": 5.0}, {"pos": {"x": 110, "y": 3}, "damage": 42.456}]}
+    def test_the_crack_counter_comes_from_get_block_damage_at_the_block_cell(self):
+        seen = []
 
-        def get(arguments):
-            return world[arguments["path"]]
+        def invoke(arguments):
+            seen.append(arguments)
+            return {"$type": "BlockDamage", "damage": 42.456} if arguments["args"][0] == {"x": 110, "y": 3} else None
 
-        with FakeLink({"get": get}) as link:
+        world = {"halfWidth": 100, "halfHeight": 50}
+        with FakeLink({"invoke": invoke, "get": lambda arguments: world[arguments["path"]]}) as link:
             game = Game(link.port)
             self.assertEqual(scenarios.crack_counter(game, {"position": {"x": 10.5, "y": -47.0}}), 42.46)
             self.assertEqual(scenarios.crack_counter(game, {"position": {"x": 0.0, "y": 0.0}}), 0.0)
+            self.assertEqual(scenarios.crack_counter(game, {"position": {"x": 0.0, "y": 0.0}, "cell": {"x": 110, "y": 3}}), 42.46)
+        self.assertEqual(seen[0]["method"], "GetBlockDamage")
+        self.assertEqual(seen[0]["types"], ["Vector2Int"])
 
     def test_every_scenario_group_has_launch_arguments(self):
         from tests import test_desync

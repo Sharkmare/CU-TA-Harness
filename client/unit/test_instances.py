@@ -154,6 +154,11 @@ class ConfigureInstanceTests(InstanceFixture):
         self.assertFalse(os.path.exists(os.path.join(self.copy, "BepInEx", "patchers", "CT_FlavourSwitch.dll")))
         self.assertFalse(os.path.exists(os.path.join(self.copy, "BepInEx", "together-flavours")))
 
+    def test_the_client_connects_to_the_given_address_and_the_host_to_the_session_address(self):
+        self.assertIn("127.0.0.1:7791", instances.client_arguments(address="127.0.0.1:7791"))
+        self.assertIn(instances.SESSION_ADDRESS, instances.client_arguments())
+        self.assertIn(instances.SESSION_ADDRESS, instances.host_arguments())
+
     def test_an_unknown_together_choice_is_refused(self):
         with self.assertRaises(ValueError):
             instances.configure_instance(self.copy, [], together="newest")

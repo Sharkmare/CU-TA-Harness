@@ -38,6 +38,8 @@ def parse_args(argv):
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--mp", nargs="*", default=[], metavar="FLAG[=VALUE]", help="Together mod flags for the launched game (default: disable, because the mod blocks singleplayer)")
     parser.add_argument("--together", default=None, metavar="BUILD", help="Together build for the desync group: %s" % ", ".join(desync.KNOWN_BUILDS))
+    parser.add_argument("--delay-ms", default=None, metavar="MS", help="desync group: put a UDP delay proxy of this one way delay between client and host (0 keeps the proxy with no delay)")
+    parser.add_argument("--jitter-ms", default="0", metavar="MS", help="desync group: extra random delay from 0 up to this many ms")
     parser.add_argument("--mutate", default=None, help="break a behaviour on purpose to prove a test can fail (corrupt-save, no-dune)")
     return parser.parse_args(argv)
 
@@ -133,6 +135,9 @@ def main(argv=None):
     describe_selection(selected, config, arguments.offline)
     if arguments.list or not selected:
         return 0
+    if arguments.delay_ms is not None:
+        os.environ[desync.DELAY_ENVIRONMENT_VARIABLE] = str(desync.parse_delay(arguments.delay_ms))
+        os.environ[desync.JITTER_ENVIRONMENT_VARIABLE] = str(desync.parse_delay(arguments.jitter_ms) or 0.0)
     if arguments.pair:
         os.environ[rig.PAIR_ENABLED_ENVIRONMENT_VARIABLE] = "1"
     if arguments.mutate:
