@@ -22,6 +22,17 @@ DRIFT_PAUSE_SECONDS = 0.4
 BAND_LOW = crates.BAND_LOW
 BAND_HIGH = crates.BAND_HIGH
 FAILURE_CATEGORY = "pvp-distance-band-unreachable"
+RESTORE_FAILURE_CATEGORY = "pvp-victim-not-restored"
+RESTORE_TOLERANCE = 1.0
+RESTORE_SETTLE_SECONDS = 1.0
+RESTORE_SYNC_SECONDS = 4.0
+RESTORE_POLL_SECONDS = 0.5
+LIMB_SCAN_LIMIT = 30
+FULL_HEALTH = {"limbs": None, "total": None}
+
+
+def reset_launch_state():
+    FULL_HEALTH.update({"limbs": None, "total": None})
 
 
 def victim_position(game, handle):
@@ -31,6 +42,47 @@ def victim_position(game, handle):
 
 def side_of_victim(client_position, victim):
     return 1 if client_position["x"] >= victim["x"] else -1
+
+
+def read_limb_values(game, handle):
+    values = []
+    for index in range(LIMB_SCAN_LIMIT):
+        try:
+            values.append((float(game.get(handle, "limbs[%d].skinHealth" % index, depth=0)), float(game.get(handle, "limbs[%d].muscleHealth" % index, depth=0))))
+        except Exception:
+            break
+    return values
+
+
+def restore_victim(host, client, context):
+    handle = context["hostVictim"]
+    if FULL_HEALTH["limbs"] is None:
+        FULL_HEALTH["limbs"] = read_limb_values(host, handle)
+        FULL_HEALTH["total"] = hooks.limb_total(host, handle)
+        return {"restored": False, "firstRun": True, "fullTotal": FULL_HEALTH["total"], "hostTotal": FULL_HEALTH["total"], "clientTotal": hooks.limb_total(client, context["clientVictim"])}
+    before = hooks.limb_total(host, handle)
+    for index, (skin, muscle) in enumerate(FULL_HEALTH["limbs"]):
+        host.set(handle, "limbs[%d].skinHealth" % index, skin)
+        host.set(handle, "limbs[%d].muscleHealth" % index, muscle)
+    time.sleep(RESTORE_SETTLE_SECONDS)
+    deadline = time.time() + RESTORE_SYNC_SECONDS
+    host_total = hooks.limb_total(host, handle)
+    client_total = hooks.limb_total(client, context["clientVictim"])
+    while time.time() < deadline and abs(client_total - FULL_HEALTH["total"]) > RESTORE_TOLERANCE:
+        time.sleep(RESTORE_POLL_SECONDS)
+        host_total = hooks.limb_total(host, handle)
+        client_total = hooks.limb_total(client, context["clientVictim"])
+    return {"restored": True, "firstRun": False, "fullTotal": FULL_HEALTH["total"], "hostTotalBefore": before, "hostTotal": host_total, "clientTotal": client_total,
+            "ok": abs(host_total - FULL_HEALTH["total"]) <= RESTORE_TOLERANCE and abs(client_total - FULL_HEALTH["total"]) <= RESTORE_TOLERANCE}
+
+
+def prepare(host, client):
+    context = regression.pvp_prepare(host, client)
+    restore = restore_victim(host, client, context)
+    context["target"] = {"pvpRule": context.get("pvpRule"), "victimRestore": restore}
+    if restore.get("restored") and not restore["ok"]:
+        context["restoreFailure"] = restore
+    return context
 
 
 def idle_drift(host, context):
@@ -50,6 +102,9 @@ def readable(game, handle, path):
 def act(client, context):
     host = context["host"]
     entries = []
+    context["measurements"] = entries
+    if context.get("restoreFailure"):
+        return
     previous_after = None
     side = None
     for index in range(1, PUNCHES_PER_RUN + 1):
@@ -85,6 +140,11 @@ def act(client, context):
 
 
 def check(context):
+    lost = context.get("restoreFailure")
+    if lost:
+        message = "INVALID: the victim's limbs could not be restored before the run (full %.2f, host %.2f, client %.2f)" % (lost["fullTotal"], lost["hostTotal"], lost["clientTotal"])
+        crates.record_failure(RESTORE_FAILURE_CATEGORY, message)
+        return [message]
     failure = context.get("bandFailure")
     if failure:
         message = "INVALID: the client could not be brought into the %.1f to %.1f band before punch %d (distances tried %s)" % (BAND_LOW, BAND_HIGH, failure["swing"], failure["distances"])
@@ -95,7 +155,7 @@ def check(context):
 
 SCENARIOS = [
     Scenario(NAME, "with the PVP rule on, the client is held 2.5 to 3.2 from the host's player before every punch and punches it five times; damage on host and client, once per punch, knockback, and the victim's idle limb drift per punch",
-             regression.pvp_prepare, act, lambda game, context: 0, hooks.never_changes, group=GROUP, check=check, max_repeat=RUNS),
+             prepare, act, lambda game, context: 0, hooks.never_changes, group=GROUP, check=check, max_repeat=RUNS),
 ]
 
 base.SCENARIOS.extend(SCENARIOS)

@@ -62,6 +62,19 @@ class V2BuildTests(unittest.TestCase):
                 with open(os.path.join(copy, "BepInEx", "plugins", "Together", "CasualtiesMP.dll")) as handle:
                     self.assertEqual(handle.read(), "v2")
 
+    def test_the_final_build_has_its_own_stage_folder_and_choice(self):
+        self.assertEqual(desync.parse_build("upstream-fixed-final"), "upstream-fixed-final")
+        self.assertEqual(desync.together_choice("upstream-fixed-final"), "fullgame-final-stage")
+        with tempfile.TemporaryDirectory() as stage:
+            os.makedirs(os.path.join(stage, "plugins", "Together"))
+            with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
+                handle.write("final")
+            with tempfile.TemporaryDirectory() as copy, mock.patch.dict(os.environ, {instances.FULLGAME_FINAL_STAGE_ENVIRONMENT_VARIABLE: stage}):
+                instances.configure_instance(copy, [], together="fullgame-final-stage")
+                with open(os.path.join(copy, "BepInEx", "plugins", "Together", "CasualtiesMP.dll")) as handle:
+                    self.assertEqual(handle.read(), "final")
+        self.assertTrue(instances.fullgame_final_stage_directory().replace("\\", "/").endswith("casualties-together-upstream/build/stage_final"))
+
     def test_the_default_folder_is_the_v2_stage_of_the_upstream_build_tree(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop(instances.FULLGAME_V2_STAGE_ENVIRONMENT_VARIABLE, None)

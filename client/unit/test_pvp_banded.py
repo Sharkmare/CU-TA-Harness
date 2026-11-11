@@ -150,6 +150,99 @@ class ActTests(ActHarness):
         self.assertTrue(issues)
 
 
+class FakeBody:
+    def __init__(self, limbs):
+        self.limbs = [list(item) for item in limbs]
+        self.sets = []
+        self.mirror = None
+        self.reads_before_mirror = 0
+
+    def get(self, handle, path, depth=0):
+        if self.mirror is not None and self.reads_before_mirror <= 0:
+            self.limbs = [list(item) for item in self.mirror.limbs]
+        if self.mirror is not None:
+            self.reads_before_mirror -= 1
+        index = int(path.split("[")[1].split("]")[0])
+        if index >= len(self.limbs):
+            raise KeyError(path)
+        return self.limbs[index][0 if path.endswith("skinHealth") else 1]
+
+    def set(self, handle, path, value):
+        self.sets.append((path, value))
+        index = int(path.split("[")[1].split("]")[0])
+        self.limbs[index][0 if path.endswith("skinHealth") else 1] = value
+
+
+class RestoreTests(unittest.TestCase):
+    def setUp(self):
+        pvp_banded.reset_launch_state()
+        self.addCleanup(pvp_banded.reset_launch_state)
+        self.host = FakeBody([(50.0, 50.0), (30.0, 20.0)])
+        self.client = FakeBody([(50.0, 50.0), (30.0, 20.0)])
+        self.client.mirror = self.host
+        self.context = {"hostVictim": "id:9", "clientVictim": "id:-9"}
+        clock = Clock()
+        for patch in (mock.patch.object(pvp_banded.time, "sleep", clock.sleep), mock.patch.object(pvp_banded.time, "time", clock.time)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_the_first_run_records_the_full_limbs_and_writes_nothing(self):
+        result = pvp_banded.restore_victim(self.host, self.client, self.context)
+        self.assertEqual((result["firstRun"], result["restored"], result["fullTotal"]), (True, False, 150.0))
+        self.assertEqual(self.host.sets, [])
+        self.assertEqual(pvp_banded.FULL_HEALTH["limbs"], [(50.0, 50.0), (30.0, 20.0)])
+
+    def test_a_later_run_writes_every_limb_back_on_the_host_and_waits_for_the_client_copy(self):
+        pvp_banded.restore_victim(self.host, self.client, self.context)
+        self.host.limbs = [[10.0, 5.0], [0.0, 3.0]]
+        self.client.limbs = [[10.0, 5.0], [0.0, 3.0]]
+        self.client.reads_before_mirror = 6
+        result = pvp_banded.restore_victim(self.host, self.client, self.context)
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(self.host.sets), 4)
+        self.assertEqual((result["hostTotalBefore"], result["hostTotal"], result["clientTotal"]), (18.0, 150.0, 150.0))
+        self.assertEqual(self.client.sets, [])
+
+    def test_a_client_copy_that_never_catches_up_is_reported_as_not_restored(self):
+        pvp_banded.restore_victim(self.host, self.client, self.context)
+        self.host.limbs = [[10.0, 5.0], [0.0, 3.0]]
+        self.client.mirror = None
+        self.client.limbs = [[10.0, 5.0], [0.0, 3.0]]
+        result = pvp_banded.restore_victim(self.host, self.client, self.context)
+        self.assertFalse(result["ok"])
+        self.assertEqual((result["hostTotal"], result["clientTotal"]), (150.0, 18.0))
+
+    def test_prepare_marks_the_run_when_the_restore_failed_and_records_the_state_in_the_target(self):
+        pvp_banded.restore_victim(self.host, self.client, self.context)
+        self.host.limbs = [[10.0, 5.0], [0.0, 3.0]]
+        self.client.mirror = None
+        self.client.limbs = [[10.0, 5.0], [0.0, 3.0]]
+        base_context = dict(self.context, pvpRule=True)
+        with mock.patch.object(pvp_banded.regression, "pvp_prepare", lambda host, client: base_context):
+            context = pvp_banded.prepare(self.host, self.client)
+        self.assertIn("restoreFailure", context)
+        self.assertEqual(context["target"]["pvpRule"], True)
+        self.assertFalse(context["target"]["victimRestore"]["ok"])
+
+    def test_prepare_of_the_first_run_has_no_failure_and_keeps_the_rule_in_the_target(self):
+        with mock.patch.object(pvp_banded.regression, "pvp_prepare", lambda host, client: dict(self.context, pvpRule=True)):
+            context = pvp_banded.prepare(self.host, self.client)
+        self.assertNotIn("restoreFailure", context)
+        self.assertEqual(context["target"]["victimRestore"]["fullTotal"], 150.0)
+
+    def test_a_restore_failure_fires_no_punch_and_is_an_invalid_run_with_its_own_category(self):
+        crates.reset_launch_state()
+        self.addCleanup(crates.reset_launch_state)
+        fired = []
+        context = {"host": mock.Mock(), "restoreFailure": {"fullTotal": 150.0, "hostTotal": 150.0, "clientTotal": 18.0}, "measurements": []}
+        with mock.patch.object(pvp_banded.hooks, "fire_one_swing", lambda game, aim: fired.append(1)):
+            pvp_banded.act(mock.Mock(), context)
+        self.assertEqual(fired, [])
+        issues = pvp_banded.check(context)
+        self.assertTrue(issues[0].startswith("INVALID: the victim's limbs could not be restored"))
+        self.assertEqual(dict(crates.STATE["reasons"]), {"pvp-victim-not-restored": 1})
+
+
 class CheckTests(unittest.TestCase):
     def setUp(self):
         crates.reset_launch_state()
