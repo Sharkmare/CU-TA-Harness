@@ -148,6 +148,20 @@ class LaunchLogCheckTests(unittest.TestCase):
             self.assertTrue(os.path.exists(path))
 
 
+class SaveGameLogsTests(unittest.TestCase):
+    class Games:
+        def log_text(self, which):
+            return {"host": "host log line\n", "client": ""}[which]
+
+    def test_both_logs_that_have_text_are_saved_under_the_launch_and_class_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            saved = desync.save_game_logs(self.Games(), directory, "L1-upstream-fixed-hook-regression", "Desync_x")
+            self.assertEqual([os.path.basename(path) for path in saved], ["host-LogOutput.log"])
+            with open(saved[0], encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), "host log line\n")
+            self.assertIn("L1-upstream-fixed-hook-regression__Desync_x", saved[0])
+
+
 class NoScatterInstallTests(unittest.TestCase):
     def test_the_plugin_dll_is_copied_into_its_own_plugin_folder(self):
         with tempfile.TemporaryDirectory() as directory:

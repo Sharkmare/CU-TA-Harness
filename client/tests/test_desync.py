@@ -3,7 +3,7 @@ import time
 import unittest
 
 from casualtieslink import desync, diagblock, launchplan
-from casualtieslink.instances import ScenarioGames, diag_stage2_directory, diag_stage3_directory, diag_stage_directory, flavour_zip, stage_directory
+from casualtieslink.instances import ScenarioGames, baseline_stage_directory, diag_stage2_directory, diag_stage3_directory, diag_stage_directory, flavour_zip, fullgame_stage_directory, stage_directory
 from casualtieslink.launcher import mp_arguments
 
 from . import rig
@@ -25,6 +25,10 @@ def expected_hash(build):
         return desync.stage_dll_hash(diag_stage2_directory())
     if build == desync.DIAG3_BUILD:
         return desync.stage_dll_hash(diag_stage3_directory())
+    if build == desync.FIXED_BUILD:
+        return desync.stage_dll_hash(fullgame_stage_directory())
+    if build == desync.BASELINE_BUILD:
+        return desync.stage_dll_hash(baseline_stage_directory())
     return desync.flavour_dll_hash(flavour_zip(), build)
 
 
@@ -175,15 +179,17 @@ class DesyncMixin:
     @classmethod
     def tearDownClass(cls):
         if GAMES is not None:
+            desync.save_game_logs(GAMES, os.path.join(STATE_ROOT, "game_logs"), LAUNCH_ID, cls.__name__)
             GAMES.stop()
 
     def test_00_launch_log_checks(self):
         if self.host_plugins == [] and self.__class__.__name__.endswith("hand_mining"):
             self.skipTest("only the hook check group is expected to carry the repaired transpiler")
-        checks = desync.launch_log_checks(GAMES.log_text("host"), GAMES.log_text("client"), expect_no_scatter=bool(self.host_plugins))
+        checks = desync.launch_log_checks(GAMES.log_text("host"), GAMES.log_text("client"), expect_no_scatter=bool(self.host_plugins),
+                                          expect_success=BUILD != desync.BASELINE_BUILD)
         print("\nlaunch log checks: %s" % checks)
         desync.save_launch_checks(checks, REPORT_DIRECTORY, LAUNCH_ID)
-        if "hook-check" in self.__class__.__name__.replace("_", "-"):
+        if "hook-check" in self.__class__.__name__.replace("_", "-") or "hook-regression" in self.__class__.__name__.replace("_", "-"):
             self.assertEqual(checks["issues"], [], checks)
 
     def test_the_games_run_the_requested_build(self):
@@ -191,11 +197,14 @@ class DesyncMixin:
             self.assertEqual(desync.sha256_of_file(os.path.join(copy, TOGETHER_DLL_RELATIVE)), EXPECTED_HASH, "%s runs another Together DLL than %s" % (which, BUILD))
 
 
+PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
-                          "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"]}
-GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"]}
+                          "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
+                          "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
+GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
+                        "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
-PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check")
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression")
 
 
 def build_classes():

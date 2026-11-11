@@ -14,8 +14,11 @@ STAGE_BUILD = "upstream-fixes"
 DIAG_BUILD = "upstream-diag"
 DIAG2_BUILD = "upstream-diag2"
 DIAG3_BUILD = "upstream-diag3"
-STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage", DIAG2_BUILD: "diag-stage2", DIAG3_BUILD: "diag-stage3"}
-KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD)
+FIXED_BUILD = "upstream-fixed"
+BASELINE_BUILD = "upstream-baseline"
+STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage", DIAG2_BUILD: "diag-stage2", DIAG3_BUILD: "diag-stage3",
+                 FIXED_BUILD: "fullgame-stage", BASELINE_BUILD: "baseline-stage"}
+KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD, FIXED_BUILD, BASELINE_BUILD)
 DIAG_BUILDS = (DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD)
 TRANSPILER_MARKER = "TRANSPILER"
 
@@ -28,7 +31,7 @@ NO_SCATTER_COMPLETE = "(2 of 2 Together checks replaced)"
 EXCEPTION_PATTERN = re.compile(r"Exception|\[Error")
 
 
-def launch_log_checks(host_log, client_log, expect_no_scatter=True):
+def launch_log_checks(host_log, client_log, expect_no_scatter=True, expect_success=True):
     checks = {}
     for which, text in (("host", host_log), ("client", client_log)):
         checks[which + "TranspilerSuccess"] = sum(1 for line in text.splitlines() if TRANSPILER_SUCCESS in line)
@@ -38,8 +41,10 @@ def launch_log_checks(host_log, client_log, expect_no_scatter=True):
     checks["noScatterLines"] = scatter
     issues = []
     for which in ("host", "client"):
-        if checks[which + "TranspilerSuccess"] < 1:
+        if expect_success and checks[which + "TranspilerSuccess"] < 1:
             issues.append("no 'Body.Attack TRANSPILER SUCCESS' line in the %s log" % which)
+        if not expect_success and checks[which + "TranspilerSuccess"] > 0:
+            issues.append("'Body.Attack TRANSPILER SUCCESS' in the %s log of a build that should not have the repaired hook" % which)
         if checks[which + "MarkersNotFound"]:
             issues.append("'loop markers not found' in the %s log" % which)
         if checks[which + "FailedAttackPatch"]:
@@ -48,6 +53,20 @@ def launch_log_checks(host_log, client_log, expect_no_scatter=True):
         issues.append("no 'NoScatterPunish ... (2 of 2 Together checks replaced)' line in the host log")
     checks["issues"] = issues
     return checks
+
+
+def save_game_logs(games, directory, launch_id, class_name):
+    folder = os.path.join(directory, re.sub(r"[^A-Za-z0-9.\-]", "_", "%s__%s" % (launch_id or "no-launch", class_name)))
+    os.makedirs(folder, exist_ok=True)
+    saved = []
+    for which in ("host", "client"):
+        text = games.log_text(which)
+        if text:
+            path = os.path.join(folder, which + "-LogOutput.log")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+            saved.append(path)
+    return saved
 
 
 def save_launch_checks(checks, directory, launch_id):

@@ -26,6 +26,10 @@ STAGE_CHOICE = "stage"
 DIAG_STAGE_CHOICE = "diag-stage"
 DIAG_STAGE2_CHOICE = "diag-stage2"
 DIAG_STAGE3_CHOICE = "diag-stage3"
+FULLGAME_STAGE_CHOICE = "fullgame-stage"
+BASELINE_STAGE_CHOICE = "baseline-stage"
+FULLGAME_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_STAGE"
+BASELINE_STAGE_ENVIRONMENT_VARIABLE = "CU_BASELINE_STAGE"
 DIAG_STAGE3_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE3"
 DIAG_STAGE2_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE2"
 DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE"
@@ -253,6 +257,20 @@ def diag_stage3_directory():
     return os.path.join(mods_root(), "casualties-together-local", "build", "diag_stage3")
 
 
+def fullgame_stage_directory():
+    explicit = os.environ.get(FULLGAME_STAGE_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_fullgame")
+
+
+def baseline_stage_directory():
+    explicit = os.environ.get(BASELINE_STAGE_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_baseline")
+
+
 def install_stage_together(copy, directory=None):
     source = os.path.join(directory or stage_directory(), "plugins", TOGETHER_FOLDER)
     if not os.path.isfile(os.path.join(source, "CasualtiesMP.dll")):
@@ -321,6 +339,10 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, diag_stage2_directory())
     elif together == DIAG_STAGE3_CHOICE:
         installed["together"] = install_stage_together(copy, diag_stage3_directory())
+    elif together == FULLGAME_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, fullgame_stage_directory())
+    elif together == BASELINE_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, baseline_stage_directory())
     elif flavour_name(together):
         installed["together"] = install_flavour_package(copy)
     elif together != "keep":
