@@ -143,7 +143,10 @@ class BuildAndGroupTests(unittest.TestCase):
     def test_the_fixed_and_baseline_builds_have_their_own_stage_folders(self):
         self.assertEqual(desync.together_choice("upstream-fixed"), "fullgame-stage")
         self.assertEqual(desync.together_choice("upstream-baseline"), "baseline-stage")
-        for build, variable, choice in (("fixed", instances.FULLGAME_STAGE_ENVIRONMENT_VARIABLE, "fullgame-stage"), ("baseline", instances.BASELINE_STAGE_ENVIRONMENT_VARIABLE, "baseline-stage")):
+        self.assertEqual(desync.together_choice("upstream-fixed-diag"), "fullgame-diag-stage")
+        self.assertEqual(desync.parse_build("upstream-fixed-diag"), "upstream-fixed-diag")
+        for build, variable, choice in (("fixed", instances.FULLGAME_STAGE_ENVIRONMENT_VARIABLE, "fullgame-stage"), ("baseline", instances.BASELINE_STAGE_ENVIRONMENT_VARIABLE, "baseline-stage"),
+                                        ("fixed-diag", instances.FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE, "fullgame-diag-stage")):
             with tempfile.TemporaryDirectory() as stage:
                 os.makedirs(os.path.join(stage, "plugins", "Together"))
                 with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:

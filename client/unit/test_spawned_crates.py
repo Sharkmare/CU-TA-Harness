@@ -1,6 +1,10 @@
+import io
+import json
+import tempfile
 import unittest
 from unittest import mock
 
+import run_tests
 from tests import spawned_crates as crates
 
 ANCHOR = {"x": 10.0, "y": 5.0}
@@ -8,6 +12,19 @@ ANCHOR = {"x": 10.0, "y": 5.0}
 
 def crate_row(identifier, x, y=5.0):
     return {"object": {"id": identifier, "name": "SyncInfo(building, id: %d, res: medcrate)" % identifier}, "position": {"x": x, "y": y}}
+
+
+class Clock:
+    def __init__(self, step=0.25):
+        self.now = 0.0
+        self.step = step
+
+    def time(self):
+        self.now += self.step
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
 
 
 class SpawnTests(unittest.TestCase):
@@ -22,10 +39,10 @@ class SpawnTests(unittest.TestCase):
         self.host.call.side_effect = self.host_call
         self.player = dict(ANCHOR)
         self.crate_at = {"x": 11.0, "y": 5.0}
-        clock = iter(x * 0.25 for x in range(1, 100000))
+        self.clock = Clock()
         self.described = {"handle": "id:7", "id": 7, "name": "SyncInfo(building, id: 7, res: medcrate)", "position": {"x": 11.0, "y": 5.0}, "health": 1000.0,
                           "cantHit": False, "indestructible": False, "animal": False, "rigidbodyType": "Dynamic", "layer": 8, "physicsActive": True}
-        for patch in (mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.time, "time", lambda: next(clock)),
+        for patch in (mock.patch.object(crates.time, "sleep", self.clock.sleep), mock.patch.object(crates.time, "time", self.clock.time),
                       mock.patch.object(crates.base, "player_position", lambda game: dict(self.player)),
                       mock.patch.object(crates.base, "rows_near", self.rows_near),
                       mock.patch.object(crates.world, "host_position", lambda host, handle: dict(self.crate_at)),
@@ -37,7 +54,6 @@ class SpawnTests(unittest.TestCase):
         if command == "spawn":
             self.spawn_arguments = arguments
             self.host_rows = [crate_row(7, 11.0)]
-        return None
 
     def rows_near(self, game, component, position, name=None, radius=3.0):
         rows = self.host_rows if game is self.host else self.client_rows
@@ -50,105 +66,44 @@ class SpawnTests(unittest.TestCase):
         self.assertEqual((target["handle"], target["clientHandle"], target["startHealth"], target["spawnOffset"]), ("id:7", "id:7", 1000.0, 1.0))
         self.assertTrue(target["physicsActive"])
 
+    def test_the_settle_trace_has_the_spawn_half_second_and_two_second_points_on_host_and_client(self):
+        target = crates.spawn_crate(self.host, self.client)
+        labels = [point["label"] for point in target["settleTrace"]]
+        self.assertEqual(labels, ["spawn", "after 0.5 s", "after 2.0 s"])
+        for point in target["settleTrace"]:
+            self.assertEqual(point["host"], {"x": 11.0, "y": 5.0})
+            self.assertEqual(point["client"], {"x": 11.0, "y": 5.0})
+
+    def test_a_crate_that_slides_shows_its_positions_in_the_trace(self):
+        positions = iter([{"x": 11.0, "y": 5.0}] * 3 + [{"x": 12.5, "y": 5.0}] * 60)
+        with mock.patch.object(crates.world, "host_position", lambda host, handle: next(positions)):
+            self.client_rows = [crate_row(7, 11.0), crate_row(8, 12.5)]
+            target = crates.spawn_crate(self.host, self.client)
+        self.assertEqual(target["settleTrace"][0]["host"]["x"], 11.0)
+        self.assertEqual(target["settleTrace"][-1]["host"]["x"], 12.5)
+        self.assertEqual(target["position"]["x"], 12.5)
+
+    def test_a_crate_the_client_does_not_list_fails_the_setup_with_its_category(self):
+        self.client_rows = []
+        with self.assertRaises(crates.SetupFailure) as caught:
+            crates.spawn_crate(self.host, self.client)
+        self.assertEqual(caught.exception.category, "client-does-not-list-crate")
+
     def test_a_crate_that_was_already_there_is_not_taken_for_the_new_one(self):
-        self.host_rows = [crate_row(3, 11.7)]
+        self.host_rows = [crate_row(3, 10.9)]
 
         def spawn(command, **arguments):
             if command == "spawn":
-                self.host_rows = [crate_row(3, 11.7), crate_row(7, 11.0)]
+                self.host_rows = [crate_row(3, 10.9), crate_row(7, 11.0)]
 
         self.host.call.side_effect = spawn
         self.assertEqual(crates.spawn_crate(self.host, self.client)["id"], 7)
 
     def test_no_new_crate_on_the_host_fails_the_setup(self):
         self.host.call.side_effect = lambda command, **arguments: None
-        with self.assertRaises(AssertionError) as caught:
-            crates.spawn_crate(self.host, self.client)
-        self.assertIn("lists no new medcrate", str(caught.exception))
-
-    def test_a_crate_the_client_does_not_list_at_the_same_position_fails_the_setup(self):
-        self.client_rows = [crate_row(7, 13.0)]
-        with self.assertRaises(AssertionError) as caught:
-            crates.spawn_crate(self.host, self.client)
-        self.assertIn("client does not list", str(caught.exception))
-
-    def place_crate_away(self, distance):
-        self.crate_at = {"x": ANCHOR["x"] + distance, "y": 5.0}
-        self.client_rows = [crate_row(7, ANCHOR["x"] + distance)]
-        self.host_rows = []
-
-        def spawn(command, **arguments):
-            if command == "spawn":
-                self.spawn_arguments = arguments
-                self.host_rows = [crate_row(7, ANCHOR["x"] + distance)]
-
-        self.host.call.side_effect = spawn
-
-    def teleport_follows_set(self):
-        def set_position(target, path, value):
-            self.player = {"x": value["x"], "y": value["y"]}
-
-        self.client.set.side_effect = set_position
-
-    def test_a_crate_inside_three_needs_no_reseat(self):
-        self.place_crate_away(2.9)
-        target = crates.spawn_crate(self.host, self.client)
-        self.assertEqual((target["reseated"], target["reseatTries"], target["distanceBeforeReseat"]), (False, 0, 2.9))
-        self.client.set.assert_not_called()
-
-    def test_the_distances_seen_in_the_baseline_launches_are_inside_the_gate_and_not_re_seated(self):
-        for distance in (3.01, 3.05, 3.11, 3.21, 3.23, 3.24, 3.31, 3.39, 3.48, 3.52):
-            with self.subTest(distance=distance):
-                crates.reset_launch_state()
-                self.player = dict(ANCHOR)
-                self.place_crate_away(distance)
-                target = crates.spawn_crate(self.host, self.client)
-                self.assertFalse(target["reseated"])
-                self.assertEqual(target["distance"], round(distance, 2))
-        self.client.set.assert_not_called()
-
-    def test_a_crate_just_beyond_the_gate_is_re_seated_to_the_target_and_the_distance_reached_is_recorded(self):
-        for distance in (3.64, 3.9, 3.7):
-            with self.subTest(distance=distance):
-                crates.reset_launch_state()
-                self.player = dict(ANCHOR)
-                self.place_crate_away(distance)
-                self.teleport_follows_set()
-                target = crates.spawn_crate(self.host, self.client)
-                self.assertEqual((target["reseated"], target["reseatTries"], target["distanceBeforeReseat"]), (True, 1, round(distance, 2)))
-                self.assertLessEqual(target["reseatReached"], crates.RESEAT_DISTANCE)
-
-    def test_a_client_pushed_back_to_three_after_the_re_seat_is_accepted_because_the_gate_is_what_counts(self):
-        self.place_crate_away(3.64)
-        crate_x = ANCHOR["x"] + 3.64
-
-        def pushed_back(target, path, value):
-            self.player = {"x": crate_x - 3.0, "y": 5.0}
-
-        self.client.set.side_effect = pushed_back
-        target = crates.spawn_crate(self.host, self.client)
-        self.assertEqual((target["reseated"], target["reseatTries"], target["reseatReached"]), (True, crates.RESEAT_TRIES, 3.0))
-        self.assertEqual(target["distance"], 3.0)
-
-    def test_the_gate_is_the_reach_minus_the_margin(self):
-        self.assertAlmostEqual(crates.START_GATE, 3.6)
-
-    def test_a_client_displaced_far_from_the_anchor_is_put_back_before_the_spawn(self):
-        crates.spawn_crate(self.host, self.client)
-        self.player = {"x": ANCHOR["x"] + 11.79, "y": 5.0}
-        self.teleport_follows_set()
-        self.host_rows = []
-        target = crates.spawn_crate(self.host, self.client)
-        self.assertFalse(target["reseated"])
-        self.assertLessEqual(target["distance"], crates.world.MAX_START_DISTANCE)
-
-    def test_a_client_that_cannot_be_moved_fails_after_the_set_number_of_re_seats_with_its_category(self):
-        self.place_crate_away(3.9)
         with self.assertRaises(crates.SetupFailure) as caught:
             crates.spawn_crate(self.host, self.client)
-        self.assertEqual(caught.exception.category, "client-too-far-after-reseat")
-        self.assertEqual(self.client.set.call_count, crates.RESEAT_TRIES)
-        self.assertIn("3.90", str(caught.exception))
+        self.assertEqual(caught.exception.category, "no-new-crate")
 
     def test_the_client_is_put_back_at_the_first_anchor_before_the_second_spawn(self):
         crates.spawn_crate(self.host, self.client)
@@ -156,52 +111,152 @@ class SpawnTests(unittest.TestCase):
         self.host_rows = []
         crates.spawn_crate(self.host, self.client)
         self.client.set.assert_called_with("player", crates.base.BODY_PATH, {"x": 10.0, "y": 5.0, "z": 0.0})
-        self.assertEqual(self.spawn_arguments["x"], 11.0)
 
     def test_a_crate_below_the_health_floor_fails_the_setup(self):
         self.described["health"] = 20.0
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(crates.SetupFailure) as caught:
             crates.spawn_crate(self.host, self.client)
+        self.assertEqual(caught.exception.category, "low-health")
 
 
-class PreflightTests(unittest.TestCase):
-    def test_the_planned_gates_and_counts_are_consistent(self):
-        self.assertEqual(crates.preflight(["spawned_crate"], 20), [])
+class BandTests(unittest.TestCase):
+    def setUp(self):
+        self.crate = {"x": 20.0, "y": 5.0}
+        self.player = {"x": 17.0, "y": 5.0}
+        self.client = mock.Mock()
+        self.client.set.side_effect = self.teleport
+        self.landing = None
+        for patch in (mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.world, "host_position", lambda host, handle: dict(self.crate)),
+                      mock.patch.object(crates.base, "player_position", lambda game: dict(self.player))):
+            patch.start()
+            self.addCleanup(patch.stop)
 
-    def test_a_launch_that_does_not_select_the_scenario_is_not_checked(self):
-        self.assertEqual(crates.preflight(["worldhit_building"], 1), [])
+    def teleport(self, target, path, value):
+        if self.landing is not None:
+            self.player = {"x": self.crate["x"] - self.landing, "y": 5.0}
 
-    def test_a_reseat_target_stricter_than_the_gate_is_refused(self):
-        with mock.patch.object(crates, "RESEAT_DISTANCE", 5.0):
-            problems = crates.preflight(["spawned_crate"], 20)
-        self.assertEqual(len(problems), 1)
-        self.assertIn("re-seat target", problems[0])
+    def band(self):
+        return crates.ensure_band(None, self.client, "id:1", self.crate)
 
-    def test_too_few_attempts_for_the_valid_runs_and_the_early_stop_are_refused(self):
-        problems = crates.preflight(["spawned_crate"], 4)
-        self.assertEqual(len(problems), 2)
+    def test_every_distance_inside_the_band_needs_no_re_seat(self):
+        for distance in (2.5, 2.9, 3.0, 3.2):
+            with self.subTest(distance=distance):
+                self.player = {"x": self.crate["x"] - distance, "y": 5.0}
+                result = self.band()
+                self.assertEqual((result["ok"], result["reseats"], result["distances"]), (True, 0, [distance]))
+        self.client.set.assert_not_called()
 
-    def test_a_gate_at_or_beyond_the_reach_is_refused(self):
-        with mock.patch.object(crates, "START_GATE", 4.0):
-            self.assertTrue(any("bare-hand reach" in problem for problem in crates.preflight(["spawned_crate"], 20)))
+    def test_the_distances_seen_in_the_earlier_launches_outside_the_band_are_re_seated_to_two_beside_the_crate(self):
+        for distance in (3.28, 3.29, 3.3, 3.55, 3.63, 3.9, 4.66, 5.02, 11.79):
+            with self.subTest(distance=distance):
+                self.client.reset_mock()
+                self.player = {"x": self.crate["x"] - distance, "y": 5.0}
+                self.landing = 2.8
+                result = self.band()
+                self.assertEqual((result["ok"], result["reseats"]), (True, 1))
+                self.client.set.assert_called_once_with("player", crates.base.BODY_PATH, {"x": 18.0, "y": 5.0, "z": 0.0})
 
-    def test_the_launch_runner_refuses_before_any_game_starts(self):
-        import io
-        import run_tests
-        arguments = run_tests.parse_args(["--pair", "--only", "desync", "--builds", "upstream-baseline", "--repeat", "4", "--match", "spawned_crate"])
-        with mock.patch("sys.stdout", new_callable=io.StringIO) as output, mock.patch.object(run_tests.subprocess, "run", side_effect=AssertionError("a game was started")):
-            code = run_tests.run_launch_plan(arguments)
-        self.assertEqual(code, 2)
-        self.assertIn("PREFLIGHT: the setup early stop 5 is not below the 4 planned attempts", output.getvalue())
+    def test_a_client_too_close_is_moved_to_the_middle_of_the_band(self):
+        self.player = {"x": self.crate["x"] - 1.2, "y": 5.0}
+        self.landing = 2.85
+        result = self.band()
+        self.assertTrue(result["ok"])
+        self.client.set.assert_called_once_with("player", crates.base.BODY_PATH, {"x": self.crate["x"] - 2.85, "y": 5.0, "z": 0.0})
 
-    def test_the_launch_runner_reports_ok_for_the_planned_command(self):
-        import io
-        import run_tests
-        arguments = run_tests.parse_args(["--list", "--only", "desync", "--builds", "upstream-baseline", "--repeat", "20", "--match", "spawned_crate", "launch_log_checks"])
-        with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
-            code = run_tests.run_launch_plan(arguments)
-        self.assertEqual(code, 0)
-        self.assertIn("preflight: ok", output.getvalue())
+    def test_a_client_that_drifts_back_out_is_re_seated_again_and_the_distances_are_recorded(self):
+        self.player = {"x": self.crate["x"] - 3.6, "y": 5.0}
+        landings = iter([3.4, 3.35, 2.9])
+        self.client.set.side_effect = lambda target, path, value: self.__dict__.update(player={"x": self.crate["x"] - next(landings), "y": 5.0})
+        result = self.band()
+        self.assertEqual((result["ok"], result["reseats"], result["distances"]), (True, 3, [3.6, 3.4, 3.35, 2.9]))
+
+    def test_a_client_that_cannot_be_brought_into_the_band_fails_after_the_set_number_of_tries(self):
+        self.player = {"x": self.crate["x"] - 3.6, "y": 5.0}
+        self.landing = 3.6
+        result = self.band()
+        self.assertEqual((result["ok"], result["reseats"], len(result["distances"])), (False, crates.BAND_TRIES, crates.BAND_TRIES + 1))
+        self.assertEqual(self.client.set.call_count, crates.BAND_TRIES)
+
+
+class CastTests(unittest.TestCase):
+    def setUp(self):
+        self.client = mock.Mock()
+
+    def test_a_raycast_all_list_is_read_in_order_with_names_and_tags(self):
+        self.client.call.return_value = [{"collider": {"name": "Ground", "tag": "BlockGround"}, "distance": 1.0}, {"collider": {"name": "SyncInfo(building, id: 1, res: medcrate)"}, "distance": 2.0}]
+        cast = crates.mimic_cast(self.client, {"x": 0.0, "y": 0.0}, {"x": 3.0, "y": 0.0})
+        self.assertEqual((cast["method"], cast["error"], cast["crateIndex"]), ("RaycastAll", None, 1))
+        self.assertEqual(cast["hitsBeforeCrate"][0]["tag"], "BlockGround")
+        arguments = self.client.call.call_args.kwargs
+        self.assertEqual((arguments["method"], arguments["args"][1], arguments["args"][2]), ("RaycastAll", {"x": 1.0, "y": 0.0}, 4.5))
+
+    def test_a_crate_that_is_not_in_the_cast_has_no_index(self):
+        self.client.call.return_value = [{"collider": {"name": "Ground"}}]
+        cast = crates.mimic_cast(self.client, {"x": 0.0, "y": 0.0}, {"x": 3.0, "y": 0.0})
+        self.assertIsNone(cast["crateIndex"])
+
+    def test_a_raycast_that_cannot_run_falls_back_to_point_samples_and_says_so(self):
+        def call(command, **arguments):
+            if arguments["method"] == "RaycastAll":
+                raise RuntimeError("no such overload")
+            point = arguments["args"][0]
+            return {"name": "Ground"} if point["x"] < 1.0 else ({"name": "SyncInfo(building, id: 1, res: medcrate)"} if point["x"] >= 2.5 else None)
+
+        self.client.call.side_effect = call
+        cast = crates.mimic_cast(self.client, {"x": 0.0, "y": 0.0}, {"x": 3.0, "y": 0.0})
+        self.assertEqual(cast["method"], "OverlapPoint samples")
+        self.assertIn("RaycastAll failed: no such overload", cast["error"])
+        self.assertEqual([hit["name"] for hit in cast["hits"]], ["Ground", "SyncInfo(building, id: 1, res: medcrate)"])
+        self.assertEqual(cast["crateIndex"], 1)
+
+    def test_neither_method_working_is_recorded_as_an_error_with_no_hits(self):
+        self.client.call.side_effect = RuntimeError("link refused")
+        cast = crates.mimic_cast(self.client, {"x": 0.0, "y": 0.0}, {"x": 3.0, "y": 0.0})
+        self.assertEqual(cast["hits"], [])
+        self.assertIn("samples failed", cast["error"])
+
+    def test_an_unreadable_limb_position_is_recorded_not_fatal(self):
+        cast = crates.mimic_cast(self.client, None, {"x": 3.0, "y": 0.0})
+        self.assertEqual((cast["method"], cast["hits"]), (None, []))
+        self.assertIn("limb1", cast["error"])
+
+
+class BeforeSwingTests(unittest.TestCase):
+    def setUp(self):
+        self.context = {"host": mock.Mock(), "hostHandle": "id:1", "position": {"x": 20.0, "y": 5.0}}
+
+    def test_a_swing_in_the_band_returns_the_band_and_every_geometry_field(self):
+        values = {"standing": True, "isRight": False, "limbs[1].transform.position": {"x": 17.2, "y": 5.4}, "targetLookPos": {"x": 20.0, "y": 5.0, "z": 0.0}}
+        client = mock.Mock()
+        client.get.side_effect = lambda target, path, depth=0: values[path]
+        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback: {"ok": True, "reseats": 0, "distances": [3.0]}), \
+                mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}), \
+                mock.patch.object(crates.base, "player_position", lambda game: {"x": 17.0, "y": 5.0}), \
+                mock.patch.object(crates, "client_crate_position", lambda game, near: {"x": 19.9, "y": 5.0}), \
+                mock.patch.object(crates, "mimic_cast", lambda game, origin, aim: {"method": "RaycastAll", "hits": []}):
+            extra = crates.before_swing(client, self.context, 1, {"x": 20.0, "y": 5.0})
+        geometry = extra["geometry"]
+        self.assertEqual(extra["band"]["reseats"], 0)
+        self.assertEqual((geometry["standing"], geometry["isRight"], geometry["distance"]), (True, False, 3.0))
+        self.assertEqual((geometry["clientPosition"], geometry["crateHostPosition"], geometry["crateClientPosition"]), ({"x": 17.0, "y": 5.0}, {"x": 20.0, "y": 5.0}, {"x": 19.9, "y": 5.0}))
+        self.assertEqual((geometry["limb1Position"], geometry["targetLookPos"], geometry["intendedAim"]), ({"x": 17.2, "y": 5.4}, {"x": 20.0, "y": 5.0}, {"x": 20.0, "y": 5.0}))
+        self.assertEqual(geometry["cast"]["method"], "RaycastAll")
+
+    def test_unreadable_fields_are_recorded_with_their_error_not_fatal(self):
+        client = mock.Mock()
+        client.get.side_effect = RuntimeError("no member")
+        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback: {"ok": True, "reseats": 0, "distances": [3.0]}), \
+                mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}), \
+                mock.patch.object(crates.base, "player_position", lambda game: {"x": 17.0, "y": 5.0}), \
+                mock.patch.object(crates, "client_crate_position", lambda game, near: None):
+            extra = crates.before_swing(client, self.context, 1, {"x": 20.0, "y": 5.0})
+        self.assertIn("error", extra["geometry"]["standing"])
+        self.assertIsNone(extra["geometry"]["limb1Position"])
+
+    def test_a_swing_that_cannot_be_brought_into_the_band_is_not_fired_and_the_run_is_marked(self):
+        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback: {"ok": False, "reseats": 4, "distances": [3.6, 3.5, 3.5, 3.6, 3.7]}):
+            self.assertIsNone(crates.before_swing(mock.Mock(), self.context, 3, {"x": 20.0, "y": 5.0}))
+        self.assertEqual(self.context["bandFailure"], {"swing": 3, "distances": [3.6, 3.5, 3.5, 3.6, 3.7]})
 
 
 class RunControlTests(unittest.TestCase):
@@ -219,6 +274,17 @@ class RunControlTests(unittest.TestCase):
         with mock.patch.object(crates.base, "empty_the_hand", lambda client: None), mock.patch.object(crates, "spawn_crate", outcome):
             return crates.prepare("host", "client")
 
+    def test_a_band_failure_is_an_invalid_setup_failure_and_not_a_missed_swing(self):
+        issues = crates.check({"bandFailure": {"swing": 1, "distances": [3.6, 3.7]}, "measurements": []})
+        self.assertTrue(issues[0].startswith("INVALID: the client could not be brought into the 2.5 to 3.2 band before swing 1"))
+        self.assertEqual((crates.STATE["setup_failed"], crates.STATE["swing_failed"], crates.STATE["valid"]), (1, 0, 0))
+        self.assertEqual(dict(crates.STATE["reasons"]), {"distance-band-unreachable": 1})
+
+    def test_a_band_failure_after_a_landed_first_swing_still_marks_the_run_invalid(self):
+        issues = crates.check({"bandFailure": {"swing": 4, "distances": [3.6]}, "measurements": [{"hostDelta": 19.3, "clientDelta": 19.3}]})
+        self.assertTrue(issues)
+        self.assertEqual(crates.STATE["valid"], 0)
+
     def test_three_runs_without_a_landed_first_swing_stop_the_launch(self):
         for _ in range(3):
             self.assertTrue(crates.check(self.missed()))
@@ -226,13 +292,7 @@ class RunControlTests(unittest.TestCase):
             self.prepare_with(lambda host, client: self.fail("must not spawn"))
         self.assertIn("looks unhittable", str(caught.exception))
 
-    def test_two_failed_runs_do_not_stop_it(self):
-        crates.check(self.missed())
-        crates.check(self.missed())
-        target = dict(handle="id:7", clientHandle="id:7", position={"x": 1.0, "y": 1.0})
-        self.assertEqual(self.prepare_with(lambda host, client: target)["hostHandle"], "id:7")
-
-    def test_setup_failures_count_toward_the_stop(self):
+    def test_five_setup_failures_with_no_valid_run_stop_the_launch(self):
         def fail(host, client):
             raise crates.SetupFailure("no-new-crate", "no new crate")
 
@@ -242,7 +302,6 @@ class RunControlTests(unittest.TestCase):
         with self.assertRaises(unittest.SkipTest) as caught:
             self.prepare_with(fail)
         self.assertIn("first 5 attempts all failed setup", str(caught.exception))
-        self.assertIn("no-new-crate", str(caught.exception))
 
     def test_four_setup_failures_do_not_stop_it(self):
         def fail(host, client):
@@ -253,18 +312,6 @@ class RunControlTests(unittest.TestCase):
                 self.prepare_with(fail)
         target = dict(handle="id:7", clientHandle="id:7", position={"x": 1.0, "y": 1.0})
         self.assertIsNotNone(self.prepare_with(lambda host, client: target))
-
-    def test_failure_reasons_are_grouped_and_written_to_the_failure_file(self):
-        import json
-        import tempfile
-        with tempfile.TemporaryDirectory() as directory, mock.patch.object(crates, "FAILURE_DIRECTORY", directory):
-            crates.record_failure("no-new-crate", "first")
-            crates.record_failure("no-new-crate", "second")
-            crates.record_failure("client-too-far-after-reseat", "third")
-            with open(directory + "/" + crates.FAILURE_FILE, encoding="utf-8") as handle:
-                written = json.load(handle)
-        self.assertEqual(written["reasons"], {"no-new-crate": 2, "client-too-far-after-reseat": 1})
-        self.assertEqual([item["message"] for item in written["attempts"]], ["first", "second", "third"])
 
     def test_later_failures_do_not_stop_a_launch_that_already_has_a_valid_run(self):
         self.assertEqual(crates.check(self.landed()), [])
@@ -279,16 +326,26 @@ class RunControlTests(unittest.TestCase):
         with self.assertRaises(unittest.SkipTest):
             self.prepare_with(lambda host, client: self.fail("must not spawn"))
 
+    def test_failure_reasons_are_grouped_and_written_to_the_failure_file(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(crates, "FAILURE_DIRECTORY", directory):
+            crates.record_failure("no-new-crate", "first")
+            crates.record_failure("no-new-crate", "second")
+            crates.record_failure("distance-band-unreachable", "third")
+            with open(directory + "/" + crates.FAILURE_FILE, encoding="utf-8") as handle:
+                written = json.load(handle)
+        self.assertEqual(written["reasons"], {"no-new-crate": 2, "distance-band-unreachable": 1})
+        self.assertEqual([item["message"] for item in written["attempts"]], ["first", "second", "third"])
+
     def test_the_spawned_crate_is_destroyed_through_the_host_after_the_swings(self):
         host = mock.Mock()
-        with mock.patch.object(crates.world, "act", lambda client, context: None):
+        with mock.patch.object(crates.world, "act", lambda client, context, before_swing=None: None):
             crates.act("client", {"host": host, "hostHandle": "id:7"})
         host.set.assert_called_once_with("id:7", "health", 0)
 
     def test_the_crate_is_destroyed_even_when_the_swings_raise(self):
         host = mock.Mock()
 
-        def explode(client, context):
+        def explode(client, context, before_swing=None):
             raise RuntimeError("link lost")
 
         with mock.patch.object(crates.world, "act", explode):
@@ -296,10 +353,55 @@ class RunControlTests(unittest.TestCase):
                 crates.act("client", {"host": host, "hostHandle": "id:7"})
         host.set.assert_called_once()
 
+    def test_the_swing_hook_is_handed_to_the_shared_swing_loop(self):
+        seen = {}
+        with mock.patch.object(crates.world, "act", lambda client, context, before_swing=None: seen.update(hook=before_swing)):
+            crates.act("client", {"host": mock.Mock(), "hostHandle": "id:7"})
+        self.assertIs(seen["hook"], crates.before_swing)
+
     def test_the_scenario_is_selectable_alone_in_the_evidence_group(self):
         from tests import desync_scenarios as scenarios
         self.assertEqual(scenarios.matching_scenario_names(["spawned_crate"]), ["spawned_crate_hit_by_client"])
         self.assertEqual(sorted(scenarios.counts_by_group(["spawned_crate"])), ["hook-evidence"])
+
+
+class PreflightTests(unittest.TestCase):
+    def test_the_planned_gates_and_counts_are_consistent_for_twelve_attempts(self):
+        self.assertEqual(crates.preflight(["spawned_crate"], 12), [])
+
+    def test_a_launch_that_does_not_select_the_scenario_is_not_checked(self):
+        self.assertEqual(crates.preflight(["worldhit_building"], 1), [])
+
+    def test_a_band_that_is_empty_or_beyond_the_attack_distance_is_refused(self):
+        with mock.patch.object(crates, "BAND_LOW", 3.5):
+            self.assertTrue(any("is empty" in problem for problem in crates.preflight(["spawned_crate"], 12)))
+        with mock.patch.object(crates, "BAND_HIGH", 5.0):
+            self.assertTrue(any("attack distance" in problem for problem in crates.preflight(["spawned_crate"], 12)))
+
+    def test_a_re_seat_offset_outside_the_band_top_is_refused(self):
+        with mock.patch.object(crates, "BAND_RESEAT_OFFSET", 4.0):
+            self.assertTrue(any("re-seat offset" in problem for problem in crates.preflight(["spawned_crate"], 12)))
+
+    def test_too_few_attempts_for_the_valid_runs_and_the_early_stop_are_refused(self):
+        self.assertEqual(len(crates.preflight(["spawned_crate"], 4)), 2)
+
+    def test_checkpoints_that_do_not_fit_the_minimum_settle_time_are_refused(self):
+        with mock.patch.object(crates, "CHECKPOINT_SECONDS", (0.5, 3.0)):
+            self.assertTrue(any("checkpoints" in problem for problem in crates.preflight(["spawned_crate"], 12)))
+
+    def test_the_launch_runner_refuses_before_any_game_starts(self):
+        arguments = run_tests.parse_args(["--pair", "--only", "desync", "--builds", "upstream-baseline", "--repeat", "4", "--match", "spawned_crate"])
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as output, mock.patch.object(run_tests.subprocess, "run", side_effect=AssertionError("a game was started")):
+            code = run_tests.run_launch_plan(arguments)
+        self.assertEqual(code, 2)
+        self.assertIn("PREFLIGHT: the setup early stop 5 is not below the 4 planned attempts", output.getvalue())
+
+    def test_the_launch_runner_reports_ok_for_the_planned_command(self):
+        arguments = run_tests.parse_args(["--list", "--only", "desync", "--builds", "upstream-baseline", "upstream-fixed-diag", "--repeat", "12", "--match", "spawned_crate", "launch_log_checks"])
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            code = run_tests.run_launch_plan(arguments)
+        self.assertEqual(code, 0)
+        self.assertIn("preflight: ok", output.getvalue())
 
 
 if __name__ == "__main__":

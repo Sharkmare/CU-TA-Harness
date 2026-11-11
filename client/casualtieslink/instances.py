@@ -28,8 +28,10 @@ DIAG_STAGE2_CHOICE = "diag-stage2"
 DIAG_STAGE3_CHOICE = "diag-stage3"
 FULLGAME_STAGE_CHOICE = "fullgame-stage"
 BASELINE_STAGE_CHOICE = "baseline-stage"
+FULLGAME_DIAG_STAGE_CHOICE = "fullgame-diag-stage"
 FULLGAME_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_STAGE"
 BASELINE_STAGE_ENVIRONMENT_VARIABLE = "CU_BASELINE_STAGE"
+FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_DIAG_STAGE"
 DIAG_STAGE3_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE3"
 DIAG_STAGE2_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE2"
 DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE"
@@ -264,6 +266,13 @@ def fullgame_stage_directory():
     return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_fullgame")
 
 
+def fullgame_diag_stage_directory():
+    explicit = os.environ.get(FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_fullgame_diag")
+
+
 def baseline_stage_directory():
     explicit = os.environ.get(BASELINE_STAGE_ENVIRONMENT_VARIABLE)
     if explicit:
@@ -341,6 +350,8 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, diag_stage3_directory())
     elif together == FULLGAME_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, fullgame_stage_directory())
+    elif together == FULLGAME_DIAG_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, fullgame_diag_stage_directory())
     elif together == BASELINE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, baseline_stage_directory())
     elif flavour_name(together):

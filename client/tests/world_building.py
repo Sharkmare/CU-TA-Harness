@@ -250,11 +250,16 @@ def collider_at(client, point):
     return {"name": None if found is None else str(found)[:120]}
 
 
-def act(client, context):
+def act(client, context, before_swing=None):
     host = context["host"]
     entries = []
     for index in range(1, SWINGS + 1):
         aim = current_position(host, context)
+        extra = {}
+        if before_swing is not None:
+            extra = before_swing(client, context, index, aim)
+            if extra is None:
+                break
         marks = {which: len(evidence.read_log(which).splitlines()) for which in ("host", "client")}
         before = (health_by_handle(host, context["hostHandle"]), health_by_handle(client, context["clientHandle"]))
         probe = collider_at(client, aim)
@@ -270,7 +275,8 @@ def act(client, context):
                         "cooldown": [round(cooldown_before, 3), round(cooldown_after, 3)], "colliderAtAim": probe, "displacement": round(base.distance(aim, moved_to), 3),
                         "clientDistance": round(base.distance(base.player_position(client), aim), 2),
                         "hostLines": evidence.evidence_lines(lines["host"]), "clientLines": evidence.evidence_lines(lines["client"]),
-                        "hostExceptions": evidence.exception_lines(lines["host"]), "clientExceptions": evidence.exception_lines(lines["client"])})
+                        "hostExceptions": evidence.exception_lines(lines["host"]), "clientExceptions": evidence.exception_lines(lines["client"]),
+                        "hostHookCalls": evidence.hook_call_lines(lines["host"]), "clientHookCalls": evidence.hook_call_lines(lines["client"]), **extra})
         if not fired:
             break
         if before[0] <= 0:
@@ -329,3 +335,5 @@ SCENARIOS = [
 ]
 
 base.SCENARIOS.extend(SCENARIOS)
+
+from . import spawned_crates  # noqa: E402,F401

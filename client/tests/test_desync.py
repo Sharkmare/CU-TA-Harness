@@ -3,7 +3,7 @@ import time
 import unittest
 
 from casualtieslink import desync, diagblock, launchplan
-from casualtieslink.instances import ScenarioGames, baseline_stage_directory, diag_stage2_directory, diag_stage3_directory, diag_stage_directory, flavour_zip, fullgame_stage_directory, stage_directory
+from casualtieslink.instances import ScenarioGames, baseline_stage_directory, diag_stage2_directory, diag_stage3_directory, diag_stage_directory, flavour_zip, fullgame_diag_stage_directory, fullgame_stage_directory, stage_directory
 from casualtieslink.launcher import mp_arguments
 
 from . import rig
@@ -29,6 +29,8 @@ def expected_hash(build):
         return desync.stage_dll_hash(diag_stage3_directory())
     if build == desync.FIXED_BUILD:
         return desync.stage_dll_hash(fullgame_stage_directory())
+    if build == desync.FIXED_DIAG_BUILD:
+        return desync.stage_dll_hash(fullgame_diag_stage_directory())
     if build == desync.BASELINE_BUILD:
         return desync.stage_dll_hash(baseline_stage_directory())
     return desync.flavour_dll_hash(flavour_zip(), build)

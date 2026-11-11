@@ -15,6 +15,7 @@ SPAWN_HEALTH_RANGE = (100.0, 400.0)
 SWINGS = 5
 LINE_LIMIT = 8
 LINE_WIDTH = 220
+HOOK_CALL_LIMIT = 12
 EXCEPTION = re.compile(r"Exception|\[Error")
 FIND_THE_BUG_TYPE = "static:KrokV5Optimization.FindTheBug"
 
@@ -42,6 +43,10 @@ def new_lines(before_count, text):
 def evidence_lines(lines):
     wanted = [line.strip()[:LINE_WIDTH] for line in lines if "evidencebag" in line.lower() or "damage " in line or "hit send" in line or "hit client" in line or "hit server" in line]
     return wanted[:LINE_LIMIT]
+
+
+def hook_call_lines(lines):
+    return [line.strip()[:LINE_WIDTH] for line in lines if "hook call" in line][:HOOK_CALL_LIMIT]
 
 
 def exception_lines(lines):

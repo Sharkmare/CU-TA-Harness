@@ -272,6 +272,51 @@ class ActTests(unittest.TestCase):
         self.assertTrue(context["valid"])
 
 
+class SwingHookTests(unittest.TestCase):
+    def run_act(self, before_swing, reader=None):
+        healths = {"host": 100.0, "client": 100.0}
+        host, client = mock.Mock(), mock.Mock()
+        client.get.return_value = 0.0
+
+        def optional_get(game, handle, path, nonpublic=False):
+            return healths["host" if game is host else "client"]
+
+        def swing(game, aim):
+            healths["host"] -= 19.0
+            healths["client"] -= 19.0
+            return True
+
+        context = {"host": host, "hostHandle": "id:5", "clientHandle": "id:5", "position": {"x": 0.0, "y": 0.0}, "measurements": []}
+        with mock.patch.object(world, "host_position", lambda game, handle: {"x": 0.0, "y": 0.0}), mock.patch.object(world, "optional_get", optional_get),                 mock.patch.object(world.hooks, "fire_one_swing", swing), mock.patch.object(world.time, "sleep", lambda seconds: None),                 mock.patch.object(world.evidence, "read_log", reader or (lambda which: "")), mock.patch.object(world, "collider_at", lambda game, point: {"name": "crate"}),                 mock.patch.object(world.base, "player_position", lambda game: {"x": -3.0, "y": 0.0}):
+            world.act(client, context, before_swing=before_swing)
+        return context
+
+    def test_without_a_hook_every_swing_is_fired(self):
+        self.assertEqual(len(self.run_act(None)["measurements"]), world.SWINGS)
+
+    def test_the_hook_result_is_merged_into_each_swing_entry(self):
+        context = self.run_act(lambda client, context, index, aim: {"band": {"reseats": index}})
+        self.assertEqual([entry["band"]["reseats"] for entry in context["measurements"]], [1, 2, 3, 4, 5])
+
+    def test_a_hook_that_returns_none_stops_before_that_swing_is_fired(self):
+        context = self.run_act(lambda client, context, index, aim: None if index == 3 else {})
+        self.assertEqual([entry["swing"] for entry in context["measurements"]], [1, 2])
+
+    def test_hook_call_lines_of_the_swing_window_are_kept_apart_from_the_evidence_lines(self):
+        hook = "[Info   :  Together] [KrokV5Opt] evidencebag hook call side=client collider=medcrate tag=Untagged dist=3.1 building=True cantHit=False phys=True local=True"
+        calls = {"count": 0}
+
+        def read_log(which):
+            calls["count"] += 1
+            return "" if calls["count"] <= 2 else "\n".join(["start", hook, ""])
+
+        context = self.run_act(None, reader=read_log)
+        first = context["measurements"][0]
+        self.assertEqual(len(first["clientHookCalls"]), 1)
+        self.assertIn("hook call side=client collider=medcrate", first["clientHookCalls"][0])
+        self.assertEqual(len(first["hostHookCalls"]), 1)
+
+
 class PrepareTests(unittest.TestCase):
     def setUp(self):
         world.reset_launch_state()
