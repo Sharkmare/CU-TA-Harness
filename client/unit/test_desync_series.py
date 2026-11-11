@@ -164,6 +164,39 @@ class HintTests(unittest.TestCase):
         self.assertEqual((desync.counter_increases(samples, "host"), desync.counter_increases(samples, "client")), (1, 1))
 
 
+class SwingClassificationTests(unittest.TestCase):
+    def test_a_swing_is_accepted_when_a_host_step_follows_its_arrival(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.4, [8, 19.0], [8, 19.0]), sample(1.5, [8, 38.0], [8, 38.0]), sample(2.2, [8, 38.0], [8, 38.0])]
+        accepted = desync.classify_swings([0.0, 0.7, 1.4], samples, 100.0)
+        self.assertEqual(accepted, [True, False, True])
+
+    def test_the_break_counts_as_a_host_step(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.3, [8, 19.0], [8, 19.0]), sample(1.0, [0, 0.0], [0, 0.0])]
+        self.assertEqual(desync.classify_swings([0.0, 0.7], samples, 0.0), [True, True])
+
+    def test_the_gap_summary_splits_accepted_from_dropped(self):
+        log = [{"gap": 0.1}, {"gap": 0.9}, {"gap": 0.3}]
+        summary = desync.gap_summary(log, [True, False, True])
+        self.assertEqual(summary["accepted"], {"count": 2, "meanGap": 0.2, "maxGap": 0.3})
+        self.assertEqual(summary["dropped"], {"count": 1, "meanGap": 0.9, "maxGap": 0.9})
+
+    def test_an_empty_group_has_no_mean(self):
+        self.assertEqual(desync.gap_summary([{"gap": 0.5}], [True])["dropped"], {"count": 0, "meanGap": None, "maxGap": None})
+
+    def test_the_report_lists_each_swing_with_its_gap_and_acceptance(self):
+        class Scenario:
+            name = "x"
+            description = "d"
+        observation = desync.SeriesObservation(Scenario(), {"host": [8, 0.0], "client": [8, 0.0]},
+                                               [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.4, [8, 19.0], [8, 19.0]), sample(2.0, [0, 0.0], [0, 0.0])],
+                                               [0.0, 0.7], True,
+                                               {"swingLog": [{"clientPosition": {"x": 1, "y": 2}, "hostCopyPosition": {"x": 1, "y": 2.5}, "gap": 0.5}, {"clientPosition": {"x": 1, "y": 2}, "hostCopyPosition": {"x": 1, "y": 2}, "gap": 0.0}]})
+        report = desync.describe_series(observation, "b", "00" * 32, "1.0", 100.0)
+        self.assertEqual([item["acceptedByHost"] for item in report["swings"]["list"]], [True, True])
+        self.assertEqual(report["swings"]["list"][0]["gap"], 0.5)
+        self.assertIn("swings accepted by the host", desync.format_series_report(report))
+
+
 class DelayParsingTests(unittest.TestCase):
     def test_numbers_parse_and_empty_means_no_proxy(self):
         self.assertEqual(desync.parse_delay("250"), 250.0)

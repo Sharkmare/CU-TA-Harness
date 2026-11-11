@@ -318,6 +318,43 @@ def counter_increases(samples, side):
     return increases
 
 
+def host_step_times(samples):
+    times = []
+    previous = 0.0
+    for sample in samples:
+        block, counter = sample["host"]
+        if block != EMPTY_BLOCK and counter > previous + COUNTER_DROP_EPSILON:
+            times.append(sample["t"])
+        if block != EMPTY_BLOCK:
+            previous = counter
+        elif previous > 0.0:
+            times.append(sample["t"])
+            previous = 0.0
+    return times
+
+
+def classify_swings(hit_times, samples, delay_ms):
+    delay = (delay_ms or 0.0) / MILLISECONDS_PER_SECOND
+    arrivals = [hit_time + delay for hit_time in hit_times]
+    accepted = [False] * len(hit_times)
+    for step in host_step_times(samples):
+        owners = [index for index, arrival in enumerate(arrivals) if arrival <= step]
+        if owners:
+            accepted[owners[-1]] = True
+    return accepted
+
+
+def gap_summary(swing_log, accepted):
+    summary = {}
+    for label, wanted in (("accepted", True), ("dropped", False)):
+        gaps = [entry["gap"] for entry, ok in zip(swing_log, accepted) if ok is wanted]
+        summary[label] = {"count": len(gaps), "meanGap": round(sum(gaps) / len(gaps), 3) if gaps else None, "maxGap": max(gaps) if gaps else None}
+    return summary
+
+
+MILLISECONDS_PER_SECOND = 1000.0
+
+
 def verdict_hints(samples, hit_times, delay_ms, host_counts, findings):
     hints = []
     pairs = [(s["client"][1], s["host"][1]) for s in samples if s["client"][0] != EMPTY_BLOCK and s["host"][0] != EMPTY_BLOCK and s["client"][1] > 0 and s["host"][1] > 0]
@@ -347,11 +384,20 @@ def verdict_hints(samples, hit_times, delay_ms, host_counts, findings):
     return hints
 
 
+def swing_records(observation, delay_ms):
+    log = observation.context.get("swingLog") or []
+    accepted = classify_swings(observation.hit_times, observation.samples, delay_ms)
+    records = [dict(entry, t=hit_time, acceptedByHost=ok) for entry, hit_time, ok in zip(log, observation.hit_times, accepted)]
+    return {"list": records, "gaps": gap_summary(log, accepted) if log else None,
+            "acceptedCount": sum(1 for ok in accepted if ok), "droppedCount": sum(1 for ok in accepted if not ok)}
+
+
 def describe_series(observation, build, dll_hash, game_version=None, delay_ms=None, jitter_ms=0.0, host_counts=None):
     verdict, findings = judge_series(observation.samples)
     return {
         "block": {key: observation.context.get(key) for key in ("position", "blockId", "blockHealth", "cell")},
         "hostLog": host_counts,
+        "swings": swing_records(observation, delay_ms),
         "hints": verdict_hints(observation.samples, observation.hit_times, delay_ms, host_counts, findings),
         "gameVersion": game_version,
         "actionPerformedBy": "client",
@@ -386,6 +432,11 @@ def format_series_report(report):
             [(item["t"], item["goneFor"]) for item in found["reappeared"]] or "never", found["presentAtEnd"]))
     block = report.get("block") or {}
     lines.insert(4, "  block id %s, health %s, at %s" % (block.get("blockId"), block.get("blockHealth"), block.get("position")))
+    swings = report.get("swings") or {}
+    if swings:
+        lines.append("  swings accepted by the host (approximate, by crack steps): %d, dropped: %d" % (swings["acceptedCount"], swings["droppedCount"]))
+        for label, found in (swings.get("gaps") or {}).items():
+            lines.append("  %s swings: %d, host copy of the client body to its real position, mean %s, max %s world units" % (label, found["count"], found["meanGap"], found["maxGap"]))
     for hint in report.get("hints", []):
         lines.append("  hint: %s" % hint)
     previous = None

@@ -482,13 +482,21 @@ def multi_hit_block(game, low, high):
     raise AssertionError("no block with health %s near the player at (%.1f, %.1f); saw (id, health) %s" % ((low, high), base["x"], base["y"], seen))
 
 
+CLIENT_BODY_NAME = "Body_ClientD"
+
+
 def hand_prepare(host, client):
     empty_the_hand(client)
     position, block, health = multi_hit_block(client, *HAND_BLOCK_HEALTH_RANGE)
-    return {"position": position, "blockId": block, "blockHealth": health, "cell": block_cell(client, position)}
+    return {"position": position, "blockId": block, "blockHealth": health, "cell": block_cell(client, position),
+            "hostGame": host, "hostBodyHandle": body_handle_by_name(host, CLIENT_BODY_NAME), "swingLog": []}
 
 
 def hand_hit(client, context):
+    real = player_position(client)
+    copy = context["hostGame"].get(context["hostBodyHandle"], BODY_PATH, depth=0)
+    copy = {"x": float(copy["x"]), "y": float(copy["y"])}
+    context["swingLog"].append({"clientPosition": real, "hostCopyPosition": copy, "gap": round(distance(real, copy), 3)})
     swing(client, context["position"])
 
 
