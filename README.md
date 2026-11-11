@@ -216,6 +216,26 @@ python run_tests.py --pair --only desync --together stock-5.5.0 --mutate skip-cl
 
 The hand mining scenarios (`hand_mining_cracks`, one click every 0.75 s, and `hold_mining_cracks`, `Body.UseItemInHand` every 20 ms so the game's own attack cooldown gates each swing) record the crack counter and the tile id on both games every 0.25 s from the first swing until 10 s after the break. Verdicts: `persisted`, `crack-reset` (the counter dropped while the block was still there), `reappeared-after-break` (the block was back on a machine after it had been gone) and `never-broke`. The report also gives the block id and health, the swings the client sent, the swings the host took (read from the host's crack steps), the host log counts for `hit server cooldown`, `range`, `unresolved` and `drop`, the host copy of the client body against its real position at each swing, and hints that name the divergence pattern.
 
+The held-click scenarios take a fresh block for every run: the host places block 8 (health 60) in the first free column 2, -2, 3 or -3 beside the client with `SetBlock`, both games must show it before the run starts, and the cell is cleared again afterwards, so a launch can mine as many blocks as it has runs. Four scenarios, each selected by one `--match` fragment:
+
+| Fragment | Group | Client aim | Characters |
+|---|---|---|---|
+| `hold_mining_cracks` | `hand-mining` | fixed on the block | Experiment and Experiment |
+| `aim_circle_mining_cracks` | `hand-mining` | circles the block at 0.4 block radius, one turn in 3 s; the crack counters of the block and its eight neighbours are read on both games, and increases on other tiles are counted | Experiment and Experiment |
+| `dune_client_hold_mining` | `mixed-hand-mining` | fixed | Dune client, Experiment host |
+| `dune_client_aim_circle` | `mixed-hand-mining` | circle | Dune client, Experiment host |
+
+A network profile can carry its own repetition count, `DELAY:JITTER@COUNT`:
+
+```bash
+python run_tests.py --pair --only desync --builds upstream-diag --net 0:0@15 100:0@15 --match hold_mining_cracks
+python run_tests.py --pair --only desync --builds upstream-diag --net 0:0@15 100:0@15 --match aim_circle_mining_cracks
+python run_tests.py --pair --only desync --builds upstream-diag --net 0:0@10 100:0@10 --match dune_client_hold_mining
+python tools/desync_summary.py L1-upstream-diag-hand-mining
+```
+
+`tools/desync_summary.py` sums the reports of one launch per network profile: blocks mined, blocks that reappeared, swings sent, received and accepted, losses by reason, and the delay the proxy planned.
+
 The offline tests (`unit/test_desync.py`, `unit/test_desync_series.py`, `unit/test_desync_scenarios.py`, `unit/test_launchplan.py`, `unit/test_udpproxy.py`, `unit/test_run_arguments.py`) cover the verdicts, the report text, the file names, the build and hash handling, the launch plan, the run expansion, the proxy and its control, and the scenario helpers against the fake game server. The game-side reads are untested until the scenarios have run on a game.
 
 ### Checking that the tests can fail
