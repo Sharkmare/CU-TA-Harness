@@ -11,6 +11,8 @@ HOST_PARSED = "HOST_PARSED"
 HOST_DECIDED = "HOST_DECIDED"
 HOST_AFTER = "HOST_AFTER"
 COMPARED_FIELDS = ("cd", "cons", "overEnc", "stim", "stamina")
+GEOMETRY_FIELDS = ("pos", "limb1", "look")
+PARSED_FIELDS = ("sentLimb1", "sentLook", "hostLimb1Before", "hostLookBefore", "hitPos")
 APPLIED_REASON = "applied"
 
 
@@ -44,7 +46,7 @@ def host_records(entries):
     for entry in entries:
         kind = entry["kind"]
         if kind == HOST_RECV:
-            current = {"recv": entry, "outcome": "received", "seq": None, "decided": None, "after": None, "refuse": None}
+            current = {"recv": entry, "outcome": "received", "seq": None, "decided": None, "after": None, "refuse": None, "parsed": None}
             records.append(current)
         elif current is None:
             continue
@@ -55,6 +57,7 @@ def host_records(entries):
             current["outcome"] = "dropped-before-cooldown-check"
         elif kind == HOST_PARSED:
             current["outcome"] = "parsed"
+            current["parsed"] = entry
             current["seq"] = entry["fields"].get("seq")
         elif kind == HOST_DECIDED:
             current["decided"] = entry
@@ -72,13 +75,17 @@ def swing_table(client_entries, host_entries):
     for index, send in enumerate(sends):
         record = records[index] if index < len(records) else None
         row = {"index": index + 1, "seq": send["fields"].get("seq"), "clientT": send["t"],
-               "client": {name: send["fields"].get(name) for name in COMPARED_FIELDS}}
+               "client": {name: send["fields"].get(name) for name in COMPARED_FIELDS},
+               "clientGeometry": {name: send["fields"].get(name) for name in GEOMETRY_FIELDS}}
         if record is None:
             row["outcome"] = "never-received"
         else:
             row["outcome"] = record["outcome"]
             row["hostT"] = record["recv"]["t"]
             row["host"] = {name: record["recv"]["fields"].get(name) for name in COMPARED_FIELDS}
+            row["hostGeometry"] = {name: record["recv"]["fields"].get(name) for name in GEOMETRY_FIELDS}
+            if record["parsed"] is not None:
+                row["hostAim"] = {name: record["parsed"]["fields"].get(name) for name in PARSED_FIELDS}
             row["seqMatches"] = record["seq"] is None or record["seq"] == send["fields"].get("seq")
             if record["decided"] is not None:
                 fields = record["decided"]["fields"]

@@ -56,6 +56,7 @@ class DelayProxy:
         self.control = None
         self.forwarded = {"toHost": 0, "toClient": 0}
         self.dropped = {"toHost": 0, "toClient": 0}
+        self.planned = []
 
     def start(self):
         self.front = self.bound_socket(self.listen_port)
@@ -98,6 +99,18 @@ class DelayProxy:
         with self.settings_lock:
             return {"delay_ms": self.delay_ms, "jitter_ms": self.jitter_ms, "loss": self.loss, "reorder": self.reorder, "seed": self.seed}
 
+    def mark(self):
+        return len(self.planned)
+
+    def delay_stats(self, mark=0):
+        stats = {}
+        for direction in ("toHost", "toClient"):
+            values = [delay for name, delay in self.planned[mark:] if name == direction]
+            stats[direction] = {"packets": len(values), "minMs": round(min(values), 2) if values else None,
+                                "meanMs": round(sum(values) / len(values), 2) if values else None, "maxMs": round(max(values), 2) if values else None}
+        stats["dropped"] = dict(self.dropped)
+        return stats
+
     def start_control(self, port):
         self.control = ControlServer(self, port).start()
         return self.control
@@ -130,6 +143,7 @@ class DelayProxy:
             self.dropped[direction] += 1
             return
         due = self.clock() + delay
+        self.planned.append((direction, delay * MILLISECONDS_PER_SECOND))
         with self.condition:
             heapq.heappush(self.queue, (due, next(self.sequence), sock, destination, data, direction))
             self.condition.notify()

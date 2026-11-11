@@ -70,6 +70,14 @@ class TableTests(unittest.TestCase):
     def test_a_refused_swing_keeps_the_host_cooldown_copy(self):
         self.assertEqual(self.rows[1]["refusedAtHostCooldown"], "0.31")
 
+    def test_geometry_and_the_host_aim_are_kept_for_the_comparison(self):
+        host = "\n".join([recv("10.1", 1), "[diagblock] t=10.1 HOST_PARSED seq=1 didhit=True hitobj=blk isBlock=True isNothing=False hitPos=(1,1) sentLimb1=(0.2,1) sentLook=(1,1) unarmed=True hostLimb1Before=(0.5,1) hostLookBefore=(3,3)",
+                           decided("10.1", 1, "applied")])
+        row = diagblock.swing_table(diagblock.parse_lines(client_line("10.0", 1)), diagblock.parse_lines(host))[0]
+        self.assertEqual(row["clientGeometry"], {"pos": "(0,1)", "limb1": "(0.2,1)", "look": "(1,1)"})
+        self.assertEqual(row["hostGeometry"]["pos"], "(0,1)")
+        self.assertEqual((row["hostAim"]["hostLimb1Before"], row["hostAim"]["hostLookBefore"]), ("(0.5,1)", "(3,3)"))
+
     def test_decided_swings_carry_counter_health_and_the_cooldown_after(self):
         self.assertEqual(self.rows[0]["decided"]["counter"], "19.33")
         self.assertEqual(self.rows[0]["decided"]["health"], "60")

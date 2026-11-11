@@ -5,7 +5,8 @@ PROFILE_FIELDS = ("delay_ms", "jitter_ms", "loss", "reorder")
 
 
 class NetworkProfile:
-    def __init__(self, delay_ms=0.0, jitter_ms=0.0, loss=0.0, reorder=0.0):
+    def __init__(self, delay_ms=0.0, jitter_ms=0.0, loss=0.0, reorder=0.0, repeat=None):
+        self.repeat = repeat
         self.delay_ms = float(delay_ms)
         self.jitter_ms = float(jitter_ms)
         self.loss = float(loss)
@@ -30,7 +31,8 @@ class NetworkProfile:
         return dict(zip(PROFILE_FIELDS, self.key()))
 
     def spec(self):
-        return ":".join("%g" % value for value in self.key())
+        text = ":".join("%g" % value for value in self.key())
+        return text if self.repeat is None else "%s@%d" % (text, self.repeat)
 
 
 DIRECT = NetworkProfile()
@@ -39,7 +41,11 @@ DIRECT = NetworkProfile()
 def parse_profile(text):
     if text in (None, "", DIRECT_LABEL):
         return NetworkProfile()
-    return NetworkProfile(*[float(part) if part else 0.0 for part in text.split(":")])
+    numbers, _, repeat = text.partition("@")
+    count = int(repeat) if repeat else None
+    if count is not None and count < 1:
+        raise ValueError("a profile repeat must be at least 1: %r" % text)
+    return NetworkProfile(*[float(part) if part else 0.0 for part in numbers.split(":")], repeat=count)
 
 
 def parse_profiles(texts):
@@ -90,7 +96,8 @@ def plan_launches(builds, startup_groups, profiles, repetitions=1, match=None):
 
 def runs_in_launch(launch, counts):
     steady = counts.get(launch.startup_group, {"plain": 0, "network": 0})
-    return (steady["plain"] + steady["network"] * len(launch.profiles)) * launch.repetitions
+    network_runs = sum(profile.repeat or launch.repetitions for profile in launch.profiles) * steady["network"]
+    return steady["plain"] * launch.repetitions + network_runs
 
 
 def describe_launches(launches, counts):

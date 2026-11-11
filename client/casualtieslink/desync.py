@@ -221,14 +221,15 @@ class Run:
 
 def expand_runs(scenarios, profiles, repeat):
     runs = []
-    for repetition in range(1, repeat + 1):
-        for scenario in scenarios:
-            chosen = profiles if scenario.network_sensitive else [launchplan.DIRECT]
-            for profile in chosen:
+    for scenario in scenarios:
+        chosen = profiles if scenario.network_sensitive else [launchplan.DIRECT]
+        for profile in chosen:
+            count = (profile.repeat or repeat) if scenario.network_sensitive else repeat
+            for repetition in range(1, count + 1):
                 name = "test_" + scenario.name
                 if scenario.network_sensitive:
                     name += "_" + profile.label()
-                name += repetition_suffix(repetition, repeat)
+                name += repetition_suffix(repetition, count)
                 runs.append(Run(scenario, profile, repetition, name))
     return runs
 
@@ -259,7 +260,7 @@ def launch_id_from_environment():
 
 
 def repetition_suffix(repetition, repeat):
-    return "" if repeat <= 1 else "_r%d" % repetition
+    return "" if repeat <= 1 else "_r%02d" % repetition
 
 
 def delay_from_environment():
@@ -546,6 +547,12 @@ def format_series_report(report):
             lines.append("  %s swings: %d, host copy of the client body to its real position, mean %s, max %s world units" % (label, found["count"], found["meanGap"], found["maxGap"]))
     for hint in report.get("hints", []):
         lines.append("  hint: %s" % hint)
+    if report.get("proxyObserved"):
+        for direction in ("toHost", "toClient"):
+            observed = report["proxyObserved"][direction]
+            lines.append("  proxy %s: %d packets, planned one way delay min %s mean %s max %s ms" % (direction, observed["packets"], observed["minMs"], observed["meanMs"], observed["maxMs"]))
+    if report.get("clientBody"):
+        lines.append("  client body: %s" % report["clientBody"])
     for line in report.get("diagBlock", {}).get("textLines", []):
         lines.append("  " + line)
     previous = None

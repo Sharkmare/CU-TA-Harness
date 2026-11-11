@@ -268,6 +268,38 @@ class LiveControlTests(unittest.TestCase):
         self.assertEqual((first, second), (b"fast", b"slow"))
 
 
+class ObservedDelayTests(unittest.TestCase):
+    def test_the_proxy_reports_the_delays_it_planned_since_a_mark(self):
+        rig = Rig(delay_ms=30)
+        try:
+            rig.to_host(b"a")
+            mark = rig.proxy.mark()
+            rig.proxy.set(delay_ms=120)
+            rig.to_host(b"b")
+            rig.to_host(b"c")
+            stats = rig.proxy.delay_stats(mark)
+            everything = rig.proxy.delay_stats()
+        finally:
+            rig.close()
+        self.assertEqual(stats["toHost"]["packets"], 2)
+        self.assertEqual((stats["toHost"]["minMs"], stats["toHost"]["maxMs"]), (120.0, 120.0))
+        self.assertEqual(everything["toHost"]["packets"], 3)
+        self.assertEqual(everything["toHost"]["minMs"], 30.0)
+
+    def test_no_packets_give_no_numbers(self):
+        proxy = DelayProxy(1, 2)
+        self.assertEqual(proxy.delay_stats()["toClient"], {"packets": 0, "minMs": None, "meanMs": None, "maxMs": None})
+
+    def test_jittered_delays_stay_inside_the_bounds_in_the_stats(self):
+        proxy = DelayProxy(1, 2, delay_ms=100, jitter_ms=60, seed=5)
+        for _ in range(50):
+            proxy.schedule(None, None, b"x", "toHost")
+        stats = proxy.delay_stats()["toHost"]
+        self.assertGreaterEqual(stats["minMs"], 100.0)
+        self.assertLessEqual(stats["maxMs"], 160.0)
+        self.assertEqual(stats["packets"], 50)
+
+
 class ControlServerTests(unittest.TestCase):
     def setUp(self):
         self.proxy = DelayProxy(free_udp_port(), free_udp_port(), delay_ms=25, seed=9).start()

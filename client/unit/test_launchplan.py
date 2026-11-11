@@ -40,6 +40,32 @@ class ParseProfileTests(unittest.TestCase):
         self.assertEqual(NetworkProfile(100, 60).label(), "d100-j60")
 
 
+class ProfileRepeatTests(unittest.TestCase):
+    def test_a_profile_repeat_is_read_and_round_trips(self):
+        profile = launchplan.parse_profile("100:60@20")
+        self.assertEqual((profile.key(), profile.repeat), ((100.0, 60.0, 0.0, 0.0), 20))
+        self.assertEqual(launchplan.parse_profile(profile.spec()).repeat, 20)
+
+    def test_a_profile_without_a_repeat_has_none(self):
+        self.assertIsNone(launchplan.parse_profile("100:0").repeat)
+
+    def test_a_zero_or_text_repeat_is_refused(self):
+        for bad in ("100:0@0", "100:0@x"):
+            with self.assertRaises(ValueError, msg=bad):
+                launchplan.parse_profile(bad)
+
+    def test_the_run_count_adds_each_profiles_own_repetitions(self):
+        profiles = launchplan.parse_profiles(["0:0@10", "100:0@20", "100:60@10"])
+        launch = launchplan.plan_launches(["upstream-diag"], ["hand-mining"], profiles, 1)[0]
+        self.assertEqual(launchplan.runs_in_launch(launch, {"hand-mining": {"plain": 0, "network": 1}}), 40)
+
+    def test_the_child_arguments_keep_the_repeats(self):
+        profiles = launchplan.parse_profiles(["0:0@10", "100:0@20"])
+        launch = launchplan.plan_launches(["fork"], ["hand-mining"], profiles, 1)[0]
+        self.assertIn("0:0:0:0@10", launch.arguments())
+        self.assertIn("100:0:0:0@20", launch.arguments())
+
+
 class PlanTests(unittest.TestCase):
     profiles = launchplan.parse_profiles(["100:0", "100:60", "250:100"])
 

@@ -7,7 +7,7 @@ from casualtieslink.instances import ScenarioGames, diag_stage_directory, flavou
 from casualtieslink.launcher import mp_arguments
 
 from . import rig
-from .desync_scenarios import CORPSE_FLAGS, SCENARIOS, SERIES_SCENARIOS, ready_up, reset_between_scenarios
+from .desync_scenarios import CLIENT_BODY_NAME, CORPSE_FLAGS, SCENARIOS, SERIES_SCENARIOS, body_handle_by_name, ready_up, reset_between_scenarios
 from .test_pair import PAIR_ENABLED, SKIP_REASON, wait_for_bodies
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
@@ -53,6 +53,24 @@ def check_games_answer(case):
             case.fail("the %s game does not answer: %s" % (label, exception))
 
 
+def games_answer(case):
+    try:
+        return {"host": case.host.state()["state"], "client": case.client.state()["state"]}
+    except Exception as exception:
+        return {"error": str(exception)}
+
+
+def body_identity(case):
+    found = {}
+    for label, game in (("host", case.host), ("client", case.client)):
+        try:
+            handle = body_handle_by_name(game, CLIENT_BODY_NAME)
+            found[label] = {"charType": game.get(handle, "charType", depth=0), "STR": game.get(handle, "skills.STR", depth=0)}
+        except Exception as exception:
+            found[label] = {"error": str(exception)}
+    return found
+
+
 def prepare_run(case, profile):
     check_games_answer(case)
     reset_between_scenarios(case.host, case.client)
@@ -89,14 +107,19 @@ def series_method(run):
     def method(self):
         prepare_run(self, run.profile)
         log_marks = {which: len(GAMES.log_text(which).splitlines()) for which in ("host", "client")}
+        proxy_mark = GAMES.proxy.mark()
         try:
             observation = desync.observe_series(scenario, self.host, self.client, perform_action=not rig.mutation_active(desync.SKIP_ACTION_MUTATION))
         finally:
             restore_network()
         run_logs = {which: "\n".join(GAMES.log_text(which).splitlines()[log_marks[which]:]) for which in ("host", "client")}
+        proxy_observed = GAMES.proxy.delay_stats(proxy_mark)
         host_counts = desync.host_log_counts(run_logs["host"])
         report = desync.describe_series(observation, BUILD, EXPECTED_HASH, self.game_version, run.profile.delay_ms, run.profile.jitter_ms, host_counts,
                                         LAUNCH_ID, run.repetition, run.profile.as_dict(), GAMES.proxy.seed)
+        report["proxyObserved"] = proxy_observed
+        report["gamesAnswerAfterRun"] = games_answer(self)
+        report["clientBody"] = body_identity(self)
         if BUILD == desync.DIAG_BUILD:
             report["diagBlock"] = diagblock.summarise_run(run_logs["client"], run_logs["host"], observation.hit_times)
         text = desync.format_series_report(report)

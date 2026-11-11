@@ -252,8 +252,20 @@ class RunExpansionTests(unittest.TestCase):
     def test_repetitions_repeat_the_whole_set_with_a_suffix(self):
         profiles = launchplan.parse_profiles(["100:0"])
         runs = desync.expand_runs(list(self.scenarios()), profiles, 2)
-        self.assertEqual([run.name for run in runs], ["test_block_r1", "test_hold_d100-j0_r1", "test_block_r2", "test_hold_d100-j0_r2"])
-        self.assertEqual([run.repetition for run in runs], [1, 1, 2, 2])
+        self.assertEqual([run.name for run in runs], ["test_block_r01", "test_block_r02", "test_hold_d100-j0_r01", "test_hold_d100-j0_r02"])
+        self.assertEqual([run.repetition for run in runs], [1, 2, 1, 2])
+
+    def test_a_profile_can_carry_its_own_repetition_count(self):
+        profiles = launchplan.parse_profiles(["0:0@2", "100:0@3", "100:60"])
+        runs = desync.expand_runs([self.scenarios()[1]], profiles, 1)
+        self.assertEqual([run.name for run in runs], [
+            "test_hold_d0-j0_r01", "test_hold_d0-j0_r02",
+            "test_hold_d100-j0_r01", "test_hold_d100-j0_r02", "test_hold_d100-j0_r03",
+            "test_hold_d100-j60"])
+
+    def test_plain_scenarios_ignore_a_profile_repeat(self):
+        profiles = launchplan.parse_profiles(["100:0@5"])
+        self.assertEqual([run.name for run in desync.expand_runs([self.scenarios()[0]], profiles, 1)], ["test_block"])
 
     def test_the_names_are_unique_across_profiles_and_repetitions(self):
         profiles = launchplan.parse_profiles(["100:0", "100:60", "250:100"])
