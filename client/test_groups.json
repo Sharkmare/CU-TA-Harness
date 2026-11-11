@@ -29,6 +29,15 @@
       "watch_plugin": true
     },
     {
+      "id": "desync",
+      "modules": [
+        "tests.test_desync"
+      ],
+      "needs_game": false,
+      "owns_game": true,
+      "watch_plugin": true
+    },
+    {
       "id": "link",
       "modules": [
         "tests.test_link"
@@ -64,7 +73,10 @@
         "unit.test_launcher",
         "unit.test_pair_fake",
         "unit.test_instances",
-        "unit.test_observe"
+        "unit.test_observe",
+        "unit.test_desync",
+        "unit.test_desync_scenarios",
+        "unit.test_run_arguments"
       ],
       "needs_game": false
     },

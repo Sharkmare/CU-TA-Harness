@@ -13,7 +13,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, REPO_ROOT)
 
 import selection
-from casualtieslink import Game, GameAlreadyRunning, GameProcess, mp_arguments
+from casualtieslink import desync, Game, GameAlreadyRunning, GameProcess, mp_arguments
 from casualtieslink.lock import GameLock
 from casualtieslink.transport import default_port
 from tests import rig
@@ -37,6 +37,7 @@ def parse_args(argv):
     parser.add_argument("--pair", action="store_true", help="run the two game tests (starts a host and a client game)")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--mp", nargs="*", default=[], metavar="FLAG[=VALUE]", help="Together mod flags for the launched game (default: disable, because the mod blocks singleplayer)")
+    parser.add_argument("--together", default=None, metavar="BUILD", help="Together build for the desync group: %s" % ", ".join(desync.KNOWN_BUILDS))
     parser.add_argument("--mutate", default=None, help="break a behaviour on purpose to prove a test can fail (corrupt-save, no-dune)")
     return parser.parse_args(argv)
 
@@ -122,6 +123,8 @@ def describe_selection(selected, config, offline):
 def main(argv=None):
     program_started = time.time()
     arguments = parse_args(argv)
+    if arguments.together:
+        os.environ[desync.BUILD_ENVIRONMENT_VARIABLE] = desync.parse_build(arguments.together)
     with open(CONFIG_PATH, encoding="utf-8") as handle:
         config = json.load(handle)
     state = selection.load_state(STATE_PATH)

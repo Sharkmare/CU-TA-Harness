@@ -134,6 +134,7 @@ python run_tests.py --mutate no-dune --pair --only pair
 | client-offline | no | reply and argument parsing, `--mp` flags, the change selection, the game lock, the test copy, the transport and `Game` against a fake game server, the command line, the launcher with a fake process (refuses a second game, command line, save backup and restore, kill on timeout), `ProfileGuard` and `GamePair` with fakes (start order, cleanup after a failed client, restoring the profile) |
 | repo-tools | no | the commit message check |
 | gates | yes, its own two | the scenarios A to D above |
+| desync | yes, its own two | a client does something and the host may revert it: see the next section |
 | plugin-offline | no | `plugin-tests/`, a console program that compiles the Unity-free parts of the plugin and checks them: the launch switch, the key press windows (down, held and up frames), the request gate (host, `Origin`, header, method and path rules), the reflection path parser and the event buffer (numbering, filters, capacity, waiting reads, many threads) |
 
 The fake game server is `client/unit/fake_link.py`. It speaks the same protocol (envelope, header, `/describe`, `/events`) from a local port, so the client, the command line and the launcher are tested without Unity.
@@ -167,6 +168,39 @@ Stock Together 5.4.0 logs seven `NullReferenceException` lines at startup by its
 How it observes: the gate states are read from the plugins' own static fields through `get` with `nonpublic` (`CasualtiesSize.TogetherBridge.Gate.Host`, `CasualtiesCharacters.StockBridge.channel.HostState`). The link plugin counts the custom messages a game sends: it patches the one place every message leaves through, `LiteNetLib.LiteNetPeer.SendInternal`, as soon as Together has loaded (before the first hello), and `net_counters` returns the counts by direction and message hash. Patching the Together wrappers instead missed messages, because the small ones are inlined by the compiler. `message_hash` asks Together itself for the hash of a name, so counts are matched to names (`CasualtiesSize.Hello`) without knowing the wire layout. The plugins' debug logging is switched on in the game copies by writing their `.cfg` files; the shipped defaults are not changed.
 
 Setup is `casualtieslink/instances.py`. It makes two copies of the game folder once (`%TEMP%\CU-scenario-host` and `%TEMP%\CU-scenario-client`), and before every scenario rebuilds each copy's plugin set: it removes the plugin folders it manages, puts the stock Together folder in (without `Multiupdater.dll`), copies the freshly built link plugin, and installs the plugins that scenario names from the build outputs of the sibling folders (`size-mod/bin`, the newest release zip in `CU Characters/dist` and `CU Character Avali/dist`, the sample pack fixture). The operator's game folder is only read. The profile folder and PlayerPrefs are saved and restored around the whole run, and a persisted "Together disabled" preference is set back to enabled for the run. Paths come from the location of this repository (`CU_MODS_ROOT`, `CU_STOCK_TOGETHER_DIR` or `CU_STOCK_TOGETHER_DLL`, `CU_LINK_DLL` override them). Build the plugin first: `dotnet build plugin -c Release`.
+
+### Desync scenarios (does the host keep what a client did)
+
+Seven scenarios in `tests/desync_scenarios.py` each perform one action on the client through the link and then read the authoritative state on both games at 0 s, 2 s and 10 s:
+
+| Scenario | Client action | State read on both |
+|---|---|---|
+| `block_removal_by_client` | `WorldGeneration.DamageBlock` on a solid block below the client | `GetBlock` at that position |
+| `item_pickup_by_client` | `Body.PickUpItem` on an item the host spawned | ground items of that kind near the spot |
+| `item_drop_by_client` | `Body.DropItem` after a pickup | ground items of that kind near the client |
+| `corpse_damage_by_client` | `health = 0` on a corpse the host spawned | the corpse's `BuildingEntity.health` (none if gone) |
+| `door_open_by_client` | `health = 0` on the nearest `Openable`'s `BuildingEntity` | its health (none if gone) |
+| `container_load_by_client` | `Container.LoadItem` | `Container.itemCount` |
+| `container_unload_by_client` | `Container.UnloadItem` after a load | `Container.itemCount` |
+
+The engine is `casualtieslink/desync.py`. Each scenario ends in one verdict: `persisted` (both agree and the change is there from 0 s), `reverted-by-host` (the client had the change and it was overwritten with the old value), `diverged` (the games disagree), `not-there-from-the-start` or `never-changed`. The test passes only on `persisted`. The report prints the baseline and the host and client value at each time, marks rows where the games disagree, names the build and the SHA-256 of its `CasualtiesMP.dll`, and is saved as JSON in `.state/desync_reports/<scenario>__<build>@<hash8>.json`.
+
+The same scenarios run against one Together build per run, chosen with `--together`:
+
+| Build | What is installed |
+|---|---|
+| `stock-5.5.0`, `stock-5.4.0`, `fork` | the flavour package (`CU_FLAVOUR_ZIP`), started with `--mp-flavour` |
+| `upstream-fixes` | `plugins/Together` from `casualties-together-upstream/build/stage` (`CU_UPSTREAM_STAGE`), without the updater |
+
+The test class name carries the build and the first eight hex digits of the DLL hash (`Desync_stock_5_5_0_9bb980b8`), and a test checks that both games run the DLL with that hash.
+
+```bash
+python run_tests.py --pair --only desync --together stock-5.5.0 --budget-seconds 600
+python run_tests.py --pair --only desync --together fork --match block_removal
+python run_tests.py --pair --only desync --together stock-5.5.0 --mutate skip-client-action
+```
+
+`--mutate skip-client-action` leaves out the client's action, so every scenario reports `never-changed` and fails. The offline tests (`unit/test_desync.py`, `unit/test_desync_scenarios.py`) cover the verdicts, the report text, the file names, the build and hash handling, and the scenario helpers against the fake game server. The game-side reads (for example that a held item has a transform parent and a ground item has none) are untested until the scenarios have run once on a game.
 
 ### Checking that the tests can fail
 
