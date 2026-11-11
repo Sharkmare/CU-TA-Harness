@@ -36,7 +36,7 @@ def tearDownModule():
 def scenario_test(scenario):
     def run(self):
         observation = desync.observe(scenario, self.host, self.client, perform_action=not rig.mutation_active(desync.SKIP_ACTION_MUTATION))
-        report = desync.describe(observation, BUILD, EXPECTED_HASH)
+        report = desync.describe(observation, BUILD, EXPECTED_HASH, self.game_version)
         text = desync.format_report(report)
         print("\n" + text)
         desync.save_report(report, REPORT_DIRECTORY)
@@ -64,6 +64,7 @@ class DesyncMixin:
             cls.host.call("close_console")
             cls.client.call("close_console")
             time.sleep(SETTLE_SECONDS)
+            cls.game_version = str(cls.client.get("static:Application", "version", depth=0))
         except BaseException:
             for which in ("host", "client"):
                 print("\n%s log tail:" % which)

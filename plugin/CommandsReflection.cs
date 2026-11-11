@@ -39,13 +39,17 @@ namespace CasualtiesLink
 
             Add("invoke", "Calls a method by name (same target rules as get). Arguments convert like set values. Give 'types' (parameter type names, e.g. [\"Vector2Int\",\"UInt16\"]) to pick one overload.", args =>
             {
+                if (args["sets"] is JArray writes)
+                    foreach (JToken write in writes)
+                        Reflect.Write((string)write["target"], (string)write["path"], write["value"], write["nonpublic"] != null && (bool)write["nonpublic"]);
                 JToken types = args["types"];
                 string[] typeNames = types == null || types.Type == JTokenType.Null ? null : types.Select(token => (string)token).ToArray();
                 return Reflect.Invoke(Str(args, "target", null, true), Str(args, "method", null, true), args["args"] as JArray ?? new JArray(), typeNames, Bool(args, "nonpublic", false));
             }, false,
                 Arg("target", "string", "Object selector", true), Arg("method", "string", "Method name", true),
                 Arg("args", "any", "JSON array of arguments", false, null), Arg("types", "any", "JSON array of parameter type names to choose an overload", false, null),
-                Arg("nonpublic", "bool", "Allow non public methods", false, false));
+                Arg("nonpublic", "bool", "Allow non public methods", false, false),
+                Arg("sets", "any", "Writes done on the same main thread job right before the call, each {target, path, value}", false, null));
 
             Add("set", "Writes a value by path (same target and path rules as get). Values convert to the field type: numbers, bools, strings, enums by name, Vector2/3 as {x,y,z}, object references as 'id:N'.", args =>
                 Reflect.Write(Str(args, "target", null, true), Str(args, "path", null, true), args["value"] ?? throw new Exception("argument 'value' is required"), Bool(args, "nonpublic", false)), false,

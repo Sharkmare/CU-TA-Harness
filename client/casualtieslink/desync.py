@@ -131,9 +131,11 @@ def judge(observation):
     return VERDICT_PERSISTED
 
 
-def describe(observation, build, dll_hash):
+def describe(observation, build, dll_hash, game_version=None):
     verdict = judge(observation)
     return {
+        "gameVersion": game_version,
+        "actionPerformedBy": "client",
         "build": build,
         "dllSha256": dll_hash,
         "scenario": observation.scenario.name,
@@ -149,7 +151,7 @@ def format_report(report):
     lines = [
         "desync %s [%s] sha256 %s" % (report["scenario"], report["build"], report["dllSha256"]),
         "  %s" % report["description"],
-        "  action on client: %s" % ("performed" if report["actedOnClient"] else "SKIPPED (mutation)"),
+        "  game version %s, action performed by the %s: %s" % (report.get("gameVersion"), report.get("actionPerformedBy", "client"), "yes" if report["actedOnClient"] else "SKIPPED (mutation)"),
         "  baseline  host=%s client=%s" % (report["baseline"]["host"], report["baseline"]["client"]),
     ]
     for sample in report["samples"]:

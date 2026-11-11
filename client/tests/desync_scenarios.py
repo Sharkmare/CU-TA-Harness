@@ -238,8 +238,8 @@ def look_at(game, position):
 
 def swing(client, position, times=1):
     for _ in range(times):
-        look_at(client, position)
-        client.call("invoke", target="player", method="UseItemInHand")
+        client.call("invoke", target="player", method="UseItemInHand",
+                    sets=[{"target": "player", "path": "targetLookPos", "value": {"x": position["x"], "y": position["y"], "z": 0.0}}])
         time.sleep(SWING_PAUSE_SECONDS)
 
 
@@ -433,11 +433,11 @@ def lower_sum(value, baseline):
 
 SCENARIOS = [
     Scenario("block_removal_by_client", "control: the client calls WorldGeneration.DamageBlock directly (the vanilla local call, not Together's carrier); the block id there becomes 0 on both",
-             block_prepare, block_act, block_read, lambda value, baseline: value != baseline and value == 0),
+             block_prepare, block_act, block_read, lambda value, baseline: value != baseline and value == 0, offsets=DIG_OFFSETS_SECONDS),
     Scenario("S1_block_dig_by_client", "the client digs a block with a pickaxe through Body.UseItemInHand; the block is gone on both and stays gone",
              dig_prepare, dig_act, block_read, lambda value, baseline: value != baseline and value == 0, offsets=DIG_OFFSETS_SECONDS),
     Scenario("S2_block_crack_by_client", "the client hits a block once; the host and client damage counters for that block are equal",
-             crack_prepare, crack_act, crack_read, lambda value, baseline: value != baseline),
+             crack_prepare, crack_act, crack_read, lambda value, baseline: value != baseline, offsets=DIG_OFFSETS_SECONDS),
     Scenario("S3_corpse_punch_by_client", "a Dune client hits a corpse (host is not Dune); the corpse health agrees on both",
              corpse_punch_prepare, corpse_punch_act, corpse_health, gone_or_lower, group="mixed-characters"),
     Scenario("S5_building_break_by_client", "the client breaks the nearest building with a pickaxe; destroyed on both, not rebuilt",

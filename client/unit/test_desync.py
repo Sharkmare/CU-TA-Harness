@@ -101,7 +101,7 @@ class ReportTests(unittest.TestCase):
     def report(self, host_values, client_values, acted=True):
         observation = observe_script(host_values, client_values)
         observation.acted = acted
-        return desync.describe(observation, "stock-5.5.0", "ab" * 32)
+        return desync.describe(observation, "stock-5.5.0", "ab" * 32, "1.0")
 
     def test_the_report_carries_build_hash_both_values_and_the_verdict(self):
         text = desync.format_report(self.report([0, 0, 0, 0], [0, 5, 0, 0]))
@@ -109,6 +109,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("sha256 " + "ab" * 32, text)
         self.assertIn("t= 0.0s   host=0 client=5", text)
         self.assertIn("verdict: reverted-by-host", text)
+        self.assertIn("game version 1.0, action performed by the client: yes", text)
         self.assertIn("the host value overwrote the client value", text)
 
     def test_disagreeing_rows_are_marked(self):

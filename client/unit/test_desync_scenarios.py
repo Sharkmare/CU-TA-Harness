@@ -186,6 +186,7 @@ class DigLoopTests(unittest.TestCase):
                 return 0 if state["swings"] >= 2 else 8
             if arguments["method"] == "UseItemInHand":
                 state["swings"] += 1
+                state["look"].append((arguments["sets"][0]["path"], arguments["sets"][0]["value"]))
             return None
 
         def set_value(arguments):
