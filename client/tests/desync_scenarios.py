@@ -1,4 +1,5 @@
 import math
+import os
 import unittest
 import time
 
@@ -697,11 +698,26 @@ def try_ready(game):
 PREFLIGHTS = []
 
 
-def preflight_problems(fragments, attempts):
+def preflight_problems(fragments, attempts, builds=()):
     problems = []
     for check in PREFLIGHTS:
-        problems.extend(check(fragments, attempts))
+        problems.extend(check(fragments, attempts, builds))
     return problems
+
+
+def stage_dll_preflight(fragments, attempts, builds):
+    from casualtieslink import instances
+    directories = instances.stage_directory_by_build()
+    problems = []
+    for build in builds:
+        if build in directories:
+            dll = os.path.join(directories[build](), "plugins", instances.TOGETHER_FOLDER, "CasualtiesMP.dll")
+            if not os.path.isfile(dll):
+                problems.append("the Together DLL of build %s is missing: %s" % (build, dll))
+    return problems
+
+
+PREFLIGHTS.append(stage_dll_preflight)
 
 
 def matching_scenario_names(fragments):

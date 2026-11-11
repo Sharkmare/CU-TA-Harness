@@ -178,6 +178,41 @@ class BandTests(unittest.TestCase):
         self.assertEqual(self.client.set.call_count, crates.BAND_TRIES)
 
 
+class HitListTests(unittest.TestCase):
+    def test_a_plain_list_is_used_as_it_is(self):
+        self.assertEqual(crates.hit_list([{"a": 1}]), [{"a": 1}])
+
+    def test_a_dict_with_a_known_list_key_gives_that_list(self):
+        for key in ("items", "hits", "results", "values", "elements", "array", "data", "value"):
+            with self.subTest(key=key):
+                self.assertEqual(crates.hit_list({"count": 1, key: [{"a": 1}]}), [{"a": 1}])
+
+    def test_a_dict_with_one_list_under_another_key_gives_that_list(self):
+        self.assertEqual(crates.hit_list({"type": "RaycastHit2D[]", "hitsInOrder": [{"a": 1}, {"a": 2}]}), [{"a": 1}, {"a": 2}])
+
+    def test_a_dict_with_numbered_entries_is_ordered_numerically(self):
+        self.assertEqual(crates.hit_list({"10": "c", "2": "b", "1": "a", "length": 3}), ["a", "b", "c"])
+
+    def test_an_empty_counted_dict_is_no_hits(self):
+        self.assertEqual(crates.hit_list({"count": 0}), [])
+
+    def test_an_unknown_dict_names_its_keys_in_the_error(self):
+        with self.assertRaises(ValueError) as caught:
+            crates.hit_list({"zeta": 1, "alpha": 2})
+        self.assertIn("['alpha', 'zeta']", str(caught.exception))
+
+    def test_a_scalar_is_an_error(self):
+        with self.assertRaises(ValueError):
+            crates.hit_list("nothing")
+
+    def test_a_dict_result_from_the_link_is_cast_without_falling_back(self):
+        client = mock.Mock()
+        client.call.return_value = {"count": 2, "items": [{"collider": {"name": "Body_ClientD", "tag": "Player"}}, {"collider": {"name": "SyncInfo(building, id: 1, res: medcrate)"}}]}
+        cast = crates.mimic_cast(client, {"x": 0.0, "y": 0.0}, {"x": 3.0, "y": 0.0})
+        self.assertEqual((cast["method"], cast["error"], cast["crateIndex"]), ("RaycastAll", None, 1))
+        self.assertEqual(cast["hitsBeforeCrate"][0]["tag"], "Player")
+
+
 class CastTests(unittest.TestCase):
     def setUp(self):
         self.client = mock.Mock()
@@ -223,7 +258,7 @@ class CastTests(unittest.TestCase):
 
 class BeforeSwingTests(unittest.TestCase):
     def setUp(self):
-        self.context = {"host": mock.Mock(), "hostHandle": "id:1", "position": {"x": 20.0, "y": 5.0}}
+        self.context = {"host": mock.Mock(), "hostHandle": "id:1", "clientHandle": "id:1", "position": {"x": 20.0, "y": 5.0}}
 
     def test_a_swing_in_the_band_returns_the_band_and_every_geometry_field(self):
         values = {"standing": True, "isRight": False, "limbs[1].transform.position": {"x": 17.2, "y": 5.4}, "targetLookPos": {"x": 20.0, "y": 5.0, "z": 0.0}}
@@ -241,6 +276,25 @@ class BeforeSwingTests(unittest.TestCase):
         self.assertEqual((geometry["clientPosition"], geometry["crateHostPosition"], geometry["crateClientPosition"]), ({"x": 17.0, "y": 5.0}, {"x": 20.0, "y": 5.0}, {"x": 19.9, "y": 5.0}))
         self.assertEqual((geometry["limb1Position"], geometry["targetLookPos"], geometry["intendedAim"]), ({"x": 17.2, "y": 5.4}, {"x": 20.0, "y": 5.0}, {"x": 20.0, "y": 5.0}))
         self.assertEqual(geometry["cast"]["method"], "RaycastAll")
+
+    def test_the_body_type_and_physics_state_of_the_host_and_client_copy_are_recorded_every_swing(self):
+        self.context["clientHandle"] = "id:-44"
+        seen = {}
+
+        def optional_get(game, handle, path, nonpublic=False):
+            seen[(handle, path, nonpublic)] = True
+            return "Kinematic" if handle == "id:-44" else "Dynamic"
+
+        def physics_active(game, handle):
+            return handle == "id:1"
+
+        client = mock.Mock()
+        client.get.return_value = True
+        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback: {"ok": True, "reseats": 0, "distances": [3.0]}),                 mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}),                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 17.0, "y": 5.0}),                 mock.patch.object(crates, "client_crate_position", lambda game, near: None),                 mock.patch.object(crates, "mimic_cast", lambda game, origin, aim: {"method": None, "hits": []}),                 mock.patch.object(crates.world, "optional_get", optional_get), mock.patch.object(crates.world, "physics_active", physics_active):
+            extra = crates.before_swing(client, self.context, 1, {"x": 20.0, "y": 5.0})
+        self.assertEqual(extra["physics"]["host"], {"handle": "id:1", "bodyType": "Dynamic", "physicsActive": True})
+        self.assertEqual(extra["physics"]["client"], {"handle": "id:-44", "bodyType": "Kinematic", "physicsActive": False})
+        self.assertIn(("id:-44", "rb.bodyType", True), seen)
 
     def test_unreadable_fields_are_recorded_with_their_error_not_fatal(self):
         client = mock.Mock()

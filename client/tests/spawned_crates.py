@@ -33,6 +33,7 @@ BAND_RESEAT_OFFSET = 2.0
 BAND_WAIT_SECONDS = 0.3
 BAND_TRIES = 4
 CAST_SAMPLE_STEP = 0.25
+HIT_LIST_KEYS = ("items", "hits", "results", "values", "elements", "array", "data", "value")
 PHYSICS_ENGINE_TYPE = world.PHYSICS_ENGINE_TYPE
 STOP_AFTER_SETUP_FAILURES = 5
 FAILURE_FILE = "spawned_crate_failures.json"
@@ -196,12 +197,29 @@ def unit_direction(origin, aim):
     return {"x": (aim["x"] - origin["x"]) / length, "y": (aim["y"] - origin["y"]) / length}
 
 
+def hit_list(result):
+    if isinstance(result, list):
+        return result
+    if isinstance(result, dict):
+        for key in HIT_LIST_KEYS:
+            if isinstance(result.get(key), list):
+                return result[key]
+        lists = [value for value in result.values() if isinstance(value, list)]
+        if len(lists) == 1:
+            return lists[0]
+        numbered = sorted((key for key in result if str(key).isdigit()), key=int)
+        if numbered:
+            return [result[key] for key in numbered]
+        if result.get("count") == 0:
+            return []
+        raise ValueError("RaycastAll returned a dict with keys %s" % sorted(str(key) for key in result)[:8])
+    raise ValueError("RaycastAll returned %s" % type(result).__name__)
+
+
 def cast_by_raycast_all(client, origin, direction):
     result = client.call("invoke", target=PHYSICS_ENGINE_TYPE, method="RaycastAll",
                          args=[{"x": origin["x"], "y": origin["y"]}, direction, ATTACK_DISTANCE], types=["Vector2", "Vector2", "Single"])
-    if not isinstance(result, list):
-        raise ValueError("RaycastAll returned %s" % type(result).__name__)
-    return [names_in(item) for item in result]
+    return [names_in(item) for item in hit_list(result)]
 
 
 def cast_by_point_samples(client, origin, direction):
@@ -239,6 +257,10 @@ def mimic_cast(client, origin, aim):
             "hitsBeforeCrate": hits[:crate_places[0]] if crate_places else hits[:12]}
 
 
+def crate_physics(game, handle):
+    return {"handle": handle, "bodyType": world.optional_get(game, handle, "rb.bodyType", nonpublic=True), "physicsActive": world.physics_active(game, handle)}
+
+
 def read_geometry(client, host, context, aim):
     handle = context["hostHandle"]
     crate_host = world.host_position(host, handle) or context["position"]
@@ -256,7 +278,8 @@ def before_swing(client, context, index, aim):
     if not band["ok"]:
         context["bandFailure"] = {"swing": index, "distances": band["distances"]}
         return None
-    return {"band": band, "geometry": read_geometry(client, host, context, aim)}
+    return {"band": band, "geometry": read_geometry(client, host, context, aim),
+            "physics": {"host": crate_physics(host, context["hostHandle"]), "client": crate_physics(client, context["clientHandle"])}}
 
 
 def prepare(host, client):
@@ -304,7 +327,7 @@ def check(context):
     return issues
 
 
-def preflight(fragments, attempts):
+def preflight(fragments, attempts, builds=()):
     selected = base.matching_scenario_names(fragments)
     if "spawned_crate_hit_by_client" not in selected:
         return []
