@@ -102,17 +102,17 @@ python run_tests.py --offline --list     # what would run, and which changed fil
 python run_tests.py --offline --failfast
 ```
 
-The game tests need a free machine, because the game is single instance and the runner takes `.game.lock`:
+The game tests need a free machine, because the game is single instance and the runner takes `.game.lock`. The groups `inert`, `link`, `run` and `world` start the game from the installed folder, so a run without flags refuses to start them: when the change selection picks one of them the runner prints the flags below and exits with code 2 before it locks, snapshots or starts anything. `--list` and `--offline` never refuse. `--allow-installed-launch` is the explicit permission; with it the runner snapshots the profile folder and the PlayerPrefs registry key first (the `start_run` command sets `didbasiccourse`) and restores both after the games have closed, also when a test raises. The groups that start their own copies (`pair`, `gates`, `desync`) are not refused and still need `--pair` or `--builds`.
 
 ```bash
-python run_tests.py                       # everything whose files changed since it last passed
-python run_tests.py --all
-python run_tests.py --only world
-python run_tests.py --attach              # use a game that is already running with the link
-python run_tests.py --pair                # also run the host and client tests
+python run_tests.py                       # offline groups that changed; refuses, listing the flags, if a single-game group is selected
+python run_tests.py --all --allow-installed-launch   # everything, starting the installed game for link, run, world and inert
+python run_tests.py --only world --allow-installed-launch
+python run_tests.py --attach              # use a game that is already running with the link; starts nothing
+python run_tests.py --pair                # also run the host and client tests (own copies)
 python run_tests.py --pair --only pair --budget-seconds 900
 python run_tests.py --pair --only pair --match visuals
-python run_tests.py --mutate corrupt-save --only world
+python run_tests.py --mutate corrupt-save --only world --allow-installed-launch
 python run_tests.py --mutate no-dune --pair --only pair
 ```
 
@@ -120,7 +120,7 @@ python run_tests.py --mutate no-dune --pair --only pair
 
 `run_tests.py` works out, for each test module, which files it depends on: the module itself, every module of this repository that it imports (found by reading the imports, so nothing has to be listed by hand), and for the game groups the plugin sources. It stores a hash of each of those files when the module passes. The next run only runs the modules where a hash differs, and `--list` names the file. Examples: changing `casualtieslink/pair.py` runs `unit.test_pair_fake` and nothing else; changing a plugin file reruns the game groups and not the offline ones; changing line endings alone reruns nothing. A module that failed runs again until it passes, and a module that was only skipped is not recorded as passed. State lives in `client/.test_state.json`.
 
-`test_groups.json` lists the groups. A module is either a Python test module or a command with its own watch list (the plugin tests). `needs_game` groups share one game that the runner starts and closes. `owns_game` groups (`inert`, `pair`) start their own games and run first. `--match` runs only tests whose id contains the text, `--budget-seconds` fails the run when it takes longer, and the summary shows the total time and any module slower than five seconds.
+`test_groups.json` lists the groups. A module is either a Python test module or a command with its own watch list (the plugin tests). `needs_game` groups share one game that the runner starts and closes. `owns_game` groups (`inert`, `pair`) start their own games and run first. A group with `uses_installed_game` (`inert`, `link`, `run`, `world`) starts the game from the installed folder and is refused without `--allow-installed-launch`; a unit test fails when a test module starts a game process without a copy and is not in such a group. `--match` runs only tests whose id contains the text, `--budget-seconds` fails the run when it takes longer, and the summary shows the total time and any module slower than five seconds.
 
 ### The groups
 

@@ -15,11 +15,14 @@ sys.path.insert(0, REPO_ROOT)
 import selection
 from casualtieslink import desync, launchplan, Game, GameAlreadyRunning, GameProcess, mp_arguments
 from casualtieslink.lock import GameLock
+from casualtieslink.pair import ProfileGuard
 from casualtieslink.transport import default_port
 from tests import rig
 
 CONFIG_PATH = os.path.join(HERE, "test_groups.json")
 STATE_PATH = os.path.join(HERE, selection.STATE_FILE_NAME)
+SNAPSHOT_ROOT = os.path.join(REPO_ROOT, ".state")
+REFUSED_EXIT_CODE = 2
 DEFAULT_MP_FLAGS = ["disable"]
 SLOW_UNIT_SECONDS = 5.0
 SCENARIO_BUDGET_SECONDS_PER_RUN = 60.0
@@ -34,6 +37,7 @@ def parse_args(argv):
     parser.add_argument("--list", action="store_true", help="show what would run and why, then stop")
     parser.add_argument("--failfast", action="store_true", help="stop a module at its first failing test")
     parser.add_argument("--attach", action="store_true", help="use a game that is already running with the link")
+    parser.add_argument("--allow-installed-launch", action="store_true", help="let the single-game groups (inert, link, run, world) start the game from the installed folder; the profile and PlayerPrefs are snapshotted first and restored after")
     parser.add_argument("--match", nargs="+", default=None, help="run only tests whose id contains any of these texts")
     parser.add_argument("--budget-seconds", type=float, default=None, help="fail the run when it takes longer than this")
     parser.add_argument("--pair", action="store_true", help="run the two game tests (starts a host and a client game)")
@@ -129,6 +133,20 @@ def describe_selection(selected, config, offline):
             print("  %-16s %s: %s" % (group["id"], selection.unit_id(unit_entry["unit"]), shown))
 
 
+def installed_launch_groups(selected):
+    return [entry["group"]["id"] for entry in selected if entry["group"].get("uses_installed_game")]
+
+
+def refusal_message(group_ids):
+    return "\n".join([
+        "refusing to start the game from the installed folder; selected groups that would: %s" % ", ".join(group_ids),
+        "  --offline                      run only the groups that never start the game",
+        "  --pair or --builds ...         run the groups that start their own copies (desync, pair, gates)",
+        "  --attach                       use a game that is already running with the link",
+        "  --allow-installed-launch       start the installed game for these groups; the profile and PlayerPrefs are snapshotted first and restored after",
+        "  --list                         show what would run and stop"])
+
+
 def main(argv=None):
     program_started = time.time()
     arguments = parse_args(argv)
@@ -154,6 +172,10 @@ def main(argv=None):
     describe_selection(selected, config, arguments.offline)
     if arguments.list or not selected:
         return 0
+    installed_groups = installed_launch_groups(selected)
+    if installed_groups and not arguments.attach and not arguments.allow_installed_launch:
+        print(refusal_message(installed_groups))
+        return REFUSED_EXIT_CODE
     if arguments.pair:
         os.environ[rig.PAIR_ENABLED_ENVIRONMENT_VARIABLE] = "1"
     if arguments.mutate:
@@ -167,6 +189,11 @@ def main(argv=None):
     needs_game = any(entry["group"].get("needs_game") for entry in shared)
     process = None
     lock = None
+    guard = None
+    if installed_groups and not arguments.attach:
+        guard = ProfileGuard(SNAPSHOT_ROOT)
+        guard.snapshot()
+        print("profile and PlayerPrefs snapshotted for: %s" % ", ".join(installed_groups))
     try:
         if owned:
             lock = GameLock("run_tests.py owned groups").acquire()
@@ -196,6 +223,8 @@ def main(argv=None):
             process.close()
         if lock is not None:
             lock.release()
+        if guard is not None:
+            guard.restore()
         if not arguments.mutate and not arguments.match:
             selection.save_state(STATE_PATH, state)
     elapsed = time.time() - program_started

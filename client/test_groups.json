@@ -7,7 +7,8 @@
       ],
       "needs_game": false,
       "owns_game": true,
-      "watch_plugin": true
+      "watch_plugin": true,
+      "uses_installed_game": true
     },
     {
       "id": "pair",
@@ -43,7 +44,8 @@
         "tests.test_link"
       ],
       "needs_game": true,
-      "watch_plugin": true
+      "watch_plugin": true,
+      "uses_installed_game": true
     },
     {
       "id": "run",
@@ -51,7 +53,8 @@
         "tests.test_run"
       ],
       "needs_game": true,
-      "watch_plugin": true
+      "watch_plugin": true,
+      "uses_installed_game": true
     },
     {
       "id": "world",
@@ -59,7 +62,8 @@
         "tests.test_world"
       ],
       "needs_game": true,
-      "watch_plugin": true
+      "watch_plugin": true,
+      "uses_installed_game": true
     },
     {
       "id": "client-offline",
@@ -92,7 +96,8 @@
         "unit.test_corpse_banded",
         "unit.test_official_stage",
         "unit.test_fullbuild_stages",
-        "unit.test_static_copy"
+        "unit.test_static_copy",
+        "unit.test_installed_launch_guard"
       ],
       "needs_game": false
     },
