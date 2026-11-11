@@ -130,6 +130,30 @@ class ConfigureInstanceTests(InstanceFixture):
             with self.assertRaises(ValueError, msg=bad):
                 instances.flavour_name(bad)
 
+    def test_the_stage_build_replaces_together_without_the_updater(self):
+        stage = os.path.join(self.directory.name, "stage")
+        os.makedirs(os.path.join(stage, "plugins", "Together"))
+        for name, content in (("CasualtiesMP.dll", "upstream"), ("Multiupdater.dll", "updater"), ("LiteNetLib.dll", "net")):
+            with open(os.path.join(stage, "plugins", "Together", name), "w") as handle:
+                handle.write(content)
+        with mock.patch.dict(os.environ, {instances.STAGE_ENVIRONMENT_VARIABLE: stage}):
+            instances.configure_instance(self.copy, [], together="stage")
+        self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "upstream")
+        self.assertFalse(os.path.exists(self.plugin_file("Together", "Multiupdater.dll")))
+        self.assertFalse(os.path.exists(self.plugin_file("Together", "RefMagic.dll")), "old files must not survive")
+
+    def test_a_stage_without_the_mod_dll_is_an_error(self):
+        with mock.patch.dict(os.environ, {instances.STAGE_ENVIRONMENT_VARIABLE: self.directory.name}):
+            with self.assertRaises(FileNotFoundError):
+                instances.configure_instance(self.copy, [], together="stage")
+
+    def test_a_non_flavour_build_removes_the_switch_that_an_earlier_flavour_left(self):
+        with mock.patch.dict(os.environ, {instances.FLAVOUR_ZIP_ENVIRONMENT_VARIABLE: self.flavour_package()}):
+            instances.configure_instance(self.copy, [], together="flavour:fork")
+        instances.configure_instance(self.copy, [], together="stock")
+        self.assertFalse(os.path.exists(os.path.join(self.copy, "BepInEx", "patchers", "CT_FlavourSwitch.dll")))
+        self.assertFalse(os.path.exists(os.path.join(self.copy, "BepInEx", "together-flavours")))
+
     def test_an_unknown_together_choice_is_refused(self):
         with self.assertRaises(ValueError):
             instances.configure_instance(self.copy, [], together="newest")

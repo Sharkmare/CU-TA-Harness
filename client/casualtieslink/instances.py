@@ -20,6 +20,8 @@ FORK_ZIP_ENVIRONMENT_VARIABLE = "CU_FORK_TOGETHER_ZIP"
 TOGETHER_IN_ZIP = "BepInEx/plugins/Together/"
 FLAVOUR_ZIP_ENVIRONMENT_VARIABLE = "CU_FLAVOUR_ZIP"
 FLAVOUR_PREFIX = "flavour:"
+STAGE_ENVIRONMENT_VARIABLE = "CU_UPSTREAM_STAGE"
+STAGE_CHOICE = "stage"
 FLAVOUR_OPTION = "--mp-flavour"
 FLAVOUR_PATCHER = os.path.join("BepInEx", "patchers", "CT_FlavourSwitch.dll")
 FLAVOUR_FOLDER = os.path.join("BepInEx", "together-flavours")
@@ -202,6 +204,33 @@ def install_flavour_package(copy):
     return archive_path
 
 
+def stage_directory():
+    explicit = os.environ.get(STAGE_ENVIRONMENT_VARIABLE)
+    if explicit:
+        return explicit
+    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage")
+
+
+def install_stage_together(copy):
+    source = os.path.join(stage_directory(), "plugins", TOGETHER_FOLDER)
+    if not os.path.isfile(os.path.join(source, "CasualtiesMP.dll")):
+        raise FileNotFoundError(os.path.join(source, "CasualtiesMP.dll"))
+    target = os.path.join(copy, PLUGINS_RELATIVE, TOGETHER_FOLDER)
+    if os.path.isdir(target):
+        shutil.rmtree(target)
+    shutil.copytree(source, target, ignore=shutil.ignore_patterns(*STOCK_EXCLUDED_FILES))
+    return source
+
+
+def remove_flavour_switch(copy):
+    folder = os.path.join(copy, FLAVOUR_FOLDER)
+    if os.path.isdir(folder):
+        shutil.rmtree(folder)
+    patcher = os.path.join(copy, FLAVOUR_PATCHER)
+    if os.path.exists(patcher):
+        os.remove(patcher)
+
+
 def clear_managed_plugins(copy):
     for name in MANAGED_FOLDERS:
         folder = os.path.join(copy, PLUGINS_RELATIVE, name)
@@ -226,14 +255,18 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         raise ValueError("unknown plugin sets %s; known: %s" % (unknown, sorted(PLUGIN_INSTALLERS)))
     clear_managed_plugins(copy)
     installed = {"link": install_link(copy)}
+    if together != "keep" and not flavour_name(together):
+        remove_flavour_switch(copy)
     if together == "stock":
         installed["together"] = install_stock_together(copy)
     elif together == "fork":
         installed["together"] = install_fork_together(copy)
+    elif together == STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy)
     elif flavour_name(together):
         installed["together"] = install_flavour_package(copy)
     elif together != "keep":
-        raise ValueError("together must be stock, fork, keep or flavour:<name>, not %r" % together)
+        raise ValueError("together must be stock, fork, stage, keep or flavour:<name>, not %r" % together)
     for name in plugins:
         installed[name] = PLUGIN_INSTALLERS[name](copy)
         if debug and name in PLUGIN_DEBUG_GUIDS:
