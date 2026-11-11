@@ -193,6 +193,7 @@ LAUNCH_ENVIRONMENT_VARIABLE = "CU_LAUNCH_ID"
 SCENARIO_BUDGET_SECONDS = 120.0
 DELAY_ENVIRONMENT_VARIABLE = "CU_DESYNC_DELAY_MS"
 JITTER_ENVIRONMENT_VARIABLE = "CU_DESYNC_JITTER_MS"
+TARGET_CELL_KEY = "0,0"
 SERIES_INTERVAL_SECONDS = 0.25
 SERIES_TAIL_SECONDS = 10.0
 COUNTER_DROP_EPSILON = 0.01
@@ -271,7 +272,8 @@ class SeriesScenario:
     network_sensitive = True
 
     def __init__(self, name, description, prepare, hit, read, cadence_seconds, max_hits, group="default",
-                 interval_seconds=SERIES_INTERVAL_SECONDS, tail_seconds=SERIES_TAIL_SECONDS):
+                 interval_seconds=SERIES_INTERVAL_SECONDS, tail_seconds=SERIES_TAIL_SECONDS, cleanup=None):
+        self.cleanup = cleanup
         self.name = name
         self.description = description
         self.prepare = prepare
@@ -326,6 +328,11 @@ def observe_series(scenario, host, client, perform_action=True, clock=time.monot
     finally:
         stop.set()
         thread.join(timeout=5.0)
+        if scenario.cleanup is not None:
+            try:
+                scenario.cleanup(host, client, context)
+            except Exception as exception:
+                context["cleanupError"] = str(exception)
     return SeriesObservation(scenario, baseline, list(samples), hit_times, perform_action, context)
 
 
@@ -336,7 +343,7 @@ def side_findings(samples, side):
     broke_at = None
     previous = None
     for index, sample in enumerate(samples):
-        block, counter = sample[side]
+        block, counter = sample[side][:2]
         if previous is not None:
             previous_block, previous_counter = previous
             following = samples[index + 1][side][0] if index + 1 < len(samples) else block
@@ -385,7 +392,7 @@ def counter_increases(samples, side):
     increases = 0
     previous = 0.0
     for sample in samples:
-        block, counter = sample[side]
+        block, counter = sample[side][:2]
         if block != EMPTY_BLOCK and counter > previous + COUNTER_DROP_EPSILON:
             increases += 1
         if block != EMPTY_BLOCK:
@@ -397,18 +404,30 @@ def crack_steps(samples, side):
     steps = []
     previous = 0.0
     for sample in samples:
-        block, counter = sample[side]
+        block, counter = sample[side][:2]
         if block != EMPTY_BLOCK and counter > previous + COUNTER_DROP_EPSILON:
             steps.append(round(counter - previous, 4))
         previous = counter if block != EMPTY_BLOCK else 0.0
     return steps
 
 
+def tile_hits(samples, side):
+    hits = {}
+    previous = {}
+    for sample in samples:
+        cells = sample[side][2] if len(sample[side]) > 2 and sample[side][0] != EMPTY_BLOCK else {}
+        for cell, counter in cells.items():
+            if counter > previous.get(cell, 0.0) + COUNTER_DROP_EPSILON:
+                hits[cell] = hits.get(cell, 0) + 1
+        previous = dict(cells)
+    return hits
+
+
 def host_step_times(samples):
     times = []
     previous = 0.0
     for sample in samples:
-        block, counter = sample["host"]
+        block, counter = sample["host"][:2]
         if block != EMPTY_BLOCK and counter > previous + COUNTER_DROP_EPSILON:
             times.append(sample["t"])
         elif block != EMPTY_BLOCK and counter == 0.0 and previous > 0.0:
@@ -511,6 +530,9 @@ def describe_series(observation, build, dll_hash, game_version=None, delay_ms=No
         "hostLog": host_counts,
         "swings": swing_records(observation, delay_ms),
         "crackSteps": {"client": crack_steps(observation.samples, "client"), "host": crack_steps(observation.samples, "host")},
+        "tileHits": {"client": tile_hits(observation.samples, "client"), "host": tile_hits(observation.samples, "host")},
+        "cleanupError": observation.context.get("cleanupError"),
+        "aimPattern": observation.context.get("aimPattern"),
         "hints": verdict_hints(observation.samples, observation.hit_times, delay_ms, host_counts, findings, jitter_ms),
         "gameVersion": game_version,
         "actionPerformedBy": "client",
@@ -557,6 +579,14 @@ def format_series_report(report):
             len(report["hitTimes"]), swings["acceptedCount"], swings["droppedCount"], swings.get("afterHostBreakCount", 0)))
         for label, found in (swings.get("gaps") or {}).items():
             lines.append("  %s swings: %d, host copy of the client body to its real position, mean %s, max %s world units" % (label, found["count"], found["meanGap"], found["maxGap"]))
+    if report.get("tileHits") and (report["tileHits"]["client"] or report["tileHits"]["host"]):
+        hits = report["tileHits"]
+        lines.append("  tile hits (offset from the target block: crack increases), client %s, host %s; aim pattern %s" % (hits["client"], hits["host"], report.get("aimPattern")))
+        other_host = sum(count for cell, count in hits["host"].items() if cell != TARGET_CELL_KEY)
+        other_client = sum(count for cell, count in hits["client"].items() if cell != TARGET_CELL_KEY)
+        lines.append("  increases on tiles other than the target: client %d, host %d" % (other_client, other_host))
+    if report.get("cleanupError"):
+        lines.append("  cleanup error: %s" % report["cleanupError"])
     if report.get("crackSteps"):
         lines.append("  crack steps per sample, client %s, host %s" % (report["crackSteps"]["client"], report["crackSteps"]["host"]))
     for hint in report.get("hints", []):

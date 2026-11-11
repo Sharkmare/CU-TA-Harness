@@ -44,7 +44,7 @@ class RunArgumentTests(unittest.TestCase):
         buffer = io.StringIO()
         with redirect_stdout(buffer), mock.patch.dict(os.environ, {}, clear=False):
             code = run_tests.main(["--list", "--only", "desync", "--builds", "upstream-fixes", "stock-5.5.0", "--net", "100:0", "100:60", "250:100",
-                                   "--repeat", "3", "--match", "hold_mining"])
+                                   "--repeat", "3", "--match", "hold_mining_cracks"])
         text = buffer.getvalue()
         self.assertEqual(code, 0)
         self.assertIn("launches (2):", text)

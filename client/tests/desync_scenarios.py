@@ -525,11 +525,117 @@ def hand_read(game, context):
 
 MIXED_HAND_MINING_GROUP = "mixed-hand-mining"
 
+FRESH_BLOCK_ID = 8
+FRESH_BLOCK_COLUMNS = (2, -2, 3, -3)
+FRESH_BLOCK_VERIFY_SECONDS = 6.0
+FRESH_BLOCK_HEALTH_RANGE = (60.0, 150.0)
+AIM_CIRCLE_RADIUS = 0.4
+AIM_CIRCLE_PERIOD_SECONDS = 3.0
+AIM_DRIFT_BLOCKS = 1.0
+AIM_DRIFT_PERIOD_SECONDS = 4.0
+NEIGHBOUR_OFFSETS = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+
+
+def aim_point(pattern, center, elapsed):
+    if pattern == "fixed":
+        return dict(center)
+    if pattern == "circle":
+        angle = 2 * math.pi * elapsed / AIM_CIRCLE_PERIOD_SECONDS
+        return {"x": center["x"] + AIM_CIRCLE_RADIUS * math.cos(angle), "y": center["y"] + AIM_CIRCLE_RADIUS * math.sin(angle)}
+    if pattern == "drift":
+        phase = (elapsed / AIM_DRIFT_PERIOD_SECONDS) % 1.0
+        triangle = 2 * phase if phase < 0.5 else 2 * (1 - phase)
+        return {"x": center["x"] + AIM_DRIFT_BLOCKS * (triangle - 0.5), "y": center["y"]}
+    raise ValueError("unknown aim pattern %r" % pattern)
+
+
+def world_centre_of_cell(game, cell):
+    half_width = int(game.get("world", "halfWidth", depth=0))
+    half_height = int(game.get("world", "halfHeight", depth=0))
+    return {"x": cell["x"] - half_width + 0.5, "y": cell["y"] - half_height + 0.5}
+
+
+def wait_for_block_on_both(host, client, centre, expected, timeout=FRESH_BLOCK_VERIFY_SECONDS):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if block_value(host, centre) == expected and block_value(client, centre) == expected:
+            return
+        time.sleep(0.25)
+    raise AssertionError("block %d at (%.1f, %.1f) is not on both games after %.0fs: host %s, client %s" % (
+        expected, centre["x"], centre["y"], timeout, block_value(host, centre), block_value(client, centre)))
+
+
+def place_fresh_block(host, client):
+    base = block_cell(client, player_position(client))
+    low, high = FRESH_BLOCK_HEALTH_RANGE
+    seen = []
+    for column in FRESH_BLOCK_COLUMNS:
+        cell = {"x": base["x"] + column, "y": base["y"]}
+        centre = world_centre_of_cell(client, cell)
+        existing = block_value(host, centre)
+        if existing == 0:
+            host.call("invoke", target="world", method="SetBlock", args=[cell["x"], cell["y"], FRESH_BLOCK_ID], types=["Int32", "Int32", "UInt16"])
+            wait_for_block_on_both(host, client, centre, FRESH_BLOCK_ID)
+            health = block_health(client, FRESH_BLOCK_ID)
+            if not low <= health <= high:
+                raise AssertionError("block %d has health %s, outside %s" % (FRESH_BLOCK_ID, health, FRESH_BLOCK_HEALTH_RANGE))
+            return cell, centre, FRESH_BLOCK_ID, health, True
+        seen.append((column, existing))
+    raise AssertionError("no free cell for a fresh block next to the client; occupied (column, block) %s" % seen)
+
+
+def fresh_block_prepare_with(pattern):
+    def prepare(host, client):
+        empty_the_hand(client)
+        cell, centre, block, health, placed = place_fresh_block(host, client)
+        return {"position": centre, "blockId": block, "blockHealth": health, "cell": cell, "placedByHost": placed, "aimPattern": pattern,
+                "hostGame": host, "hostBodyHandle": body_handle_by_name(host, CLIENT_BODY_NAME), "swingLog": [], "firstCall": None}
+    return prepare
+
+
+def remove_fresh_block(host, client, context):
+    centre = context["position"]
+    if context.get("placedByHost") and block_value(host, centre) != 0:
+        host.call("invoke", target="world", method="SetBlock", args=[context["cell"]["x"], context["cell"]["y"], 0], types=["Int32", "Int32", "UInt16"])
+
+
+def aimed_hold_hit(client, context):
+    if context["firstCall"] is None:
+        context["firstCall"] = time.time()
+    target = aim_point(context["aimPattern"], context["position"], time.time() - context["firstCall"])
+    before = float(client.get("player", "attackCooldown", depth=0))
+    real = player_position(client)
+    copy = context["hostGame"].get(context["hostBodyHandle"], BODY_PATH, depth=0)
+    client.call("invoke", target="player", method="UseItemInHand",
+                sets=[{"target": "player", "path": "targetLookPos", "value": {"x": target["x"], "y": target["y"], "z": 0.0}}])
+    after = float(client.get("player", "attackCooldown", depth=0))
+    if after <= before + COOLDOWN_RISE_EPSILON:
+        return False
+    copy = {"x": float(copy["x"]), "y": float(copy["y"])}
+    context["swingLog"].append({"clientPosition": real, "hostCopyPosition": copy, "gap": round(distance(real, copy), 3), "aim": target})
+    return True
+
+
+def tile_read(game, context):
+    cell = context["cell"]
+    counters = {}
+    for dx, dy in NEIGHBOUR_OFFSETS:
+        neighbour = {"x": cell["x"] + dx, "y": cell["y"] + dy}
+        found = game.call("invoke", target="world", method="GetBlockDamage", args=[neighbour], types=["Vector2Int"])
+        if isinstance(found, dict) and "damage" in found:
+            counters["%d,%d" % (dx, dy)] = float(found["damage"])
+    return [block_value(game, context["position"]), counters.get("0,0", 0.0), counters]
+
+
 SERIES_SCENARIOS = [
-    SeriesScenario("hold_mining_cracks_dune_client", "the same held-click bare hand mining with a Dune client and an Experiment host: per-hit damage uses the attacker's strength, so the two crack counters can step differently",
-                   hand_prepare, hold_hit, hand_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group=MIXED_HAND_MINING_GROUP),
+    SeriesScenario("aim_circle_mining_cracks", "held-click bare hand mining of a block the host placed, the client's aim circles the block; the crack counters of the block and its eight neighbours are read on both games",
+                   fresh_block_prepare_with("circle"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
+    SeriesScenario("dune_client_aim_circle_mining", "the same moving-aim mining with a Dune client and an Experiment host",
+                   fresh_block_prepare_with("circle"), aimed_hold_hit, tile_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group=MIXED_HAND_MINING_GROUP, cleanup=remove_fresh_block),
+    SeriesScenario("dune_client_hold_mining", "the same held-click bare hand mining with a Dune client and an Experiment host: per-hit damage uses the attacker's strength, so the two crack counters can step differently",
+                   fresh_block_prepare_with("fixed"), aimed_hold_hit, hand_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group=MIXED_HAND_MINING_GROUP, cleanup=remove_fresh_block),
     SeriesScenario("hold_mining_cracks", "the client mines a multi-hit block with bare hands like a held mouse button: Body.UseItemInHand every 20 ms, the game's own attack cooldown decides which calls swing",
-                   hand_prepare, hold_hit, hand_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining"),
+                   fresh_block_prepare_with("fixed"), aimed_hold_hit, hand_read, cadence_seconds=HOLD_CALL_PAUSE_SECONDS, max_hits=HOLD_MAX_CALLS, group="hand-mining", cleanup=remove_fresh_block),
     SeriesScenario("hand_mining_cracks", "the client mines a multi-hit block with bare hands (Body.UseItemInHand with an empty hand); crack counter and block on both games every 0.25 s until 10 s after the break",
                    hand_prepare, hand_hit, hand_read, cadence_seconds=0.0, max_hits=HAND_MAX_HITS, group="hand-mining"),
 ]
@@ -549,10 +655,18 @@ def try_ready(game):
         return False
 
 
+def matching_scenario_names(fragments):
+    names = [scenario.name for scenario in SCENARIOS + SERIES_SCENARIOS]
+    if not fragments:
+        return names
+    return [name for name in names if any(fragment in name for fragment in fragments)]
+
+
 def counts_by_group(fragments):
     counts = {}
+    selected = set(matching_scenario_names(fragments))
     for scenario in SCENARIOS + SERIES_SCENARIOS:
-        if fragments and not any(fragment in scenario.name for fragment in fragments):
+        if scenario.name not in selected:
             continue
         entry = counts.setdefault(scenario.group, {"plain": 0, "network": 0})
         entry["network" if scenario.network_sensitive else "plain"] += 1

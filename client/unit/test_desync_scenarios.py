@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from casualtieslink import Game, desync
@@ -227,7 +228,7 @@ class DigLoopTests(unittest.TestCase):
 class MixedHandMiningTests(unittest.TestCase):
     def test_the_dune_client_group_has_its_own_held_click_scenario(self):
         found = [item for item in scenarios.SERIES_SCENARIOS if item.group == scenarios.MIXED_HAND_MINING_GROUP]
-        self.assertEqual([item.name for item in found], ["hold_mining_cracks_dune_client"])
+        self.assertEqual(sorted(item.name for item in found), ["dune_client_aim_circle_mining", "dune_client_hold_mining"])
         self.assertTrue(found[0].network_sensitive)
 
     def test_the_group_starts_a_dune_client_with_verbose_logging_and_the_probe_config(self):
@@ -240,6 +241,191 @@ class MixedHandMiningTests(unittest.TestCase):
         counts = scenarios.counts_by_group(["hold_mining"])
         self.assertEqual(sorted(counts), ["hand-mining", "mixed-hand-mining"])
         self.assertEqual(sorted(scenarios.counts_by_group(["dune_client"])), ["mixed-hand-mining"])
+
+    def test_each_match_fragment_selects_exactly_one_mining_scenario(self):
+        for fragment, expected in (("hold_mining_cracks", "hold_mining_cracks"), ("aim_circle_mining_cracks", "aim_circle_mining_cracks"),
+                                   ("dune_client_hold_mining", "dune_client_hold_mining"), ("dune_client_aim_circle", "dune_client_aim_circle_mining")):
+            self.assertEqual(scenarios.matching_scenario_names([fragment]), [expected], fragment)
+
+
+class FakeWorld:
+    def __init__(self, blocks, replicate_to=None, never_replicate=False):
+        self.blocks = dict(blocks)
+        self.replicate_to = replicate_to or []
+        self.never_replicate = never_replicate
+        self.damage = {}
+        self.player = {"x": 10.2, "y": 50.7}
+        self.sets = []
+
+    def get(self, arguments):
+        if arguments["target"] == "world":
+            return {"halfWidth": 100, "halfHeight": 20}[arguments["path"]]
+        if arguments["target"] == "player" and arguments["path"] == scenarios.BODY_PATH:
+            return dict(self.player)
+        raise FakeFailure("unexpected get " + str(arguments))
+
+    def invoke(self, arguments):
+        method = arguments["method"]
+        if method == "GetBlock":
+            position = arguments["args"][0]
+            return self.blocks.get((int(position["x"] + 100), int(position["y"] + 20)), 0)
+        if method == "SetBlock":
+            x, y, block = arguments["args"]
+            self.sets.append((x, y, block))
+            self.blocks[(x, y)] = block
+            if not self.never_replicate:
+                for other in self.replicate_to:
+                    other.blocks[(x, y)] = block
+            return None
+        if method == "GetBlockDamage":
+            cell = arguments["args"][0]
+            counter = self.damage.get((cell["x"], cell["y"]))
+            return {"$type": "BlockDamage", "damage": counter} if counter is not None else None
+        if method == "GetBlockInfo":
+            return {"health": {8: 60.0, 9: 150.0, 6: 5000.0}.get(arguments["args"][0], 1.0)}
+        raise FakeFailure("unexpected invoke " + str(arguments))
+
+    def handlers(self):
+        return {"get": self.get, "invoke": self.invoke}
+
+
+class FreshBlockTests(unittest.TestCase):
+    def games(self, host_world, client_world):
+        return FakeLink(host_world.handlers()), FakeLink(client_world.handlers())
+
+    def test_the_host_places_a_block_next_to_the_client_and_both_games_see_it(self):
+        client_world = FakeWorld({})
+        host_world = FakeWorld({}, replicate_to=[client_world])
+        host_link, client_link = self.games(host_world, client_world)
+        with host_link, client_link:
+            host, client = Game(host_link.port), Game(client_link.port)
+            cell, centre, block, health, placed = scenarios.place_fresh_block(host, client)
+        self.assertEqual((cell, block, health, placed), ({"x": 112, "y": 70}, 8, 60.0, True))
+        self.assertEqual(centre, {"x": 12.5, "y": 50.5})
+        self.assertEqual(host_world.sets, [(112, 70, 8)])
+        self.assertEqual(client_world.blocks[(112, 70)], 8)
+
+    def test_an_occupied_column_is_skipped_for_the_next_one(self):
+        client_world = FakeWorld({})
+        host_world = FakeWorld({(112, 70): 6}, replicate_to=[client_world])
+        host_link, client_link = self.games(host_world, client_world)
+        with host_link, client_link:
+            cell = scenarios.place_fresh_block(Game(host_link.port), Game(client_link.port))[0]
+        self.assertEqual(cell, {"x": 108, "y": 70})
+
+    def test_when_every_column_is_taken_the_failure_names_them(self):
+        taken = {(110 + column, 70): 6 for column in scenarios.FRESH_BLOCK_COLUMNS}
+        client_world = FakeWorld({})
+        host_world = FakeWorld(taken, replicate_to=[client_world])
+        host_link, client_link = self.games(host_world, client_world)
+        with host_link, client_link:
+            with self.assertRaises(AssertionError) as caught:
+                scenarios.place_fresh_block(Game(host_link.port), Game(client_link.port))
+        self.assertIn("no free cell", str(caught.exception))
+
+    def test_a_block_that_never_reaches_the_client_fails_the_setup(self):
+        client_world = FakeWorld({})
+        host_world = FakeWorld({}, replicate_to=[client_world], never_replicate=True)
+        host_link, client_link = self.games(host_world, client_world)
+        original = scenarios.FRESH_BLOCK_VERIFY_SECONDS
+        try:
+            with host_link, client_link:
+                with self.assertRaises(AssertionError) as caught:
+                    scenarios.wait_for_block_on_both(Game(host_link.port), Game(client_link.port), {"x": 12.5, "y": 50.5}, 8, timeout=0.5)
+        finally:
+            scenarios.FRESH_BLOCK_VERIFY_SECONDS = original
+        self.assertIn("is not on both games", str(caught.exception))
+
+    def test_cleanup_removes_a_block_the_host_placed_and_leaves_air_alone(self):
+        world = FakeWorld({(112, 70): 8})
+        with FakeLink(world.handlers()) as link:
+            host = Game(link.port)
+            context = {"position": {"x": 12.5, "y": 50.5}, "cell": {"x": 112, "y": 70}, "placedByHost": True}
+            scenarios.remove_fresh_block(host, None, context)
+            self.assertEqual(world.blocks[(112, 70)], 0)
+            world.sets.clear()
+            scenarios.remove_fresh_block(host, None, context)
+        self.assertEqual(world.sets, [])
+
+    def test_a_block_not_placed_by_the_harness_is_never_removed(self):
+        world = FakeWorld({(112, 70): 8})
+        with FakeLink(world.handlers()) as link:
+            scenarios.remove_fresh_block(Game(link.port), None, {"position": {"x": 12.5, "y": 50.5}, "cell": {"x": 112, "y": 70}, "placedByHost": False})
+        self.assertEqual(world.blocks[(112, 70)], 8)
+
+    def test_the_cell_centre_follows_the_world_half_size(self):
+        world = FakeWorld({})
+        with FakeLink(world.handlers()) as link:
+            self.assertEqual(scenarios.world_centre_of_cell(Game(link.port), {"x": 112, "y": 70}), {"x": 12.5, "y": 50.5})
+
+
+class AimTests(unittest.TestCase):
+    centre = {"x": 5.0, "y": 7.0}
+
+    def test_a_fixed_aim_stays_on_the_centre(self):
+        self.assertEqual(scenarios.aim_point("fixed", self.centre, 1.7), self.centre)
+
+    def test_the_circle_stays_at_its_radius_and_comes_back_after_a_period(self):
+        for elapsed in (0.0, 0.4, 1.1, 2.9):
+            point = scenarios.aim_point("circle", self.centre, elapsed)
+            self.assertAlmostEqual(math.hypot(point["x"] - 5.0, point["y"] - 7.0), scenarios.AIM_CIRCLE_RADIUS, places=6)
+        start = scenarios.aim_point("circle", self.centre, 0.0)
+        again = scenarios.aim_point("circle", self.centre, scenarios.AIM_CIRCLE_PERIOD_SECONDS)
+        self.assertAlmostEqual(start["x"], again["x"], places=6)
+        self.assertNotEqual(scenarios.aim_point("circle", self.centre, 0.0), scenarios.aim_point("circle", self.centre, 0.75))
+
+    def test_the_drift_moves_one_block_sideways_and_back_without_leaving_the_row(self):
+        xs = [scenarios.aim_point("drift", self.centre, step * 0.1)["x"] for step in range(0, 41)]
+        self.assertAlmostEqual(max(xs) - min(xs), scenarios.AIM_DRIFT_BLOCKS, places=6)
+        self.assertTrue(all(scenarios.aim_point("drift", self.centre, step * 0.3)["y"] == 7.0 for step in range(20)))
+
+    def test_an_unknown_pattern_is_refused(self):
+        with self.assertRaises(ValueError):
+            scenarios.aim_point("spiral", self.centre, 0.0)
+
+
+class TileReadTests(unittest.TestCase):
+    def test_the_read_lists_the_counter_of_the_block_and_each_cracked_neighbour(self):
+        world = FakeWorld({(112, 70): 8})
+        world.damage = {(112, 70): 19.33, (113, 70): 5.0, (111, 71): 2.0}
+        with FakeLink(world.handlers()) as link:
+            state = scenarios.tile_read(Game(link.port), {"position": {"x": 12.5, "y": 50.5}, "cell": {"x": 112, "y": 70}})
+        self.assertEqual(state[0], 8)
+        self.assertEqual(state[1], 19.33)
+        self.assertEqual(state[2], {"0,0": 19.33, "1,0": 5.0, "-1,1": 2.0})
+
+
+class AimedHoldTests(unittest.TestCase):
+    def test_each_call_sends_the_current_aim_and_a_swing_counts_only_when_the_cooldown_rose(self):
+        state = {"cooldown": 0.0, "sets": []}
+
+        def get(arguments):
+            if arguments["path"] == "attackCooldown":
+                return state["cooldown"]
+            if arguments["path"] == scenarios.BODY_PATH:
+                return {"x": 1.0, "y": 2.0}
+            raise FakeFailure("unexpected " + str(arguments))
+
+        def invoke(arguments):
+            state["sets"].append(arguments["sets"][0]["value"])
+            if state["fire"]:
+                state["cooldown"] = 0.2
+
+        host_world = FakeWorld({})
+        with FakeLink({"get": get, "invoke": invoke}) as client_link, FakeLink(host_world.handlers()) as host_link:
+            host_world.get = lambda arguments: {"x": 1.1, "y": 2.0}
+            host_link.handlers["get"] = host_world.get
+            client = Game(client_link.port)
+            context = {"aimPattern": "circle", "position": {"x": 5.0, "y": 7.0}, "firstCall": None, "swingLog": [],
+                       "hostGame": Game(host_link.port), "hostBodyHandle": "id:1"}
+            state["fire"] = False
+            self.assertFalse(scenarios.aimed_hold_hit(client, context))
+            state["fire"] = True
+            self.assertTrue(scenarios.aimed_hold_hit(client, context))
+        self.assertEqual(len(context["swingLog"]), 1)
+        self.assertEqual(context["swingLog"][0]["gap"], 0.1)
+        self.assertEqual(len(state["sets"]), 2)
+        self.assertNotEqual(state["sets"][0], {"x": 5.0, "y": 7.0, "z": 0.0})
 
 
 class ScenarioListTests(unittest.TestCase):

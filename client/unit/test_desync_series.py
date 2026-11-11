@@ -237,6 +237,62 @@ class HeldClickTests(unittest.TestCase):
         self.assertIn("client swing intervals: shortest 0.200 s, mean 0.207 s; 0 of 3 could reach the host under the 0.124 s cooldown after jitter of up to 50 ms", quiet)
 
 
+class TileHitTests(unittest.TestCase):
+    def test_increases_are_counted_per_tile_and_side(self):
+        samples = [
+            {"t": 0.0, "host": [8, 0.0, {}], "client": [8, 0.0, {}]},
+            {"t": 0.25, "host": [8, 19.0, {"0,0": 19.0}], "client": [8, 19.0, {"0,0": 19.0}]},
+            {"t": 0.5, "host": [8, 19.0, {"0,0": 19.0, "1,0": 19.0}], "client": [8, 38.0, {"0,0": 38.0}]},
+            {"t": 0.75, "host": [8, 38.0, {"0,0": 38.0, "1,0": 19.0}], "client": [0, 0.0, {}]},
+        ]
+        self.assertEqual(desync.tile_hits(samples, "host"), {"0,0": 2, "1,0": 1})
+        self.assertEqual(desync.tile_hits(samples, "client"), {"0,0": 2})
+
+    def test_two_element_states_are_still_judged_and_have_no_tile_hits(self):
+        samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 19.0], [8, 19.0]), sample(0.5, [0, 0.0], [0, 0.0])]
+        self.assertEqual(desync.judge_series(samples)[0], desync.VERDICT_PERSISTED)
+        self.assertEqual(desync.tile_hits(samples, "host"), {})
+
+    def test_three_element_states_are_judged_by_block_and_counter_only(self):
+        samples = [{"t": 0.0, "host": [8, 0.0, {}], "client": [8, 0.0, {}]}, {"t": 0.25, "host": [8, 20.0, {"0,0": 20.0}], "client": [0, 0.0, {}]},
+                   {"t": 0.5, "host": [8, 20.0, {"0,0": 20.0}], "client": [8, 0.0, {}]}]
+        self.assertEqual(desync.judge_series(samples)[0], desync.VERDICT_REAPPEARED)
+
+    def test_the_report_names_hits_on_other_tiles(self):
+        block = FakeBlock(hits_to_break=2)
+        scenario = desync.SeriesScenario("hold", "d", lambda host, client: {"aimPattern": "circle"}, block.hit, block.read, cadence_seconds=0.01, max_hits=5, interval_seconds=0.01, tail_seconds=0.05)
+        report = desync.describe_series(desync.observe_series(scenario, "host", "client"), "fork", "ab" * 32)
+        report["tileHits"] = {"client": {"0,0": 3}, "host": {"0,0": 2, "1,0": 1}}
+        text = desync.format_series_report(report)
+        self.assertIn("increases on tiles other than the target: client 0, host 1", text)
+        self.assertIn("aim pattern circle", text)
+
+
+class CleanupTests(unittest.TestCase):
+    def test_cleanup_runs_after_the_series_even_when_hits_fail(self):
+        calls = []
+
+        def broken_hit(client, context):
+            raise RuntimeError("link gone")
+
+        scenario = desync.SeriesScenario("hold", "d", lambda host, client: {}, broken_hit, lambda game, context: [8, 0.0], cadence_seconds=0.0, max_hits=3,
+                                         interval_seconds=0.01, tail_seconds=0.0, cleanup=lambda host, client, context: calls.append("cleaned"))
+        with self.assertRaises(RuntimeError):
+            desync.observe_series(scenario, "host", "client")
+        self.assertEqual(calls, ["cleaned"])
+
+    def test_a_cleanup_error_is_recorded_not_raised(self):
+        def failing_cleanup(host, client, context):
+            raise RuntimeError("no host")
+
+        block = FakeBlock(hits_to_break=1)
+        scenario = desync.SeriesScenario("hold", "d", lambda host, client: {}, block.hit, block.read, cadence_seconds=0.01, max_hits=3,
+                                         interval_seconds=0.01, tail_seconds=0.02, cleanup=failing_cleanup)
+        observation = desync.observe_series(scenario, "host", "client")
+        self.assertEqual(observation.context["cleanupError"], "no host")
+        self.assertEqual(desync.describe_series(observation, "fork", "ab" * 32)["cleanupError"], "no host")
+
+
 class CrackStepTests(unittest.TestCase):
     def test_each_rise_of_the_counter_is_one_step_per_side(self):
         samples = [sample(0.0, [8, 0.0], [8, 0.0]), sample(0.25, [8, 19.33], [8, 24.7]), sample(0.5, [8, 38.66], [8, 49.4]), sample(0.75, [8, 58.0], [0, 0.0]), sample(1.0, [0, 0.0], [0, 0.0])]
