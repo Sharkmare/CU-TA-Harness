@@ -43,7 +43,7 @@ class ActHarness(unittest.TestCase):
         return True
 
     def teleport(self, target, path, value):
-        if self.landing is not None:
+        if self.landing is not None and not getattr(self, "blocked", False):
             self.player = {"x": value["x"], "y": value["y"]}
 
     def host_get(self, handle, path, depth=0):
@@ -53,7 +53,7 @@ class ActHarness(unittest.TestCase):
             return True
         raise KeyError(path)
 
-    def run_act(self):
+    def run_act(self, **options):
         self.client.set.side_effect = self.teleport
         self.client.get.side_effect = lambda handle, path, depth=0: dict(self.victim)
         self.host.get.side_effect = self.host_get
@@ -66,7 +66,7 @@ class ActHarness(unittest.TestCase):
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
-        pvp_banded.act(self.client, context)
+        pvp_banded.act(self.client, context, **options)
         return context
 
 
@@ -129,6 +129,24 @@ class ActTests(ActHarness):
         self.assertEqual(self.fired, [])
         self.assertEqual(context["bandFailure"]["swing"], 1)
         self.assertEqual(context["measurements"], [])
+
+    def test_a_client_blocked_inside_the_accepted_range_punches_and_records_the_distance(self):
+        self.landing = True
+        self.blocked = True
+        self.knockback = 0.0
+        self.player = {"x": self.victim["x"] - 2.25, "y": self.victim["y"]}
+        context = self.run_act(accept_range=(2.0, 3.6))
+        self.assertEqual(len(context["measurements"]), pvp_banded.PUNCHES_PER_RUN)
+        self.assertNotIn("bandFailure", context)
+        self.assertAlmostEqual(context["measurements"][0]["band"]["acceptedOutsideBand"], 2.25, places=1)
+
+    def test_a_client_blocked_outside_the_accepted_range_still_fails_the_run(self):
+        self.landing = None
+        self.blocked = True
+        self.player = {"x": self.victim["x"] - 3.99, "y": self.victim["y"]}
+        context = self.run_act(accept_range=(2.0, 3.6))
+        self.assertEqual(self.fired, [])
+        self.assertEqual(context["bandFailure"]["swing"], 1)
 
     def test_a_band_failure_after_two_punches_keeps_those_punches_and_marks_the_run(self):
         self.landing = True

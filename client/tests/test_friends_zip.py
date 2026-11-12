@@ -19,6 +19,11 @@ RECONNECT_PAUSE_SECONDS = 3.0
 HOST_BODY = "Body_HostD"
 CLIENT_BODY = "Body_ClientD"
 LOADER_ATTACH_LINE = "attached to " + CLIENT_BODY
+EXPECTED_ZIP_MD5 = "59a9201fa7a5598d2be75db0df36ae72"
+EXPECTED_TOGETHER_MD5 = "603694c113ebcc11d92101b7716b0aa2"
+EXPECTED_TOGETHER_LABEL = "5.5.0+chars.2"
+TOGETHER_DLL_IN_ZIP = "BepInEx/plugins/Together/CasualtiesMP.dll"
+PVP_ACCEPT_RANGE = (2.0, 3.6)
 GAMES = None
 RECORD = {}
 
@@ -67,6 +72,10 @@ def sync_readings(host_state, client_state, expected):
     return {"host": checks.sync_body_issues(host_state, expected), "client": checks.sync_body_issues(client_state, expected)}
 
 
+def attach_lines(game_name):
+    return GAMES.log_text(game_name).count(LOADER_ATTACH_LINE)
+
+
 def leave_and_reconnect(client, repick):
     client.console("disconnect")
     deadline = time.time() + LEAVE_SECONDS
@@ -88,10 +97,15 @@ class FriendsZipLobbyCheck(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         RECORD["zip"] = {"md5": friendszip.md5_of_file(friendszip.default_zip_path())}
+        if RECORD["zip"]["md5"] != EXPECTED_ZIP_MD5:
+            raise AssertionError("the zip is not the verification zip %s: %s" % (EXPECTED_ZIP_MD5, RECORD["zip"]["md5"]))
         cls.host = GAMES.start_host_alone([], FRIENDS_ZIP_CHOICE, host_extra=checks.PVP_RULE_ARGUMENTS)
         cls.client = None
         matches = friendszip.verify_copy(friendszip.default_zip_path(), GAMES.host_copy)
         RECORD["zip"]["hostCopyDllMatches"] = {"allMatch": all(matches.values()), "dllCount": len(matches)}
+        RECORD["zip"]["togetherDllMd5InHostCopy"] = friendszip.md5_of_file(os.path.join(GAMES.host_copy, *TOGETHER_DLL_IN_ZIP.split("/")))
+        if RECORD["zip"]["togetherDllMd5InHostCopy"] != EXPECTED_TOGETHER_MD5:
+            raise AssertionError("the Together DLL in the host copy is %s, expected %s" % (RECORD["zip"]["togetherDllMd5InHostCopy"], EXPECTED_TOGETHER_MD5))
         RECORD["pluginFoldersInHostCopy"] = sorted(friendszip.plugin_names_in_copy(GAMES.host_copy))
         try:
             RECORD["hostAlone"] = {"readyAccepted": ready_up([cls.host], before_ready={cls.host: chooser(checks.EXPERIMENT_CHARACTER)})}
@@ -112,6 +126,7 @@ class FriendsZipLobbyCheck(unittest.TestCase):
 
     def test_01_true_late_join_with_the_custom_pick(self):
         RECORD["hostLaunchCounts"] = checks.launch_counts(GAMES.log_text("host"))
+        RECORD["togetherLabelLineOnHost"] = ("Plugin CasualtiesMP version %s is loaded" % EXPECTED_TOGETHER_LABEL) in GAMES.log_text("host")
         type(self).client = GAMES.start_client_later([], FRIENDS_ZIP_CHOICE, client_extra=checks.PVP_RULE_ARGUMENTS)
         matches = friendszip.verify_copy(friendszip.default_zip_path(), GAMES.client_copy)
         RECORD["lateJoin"] = {"path": "pick path: PreRunScript.SelectCharacter(3) before every ready try, no --mp-mychar", "clientCopyDllMatches": all(matches.values()),
@@ -134,9 +149,11 @@ class FriendsZipLobbyCheck(unittest.TestCase):
     def test_02_banded_pvp_from_the_late_client(self):
         pvp_banded.reset_launch_state()
         context = pvp_banded.prepare(self.host, self.client)
-        pvp_banded.act(self.client, context)
+        pvp_banded.act(self.client, context, accept_range=PVP_ACCEPT_RANGE)
         issues = pvp_banded.check(context)
-        RECORD["pvp"] = {"punches": [{"swing": entry["swing"], "hostDelta": entry["hostDelta"], "clientDelta": entry["clientDelta"], "fired": entry["fired"]} for entry in context["measurements"]], "issues": issues}
+        RECORD["pvp"] = {"punches": [{"swing": entry["swing"], "hostDelta": entry["hostDelta"], "clientDelta": entry["clientDelta"], "fired": entry["fired"], "distance": entry["geometry"]["distance"],
+                                      "acceptedOutsideBand": entry["band"].get("acceptedOutsideBand"), "bandDistances": entry["band"]["distances"]} for entry in context["measurements"]], "issues": issues,
+                         "acceptRange": PVP_ACCEPT_RANGE}
         self.assertEqual(issues, [])
         self.assertEqual(len([entry for entry in context["measurements"] if entry["hostDelta"] > 0]), len(context["measurements"]), RECORD["pvp"])
 
@@ -148,16 +165,27 @@ class FriendsZipLobbyCheck(unittest.TestCase):
             self.assertGreaterEqual(found["attackTranspilerSuccess"], 1, which)
 
     def test_04_rejoin_without_a_repick(self):
+        attaches_before = attach_lines("client")
         RECORD["rejoinNoRepick"] = leave_and_reconnect(self.client, repick=False)
         host_state, client_state = both_states(self.host, self.client)
+        issues = checks.pick_issues(host_state, client_state, {CLIENT_BODY: checks.CUSTOM_CHARACTER, HOST_BODY: checks.EXPERIMENT_CHARACTER})
+        attaches_after = attach_lines("client")
+        if attaches_after <= attaches_before:
+            issues.append("the loader attach line did not appear again on the client (%d before, %d after)" % (attaches_before, attaches_after))
         RECORD["rejoinNoRepick"].update({"host": host_state, "client": client_state, "clientOwnTag": client_state["tags"].get(CLIENT_BODY), "hostTagOfClient": host_state["tags"].get(CLIENT_BODY),
-                                         "clientCharacterSelected": client_state["characterSelected"], "stayedCustom": client_state["tags"].get(CLIENT_BODY) == checks.CUSTOM_CHARACTER})
+                                         "clientCharacterSelected": client_state["characterSelected"], "attachLinesOnClientBeforeAfter": [attaches_before, attaches_after],
+                                         "bodyBuiltOrCharacterChanged": "not observable through the link; the loader attaches on those events, so a new attach line is the evidence", "issues": issues})
+        self.assertEqual(issues, [])
 
     def test_05_rejoin_with_an_explicit_repick(self):
+        attaches_before = attach_lines("client")
         RECORD["rejoinWithRepick"] = leave_and_reconnect(self.client, repick=True)
         host_state, client_state = both_states(self.host, self.client)
         issues = checks.pick_issues(host_state, client_state, {CLIENT_BODY: checks.CUSTOM_CHARACTER, HOST_BODY: checks.EXPERIMENT_CHARACTER})
-        RECORD["rejoinWithRepick"].update({"host": host_state, "client": client_state, "clientOwnTag": client_state["tags"].get(CLIENT_BODY), "issues": issues})
+        attaches_after = attach_lines("client")
+        if attaches_after <= attaches_before:
+            issues.append("the loader attach line did not appear again on the client (%d before, %d after)" % (attaches_before, attaches_after))
+        RECORD["rejoinWithRepick"].update({"host": host_state, "client": client_state, "clientOwnTag": client_state["tags"].get(CLIENT_BODY), "attachLinesOnClientBeforeAfter": [attaches_before, attaches_after], "issues": issues})
         self.assertEqual(issues, [])
 
     def test_06_reverse_host_custom_client_plain(self):

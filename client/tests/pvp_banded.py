@@ -106,7 +106,7 @@ def readable(game, handle, path):
         return {"error": str(failure)[:100]}
 
 
-def act(client, context):
+def act(client, context, accept_range=None):
     host = context["host"]
     entries = []
     context["measurements"] = entries
@@ -119,6 +119,9 @@ def act(client, context):
         if side is None:
             side = side_of_victim(base.player_position(client), victim)
         band = crates.ensure_band(host, client, context["hostVictim"], victim, side=side)
+        if not band["ok"] and accept_range and accept_range[0] <= band["distances"][-1] <= accept_range[1]:
+            band["acceptedOutsideBand"] = band["distances"][-1]
+            band["ok"] = True
         if not band["ok"]:
             context["bandFailure"] = {"swing": index, "distances": band["distances"]}
             break

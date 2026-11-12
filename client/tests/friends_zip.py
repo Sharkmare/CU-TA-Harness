@@ -127,6 +127,16 @@ def sync_body_values(game):
     return result
 
 
+def net_body_reads(game):
+    result = {}
+    for identifier, name in object_rows(game, NET_BODY_TYPE):
+        handle = "id:%d" % identifier
+        result[name] = {"playerCustomCharacter": read_optional(game, handle, "player.customCharacter", nonpublic=True),
+                        "syncCustomValue": read_optional(game, handle, "syncBody.customCharacter.Value", nonpublic=True),
+                        "syncSelectedValue": read_optional(game, handle, "syncBody.characterSelected.Value", nonpublic=True)}
+    return result
+
+
 def loader_components(game):
     result = {}
     for identifier, name in object_rows(game, CUSTOM_COMPONENT_TYPE):
@@ -145,7 +155,7 @@ def body_species(game):
 
 
 def character_state(game):
-    return {"players": player_custom_ids(game), "tags": tag_rows(game), "syncBodies": sync_body_values(game), "loaderComponents": loader_components(game),
+    return {"players": player_custom_ids(game), "tags": tag_rows(game), "syncBodies": sync_body_values(game), "netBodies": net_body_reads(game), "playerDict": short_dump(game, PLAYER_STATIC, "BodyToPlayerDict", depth=2), "loaderComponents": loader_components(game),
             "bodySpecies": body_species(game), "characterSelected": read_optional(game, "static:" + PRE_RUN_TYPE, "characterSelected"), "pager": pager_state(game)}
 
 
@@ -162,10 +172,12 @@ def numbers_in(values):
 def pick_issues(host_state, client_state, expected):
     issues = []
     for label, state in (("host", host_state), ("client", client_state)):
-        readable = state["players"]["ids"]
         for body, character in expected.items():
-            if character and character not in readable:
-                issues.append("ScavPlayer.customCharacter on the %s machine does not include %d for %s (read %s)" % (label, character, body, readable))
+            reads = state["netBodies"].get(body, {})
+            if character and reads.get("playerCustomCharacter") != character:
+                issues.append("ScavPlayer.customCharacter of the player owning %s is %s on the %s machine, expected %d" % (body, reads.get("playerCustomCharacter"), label, character))
+            if character and reads.get("syncCustomValue") != character:
+                issues.append("SyncBody custom value of %s is %s on the %s machine, expected %d" % (body, reads.get("syncCustomValue"), label, character))
             if state["tags"].get(body) != character:
                 issues.append("CharacterIdTag of %s is %s on the %s machine, expected %d" % (body, state["tags"].get(body), label, character))
             loader = state["loaderComponents"].get(body)

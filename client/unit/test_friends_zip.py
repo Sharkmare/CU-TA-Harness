@@ -129,10 +129,12 @@ class FakeGame:
 
 def machine(species, custom_id, tag_id=3, loader_id=3, players=(0, 3), host_tag=0, host_species=0):
     objects = {"PreRunScript": [(1, "pre")], "Together.ScavPlayer": [(10, "p1"), (11, "p2")], "CharacterIdTag": [(20, "Body_ClientD"), (21, "Body_HostD")], "CustomCharacter": [(30, "cc")],
-               "Body": [(40, "Body_HostD"), (41, "Body_ClientD"), (42, "Crate")], "NetBody": [(60, "Body_ClientD")]}
+               "Body": [(40, "Body_HostD"), (41, "Body_ClientD"), (42, "Crate")], "NetBody": [(60, "Body_ClientD"), (61, "Body_HostD")]}
     values = {("id:10", "customCharacter"): players[0], ("id:11", "customCharacter"): players[1], ("id:20", "Id"): tag_id, ("id:21", "Id"): host_tag,
               ("id:30", "Body"): {"name": "Body_ClientD"}, ("id:30", "Id"): loader_id, ("id:40", "charType"): host_species, ("id:41", "charType"): species,
               ("id:42", "charType"): 9, ("static:PreRunScript", "characterSelected"): custom_id, ("static:Together.ScavPlayer", "LocalPlayer.customCharacter"): custom_id,
+              ("id:60", "player.customCharacter"): players[1], ("id:61", "player.customCharacter"): players[0],
+              ("id:60", "syncBody.customCharacter.Value"): players[1], ("id:61", "syncBody.customCharacter.Value"): players[0],
               ("id:60", "syncBody"): {"characterSelected": {"Value": 0}, "customCharacterId": {"Value": custom_id}, "_position": {"x": 1}},
               ("static:CasualtiesCharacters.CharacterMenu", "view.Page"): 1, ("static:CasualtiesCharacters.CharacterMenu", "view.Counter.text"): "Page 2 / 2"}
     return FakeGame(objects, values)
@@ -152,7 +154,7 @@ class CheckTests(unittest.TestCase):
 
     def test_a_host_that_lost_the_custom_id_is_reported(self):
         issues = self.issues(machine(0, 0, players=(0, 0)), machine(0, 3))
-        self.assertTrue(any("ScavPlayer.customCharacter on the host machine" in issue for issue in issues), issues)
+        self.assertTrue(any("ScavPlayer.customCharacter of the player owning Body_ClientD is 0 on the host machine" in issue for issue in issues), issues)
 
     def test_a_loader_component_with_another_id_is_reported_for_that_machine(self):
         issues = self.issues(machine(0, 3, loader_id=0), machine(0, 3))
@@ -165,7 +167,7 @@ class CheckTests(unittest.TestCase):
 
     def test_the_reverse_pick_expects_the_custom_character_on_the_host_body_and_none_on_the_client_body(self):
         reverse = {"Body_HostD": 3, "Body_ClientD": 0}
-        game = machine(0, 3, tag_id=0, host_tag=3)
+        game = machine(0, 3, tag_id=0, host_tag=3, players=(3, 0))
         game.objects["CustomCharacter"] = [(31, "cc2")]
         game.values[("id:31", "Body")] = {"name": "Body_HostD"}
         game.values[("id:31", "Id")] = 3
@@ -193,6 +195,21 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(sorted(values["Body_ClientD"]), ["characterSelected", "customCharacterId"])
         self.assertEqual(checks.sync_body_issues(checks.character_state(machine(0, 3)), {"Body_ClientD": 3}), {"Body_ClientD": True})
         self.assertEqual(checks.sync_body_issues(checks.character_state(machine(0, 0)), {"Body_ClientD": 3}), {"Body_ClientD": False})
+
+    def test_an_unreadable_player_or_sync_value_is_an_issue_not_a_pass(self):
+        client = machine(0, 3)
+        del client.values[("id:60", "player.customCharacter")]
+        del client.values[("id:60", "syncBody.customCharacter.Value")]
+        issues = self.issues(machine(0, 3), client)
+        self.assertTrue(any("owning Body_ClientD is None on the client machine" in issue for issue in issues), issues)
+        self.assertTrue(any("SyncBody custom value of Body_ClientD is None on the client machine" in issue for issue in issues), issues)
+
+    def test_a_sync_value_that_differs_from_the_pick_is_reported_for_that_machine(self):
+        host = machine(0, 3)
+        host.values[("id:60", "syncBody.customCharacter.Value")] = 0
+        issues = self.issues(host, machine(0, 3))
+        self.assertEqual(len([issue for issue in issues if "SyncBody custom value" in issue]), 1, issues)
+        self.assertTrue(any("on the host machine" in issue for issue in issues), issues)
 
     def test_select_character_goes_through_the_menu_object_and_reads_the_raw_id_back(self):
         game = machine(0, 3)
