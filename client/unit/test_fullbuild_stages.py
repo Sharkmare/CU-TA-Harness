@@ -12,10 +12,11 @@ BUILDS = (("fullbuild-control", "fullbuild-control-stage", instances.FULLBUILD_C
           ("pr24-control", "pr24-control-stage", instances.PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control"),
           ("pr24-fixed", "pr24-fixed-stage", instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed"),
           ("pr24-fixed-verbose", "pr24-fixed-verbose-stage", instances.PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose2"),
-          ("pr24-control-verbose", "pr24-control-verbose-stage", instances.PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control_verbose"))
+          ("pr24-control-verbose", "pr24-control-verbose-stage", instances.PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control_verbose"),
+          ("pr24-reconcile", "pr24-reconcile-stage", instances.PR24_RECONCILE_STAGE_ENVIRONMENT_VARIABLE, "stage_reconcile_pr24_main"))
 PINNED_MD5 = {"fullbuild-control": "5f44699a7e034bdcbdb8ba66969d04de", "fullbuild-fixed": "2eda43381ed4445d367e27af5edefedb",
               "pr24-control": "f209be8eb9d37eda5a4aafa407deda0f", "pr24-fixed": "aac74832f4e3dd8a2c13d12cba785e3a",
-              "pr24-fixed-verbose": "ce681dc17f3c76d448e107275a9b76f5", "pr24-control-verbose": "04b8ecd02fbb347b70309abe9ee07cc1"}
+              "pr24-fixed-verbose": "ce681dc17f3c76d448e107275a9b76f5", "pr24-control-verbose": "04b8ecd02fbb347b70309abe9ee07cc1", "pr24-reconcile": "66251de5f1cdcac0a1ab7e75ff3289c6"}
 
 
 class StageTests(unittest.TestCase):
@@ -55,6 +56,8 @@ class StageTests(unittest.TestCase):
         self.assertIn("pr24-control", test_desync.RECORD_ONLY_BUILDS)
         self.assertNotIn("pr24-fixed", test_desync.RECORD_ONLY_BUILDS)
         self.assertIn("pr24-control-verbose", test_desync.RECORD_ONLY_BUILDS)
+        self.assertNotIn("pr24-reconcile", test_desync.BUILDS_WITHOUT_PROBE)
+        self.assertNotIn("pr24-reconcile", test_desync.RECORD_ONLY_BUILDS)
 
     def test_the_stages_on_disk_have_the_pinned_md5_when_they_are_present(self):
         for build, md5 in PINNED_MD5.items():
