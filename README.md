@@ -248,6 +248,10 @@ One launch runs, in order: the host alone in a world, a fresh client joining lat
 python run_tests.py --pair --only friends-zip
 ```
 
+### Paged character select (singleplayer, friends zip plus a test pack)
+
+`tools/paged_select.py --zip-md5 <md5> [--width W --height H --characters N]` starts one singleplayer game (`--mp-disable`) from a copy with the friends zip plugin set and a generated test pack (`casualtieslink/pagedselect.py`), snapshots the profile first, and keeps the game up with the link on port 7650 until a `stop` file appears in `.state/paged_select`. It then closes the game, deletes the copy and restores the profile. The screen is driven through the link (`screenshot`, `mouse`, `input`).
+
 ### Checking that the tests can fail
 
 `tools/mutation_check.py` breaks the code on purpose in scratch copies, one change at a time (the list is `tools/mutants.json`), runs the offline tests against each copy and reports any change they did not notice. For example a second game being allowed, the save backup left behind, the plugin accepting an empty `Origin`, a held key one frame short.

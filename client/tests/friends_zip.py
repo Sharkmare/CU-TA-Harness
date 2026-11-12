@@ -7,6 +7,7 @@ from casualtieslink import desync
 CUSTOM_CHARACTER = 3
 EXPERIMENT_CHARACTER = 0
 EXPERIMENT_CHARTYPE = 0
+SYNC_VALUE_OFFSET = 1
 PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 PRE_RUN_TYPE = "PreRunScript"
 PLAYER_TYPE = "ScavPlayer"
@@ -127,11 +128,25 @@ def sync_body_values(game):
     return result
 
 
+def player_handles_by_body(game):
+    try:
+        dump = game.call("get", target=PLAYER_STATIC, path="BodyToPlayerDict", depth=2, nonpublic=True)
+    except Exception as failure:
+        LOOKUP_ERRORS.append("BodyToPlayerDict: %s" % str(failure)[:100])
+        return {}
+    handles = {}
+    for key, value in (dump or {}).items():
+        if isinstance(value, dict) and isinstance(value.get("id"), int):
+            handles[key.split(" (")[0]] = "id:%d" % value["id"]
+    return handles
+
+
 def net_body_reads(game):
     result = {}
+    handles = player_handles_by_body(game)
     for identifier, name in object_rows(game, NET_BODY_TYPE):
         handle = "id:%d" % identifier
-        result[name] = {"playerCustomCharacter": read_optional(game, handle, "player.customCharacter", nonpublic=True),
+        result[name] = {"playerCustomCharacter": read_optional(game, handles[name], "customCharacter") if name in handles else None,
                         "syncCustomValue": read_optional(game, handle, "syncBody.customCharacter.Value", nonpublic=True),
                         "syncSelectedValue": read_optional(game, handle, "syncBody.characterSelected.Value", nonpublic=True)}
     return result
@@ -176,8 +191,8 @@ def pick_issues(host_state, client_state, expected):
             reads = state["netBodies"].get(body, {})
             if character and reads.get("playerCustomCharacter") != character:
                 issues.append("ScavPlayer.customCharacter of the player owning %s is %s on the %s machine, expected %d" % (body, reads.get("playerCustomCharacter"), label, character))
-            if character and reads.get("syncCustomValue") != character:
-                issues.append("SyncBody custom value of %s is %s on the %s machine, expected %d" % (body, reads.get("syncCustomValue"), label, character))
+            if character and reads.get("syncCustomValue") != character + SYNC_VALUE_OFFSET:
+                issues.append("SyncBody custom value of %s is %s on the %s machine, expected %d (id %d plus %d)" % (body, reads.get("syncCustomValue"), label, character + SYNC_VALUE_OFFSET, character, SYNC_VALUE_OFFSET))
             if state["tags"].get(body) != character:
                 issues.append("CharacterIdTag of %s is %s on the %s machine, expected %d" % (body, state["tags"].get(body), label, character))
             loader = state["loaderComponents"].get(body)
@@ -192,7 +207,7 @@ def pick_issues(host_state, client_state, expected):
 
 def sync_body_issues(state, expected):
     readable = {body: numbers_in(values.values()) for body, values in state["syncBodies"].items() if isinstance(values, dict) and "unreadable" not in values}
-    return {body: (character in readable.get(body, set())) for body, character in expected.items() if character}
+    return {body: (character + SYNC_VALUE_OFFSET in readable.get(body, set())) for body, character in expected.items() if character}
 
 
 def custom_pick_issues(host_state, client_state, custom_id, client_body, host_body):

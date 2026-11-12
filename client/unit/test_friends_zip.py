@@ -133,9 +133,10 @@ def machine(species, custom_id, tag_id=3, loader_id=3, players=(0, 3), host_tag=
     values = {("id:10", "customCharacter"): players[0], ("id:11", "customCharacter"): players[1], ("id:20", "Id"): tag_id, ("id:21", "Id"): host_tag,
               ("id:30", "Body"): {"name": "Body_ClientD"}, ("id:30", "Id"): loader_id, ("id:40", "charType"): host_species, ("id:41", "charType"): species,
               ("id:42", "charType"): 9, ("static:PreRunScript", "characterSelected"): custom_id, ("static:Together.ScavPlayer", "LocalPlayer.customCharacter"): custom_id,
-              ("id:60", "player.customCharacter"): players[1], ("id:61", "player.customCharacter"): players[0],
-              ("id:60", "syncBody.customCharacter.Value"): players[1], ("id:61", "syncBody.customCharacter.Value"): players[0],
-              ("id:60", "syncBody"): {"characterSelected": {"Value": 0}, "customCharacterId": {"Value": custom_id}, "_position": {"x": 1}},
+              ("static:Together.ScavPlayer", "BodyToPlayerDict"): {"Body_ClientD (Body)": {"$obj": "ScavPlayer", "id": -5}, "Body_HostD (Body)": {"$obj": "ScavPlayer", "id": -6}},
+              ("id:-5", "customCharacter"): players[1], ("id:-6", "customCharacter"): players[0],
+              ("id:60", "syncBody.customCharacter.Value"): players[1] + 1 if players[1] else 0, ("id:61", "syncBody.customCharacter.Value"): players[0] + 1 if players[0] else 0,
+              ("id:60", "syncBody"): {"characterSelected": {"Value": 0}, "customCharacterId": {"Value": custom_id + 1 if custom_id else 0}, "_position": {"x": 1}},
               ("static:CasualtiesCharacters.CharacterMenu", "view.Page"): 1, ("static:CasualtiesCharacters.CharacterMenu", "view.Counter.text"): "Page 2 / 2"}
     return FakeGame(objects, values)
 
@@ -194,11 +195,12 @@ class CheckTests(unittest.TestCase):
         values = checks.sync_body_values(machine(0, 3))
         self.assertEqual(sorted(values["Body_ClientD"]), ["characterSelected", "customCharacterId"])
         self.assertEqual(checks.sync_body_issues(checks.character_state(machine(0, 3)), {"Body_ClientD": 3}), {"Body_ClientD": True})
+        self.assertEqual(checks.net_body_reads(machine(0, 3))["Body_ClientD"], {"playerCustomCharacter": 3, "syncCustomValue": 4, "syncSelectedValue": None})
         self.assertEqual(checks.sync_body_issues(checks.character_state(machine(0, 0)), {"Body_ClientD": 3}), {"Body_ClientD": False})
 
     def test_an_unreadable_player_or_sync_value_is_an_issue_not_a_pass(self):
         client = machine(0, 3)
-        del client.values[("id:60", "player.customCharacter")]
+        del client.values[("id:-5", "customCharacter")]
         del client.values[("id:60", "syncBody.customCharacter.Value")]
         issues = self.issues(machine(0, 3), client)
         self.assertTrue(any("owning Body_ClientD is None on the client machine" in issue for issue in issues), issues)
@@ -206,7 +208,7 @@ class CheckTests(unittest.TestCase):
 
     def test_a_sync_value_that_differs_from_the_pick_is_reported_for_that_machine(self):
         host = machine(0, 3)
-        host.values[("id:60", "syncBody.customCharacter.Value")] = 0
+        host.values[("id:60", "syncBody.customCharacter.Value")] = 3
         issues = self.issues(host, machine(0, 3))
         self.assertEqual(len([issue for issue in issues if "SyncBody custom value" in issue]), 1, issues)
         self.assertTrue(any("on the host machine" in issue for issue in issues), issues)

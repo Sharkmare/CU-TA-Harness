@@ -109,7 +109,8 @@
         "unit.test_installed_launch_guard",
         "unit.test_console_leak",
         "unit.test_spectator_cam",
-        "unit.test_friends_zip"
+        "unit.test_friends_zip",
+        "unit.test_pagedselect"
       ],
       "needs_game": false
     },
