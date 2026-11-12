@@ -11,6 +11,7 @@ namespace CasualtiesLink.Tests
             PathParserTests.Register(suite);
             EventBufferTests.Register(suite);
             MessageCounterTests.Register(suite);
+            PositionHoldTests.Register(suite);
             return suite.Run();
         }
     }

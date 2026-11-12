@@ -637,6 +637,8 @@ def describe_series(observation, build, dll_hash, game_version=None, delay_ms=No
         "crackSteps": {"client": crack_steps(observation.samples, "client"), "host": crack_steps(observation.samples, "host")},
         "tileHits": {"client": tile_hits(observation.samples, "client"), "host": tile_hits(observation.samples, "host")},
         "cleanupError": observation.context.get("cleanupError"),
+        "startPositions": observation.context.get("startPositions"),
+        "positionControl": observation.context.get("positionControl"),
         "aimPattern": observation.context.get("aimPattern"),
         "hints": verdict_hints(observation.samples, observation.hit_times, delay_ms, host_counts, findings, jitter_ms),
         "gameVersion": game_version,

@@ -27,6 +27,10 @@ class Clock:
         self.now += seconds
 
 
+def teleport_seat(client, target):
+    client.set("player", crates.base.BODY_PATH, {"x": target["x"], "y": target["y"], "z": 0.0})
+
+
 class SpawnTests(unittest.TestCase):
     def setUp(self):
         crates.reset_launch_state()
@@ -43,7 +47,7 @@ class SpawnTests(unittest.TestCase):
         self.described = {"handle": "id:7", "id": 7, "name": "SyncInfo(building, id: 7, res: medcrate)", "position": {"x": 11.0, "y": 5.0}, "health": 1000.0,
                           "cantHit": False, "indestructible": False, "animal": False, "rigidbodyType": "Dynamic", "layer": 8, "physicsActive": True}
         for patch in (mock.patch.object(crates.time, "sleep", self.clock.sleep), mock.patch.object(crates.time, "time", self.clock.time),
-                      mock.patch.object(crates.base, "player_position", lambda game: dict(self.player)),
+                      mock.patch.object(crates.base, "player_position", lambda game: dict(self.player)), mock.patch.object(crates, "seat_client", teleport_seat),
                       mock.patch.object(crates.base, "rows_near", self.rows_near),
                       mock.patch.object(crates.world, "host_position", lambda host, handle: dict(self.crate_at)),
                       mock.patch.object(crates.world, "describe_candidate", lambda host, row: dict(self.described, position=row["position"]))):
@@ -121,6 +125,9 @@ class SpawnTests(unittest.TestCase):
 
 class BandTests(unittest.TestCase):
     def setUp(self):
+        seat = mock.patch.object(crates, "seat_client", teleport_seat)
+        seat.start()
+        self.addCleanup(seat.stop)
         self.crate = {"x": 20.0, "y": 5.0}
         self.player = {"x": 17.0, "y": 5.0}
         self.client = mock.Mock()
@@ -374,7 +381,7 @@ class RunControlTests(unittest.TestCase):
         return {"measurements": [{"hostDelta": 0.0, "clientDelta": 0.0}], "target": {"name": "medcrate"}}
 
     def prepare_with(self, outcome):
-        with mock.patch.object(crates.base, "empty_the_hand", lambda client: None), mock.patch.object(crates, "spawn_crate", outcome):
+        with mock.patch.object(crates.base, "empty_the_hand", lambda client: None), mock.patch.object(crates, "spawn_crate", outcome), mock.patch.object(crates, "position_setup", lambda host, client, context: context.update({"startPositions": {}})):
             return crates.prepare("host", "client")
 
     def test_a_band_failure_is_an_invalid_setup_failure_and_not_a_missed_swing(self):

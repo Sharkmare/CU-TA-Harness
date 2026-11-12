@@ -5,6 +5,7 @@ import os
 import time
 import unittest
 
+from casualtieslink import positioncontrol
 from casualtieslink.desync import Scenario
 
 from . import desync_scenarios as base
@@ -34,6 +35,8 @@ BAND_GAIN = 0.6
 MIN_RESEAT_OFFSET = 0.5
 BAND_WAIT_SECONDS = 0.3
 BAND_TRIES = 4
+PARK_DIRECTION = "left"
+POSITION_FAILURE_CATEGORY = "position-preflight-failed"
 CAST_SAMPLE_STEP = 0.25
 RAW_HIT_WIDTH = 700
 HIT_LIST_KEYS = ("items", "hits", "results", "values", "elements", "array", "data", "value")
@@ -119,13 +122,18 @@ def wait_for_client_listing(client, position):
     return None
 
 
+def seat_client(client, target):
+    """Put the client at the target and hold it there: a held body cannot drift, be pushed or fall, so one seat replaces re-seating until it fits."""
+    return positioncontrol.place_and_hold(client, target)
+
+
 def hold_client_at_anchor(client):
     current = base.player_position(client)
     if STATE["anchor"] is None:
         STATE["anchor"] = current
         return current
     if base.distance(current, STATE["anchor"]) > ANCHOR_TOLERANCE:
-        client.set("player", base.BODY_PATH, {"x": STATE["anchor"]["x"], "y": STATE["anchor"]["y"], "z": 0.0})
+        seat_client(client, STATE["anchor"])
         time.sleep(POLL_SECONDS * 2)
     return STATE["anchor"]
 
@@ -161,6 +169,7 @@ def spawn_object(host, client, object_id, min_health, spot=None):
 def ensure_band(host, client, handle, fallback, side=-1):
     history = []
     offsets = []
+    seats = []
     crate = fallback
     offset = BAND_TARGET
     for attempt in range(BAND_TRIES + 1):
@@ -168,15 +177,16 @@ def ensure_band(host, client, handle, fallback, side=-1):
         distance = base.distance(base.player_position(client), crate)
         history.append(round(distance, 2))
         if BAND_LOW <= distance <= BAND_HIGH:
-            return {"ok": True, "reseats": attempt, "distances": history, "offsets": offsets}
+            return {"ok": True, "reseats": attempt, "distances": history, "offsets": offsets, "seat": seats[-1] if seats else None}
         if attempt == BAND_TRIES:
             break
         if attempt > 0:
             offset = max(MIN_RESEAT_OFFSET, offset + BAND_GAIN * (BAND_TARGET - distance))
         offsets.append(round(offset, 3))
-        client.set("player", base.BODY_PATH, {"x": crate["x"] + side * offset, "y": crate["y"], "z": 0.0})
-        time.sleep(BAND_WAIT_SECONDS)
-    return {"ok": False, "reseats": BAND_TRIES, "distances": history, "offsets": offsets}
+        seat = {"x": crate["x"] + side * offset, "y": crate["y"]}
+        seat_client(client, seat)
+        seats.append(seat)
+    return {"ok": False, "reseats": BAND_TRIES, "distances": history, "offsets": offsets, "seat": seats[-1] if seats else None}
 
 
 def optional_read(game, path):
@@ -286,12 +296,40 @@ def read_geometry(client, host, context, aim):
             "limb1Distance": None if limb is None else round(base.distance(limb, crate_host), 3), "cast": mimic_cast(client, limb, aim)}
 
 
+def crate_copy_state(client, context):
+    return {"crateOnClient": crate_physics(client, context["clientHandle"])}
+
+
+def position_setup(host, client, context):
+    """Park the host body away from the swing line and hold it, and record where both bodies start."""
+    anchor = STATE["anchor"] or base.player_position(client)
+    park = positioncontrol.point_at(anchor, PARK_DIRECTION, positioncontrol.PARK_DISTANCE)
+    context["hostPark"] = park
+    context["startPositions"] = positioncontrol.start_positions(host, client, copy_state=lambda: crate_copy_state(client, context))
+    context["hostHold"] = positioncontrol.place_and_hold(host, park)
+
+
+def run_preflight(host, client, context, band):
+    seat = band.get("seat") or base.player_position(client)
+    check = positioncontrol.preflight_pair(host, client, context["hostPark"], seat, copy_state=lambda: crate_copy_state(client, context))
+    context["positionControl"] = check
+    if not context["hostHold"]["ok"]:
+        check["issues"].append("the host hold did not verify: drifts %s" % context["hostHold"]["drifts"])
+        check["ok"] = False
+    return check
+
+
 def before_swing(client, context, index, aim):
     host = context["host"]
     band = ensure_band(host, client, context["hostHandle"], context["position"])
     if not band["ok"]:
         context["bandFailure"] = {"swing": index, "distances": band["distances"]}
         return None
+    if index == 1 and context.get("hostPark"):
+        check = run_preflight(host, client, context, band)
+        if not check["ok"]:
+            context["positionFailure"] = check
+            return None
     return {"band": band, "geometry": read_geometry(client, host, context, aim),
             "physics": {"host": crate_physics(host, context["hostHandle"]), "client": crate_physics(client, context["clientHandle"])}}
 
@@ -311,8 +349,11 @@ def prepare(host, client):
         STATE["setup_failed"] += 1
         record_failure(failure.category, str(failure))
         raise
-    return {"position": target["position"], "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"],
-            "target": target, "measurements": []}
+    context = {"position": target["position"], "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"],
+               "target": target, "measurements": []}
+    position_setup(host, client, context)
+    target["startPositions"] = context["startPositions"]
+    return context
 
 
 def act(client, context):
@@ -323,9 +364,17 @@ def act(client, context):
             context["host"].set(context["hostHandle"], "health", 0)
         except Exception:
             pass
+        positioncontrol.release_quietly(client)
+        positioncontrol.release_quietly(context["host"])
 
 
 def check(context):
+    position_failure = context.get("positionFailure")
+    if position_failure:
+        STATE["setup_failed"] += 1
+        message = "INVALID: the position preflight failed before the first swing: %s" % "; ".join(position_failure["issues"])
+        record_failure(POSITION_FAILURE_CATEGORY, message)
+        return [message]
     failure = context.get("bandFailure")
     if failure:
         STATE["setup_failed"] += 1

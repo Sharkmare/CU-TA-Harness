@@ -32,7 +32,20 @@ class RowTests(unittest.TestCase):
 
     def test_counts_split_persisted_never_broke_and_other(self):
         rows = [miningsummary.summarise_report(report(v, i)) for i, v in enumerate(["persisted", "persisted", "never-broke", "reverted"], 1)]
-        self.assertEqual(miningsummary.counts(rows), {"runs": 4, "persisted": 2, "neverBroke": 1, "other": ["reverted"], "reappeared": 0})
+        self.assertEqual(miningsummary.counts(rows), {"runs": 4, "invalid": 0, "persisted": 2, "neverBroke": 1, "other": ["reverted"], "reappeared": 0})
+
+    def test_runs_whose_preflight_failed_are_invalid_and_left_out_of_the_other_counts(self):
+        good = miningsummary.summarise_report(report("persisted", 1))
+        bad = miningsummary.summarise_report(dict(report("never-broke", 2, host_steps=0, client_steps=0), positionControl={"ok": False, "issues": ["the bodies are 0.4 apart: they overlap"]}))
+        unrecorded = miningsummary.summarise_report(report("persisted", 3))
+        self.assertIsNone(unrecorded["preflightOk"])
+        self.assertFalse(bad["preflightOk"])
+        self.assertEqual(bad["preflightIssues"], ["the bodies are 0.4 apart: they overlap"])
+        self.assertEqual(miningsummary.counts([good, bad, unrecorded]), {"runs": 2, "invalid": 1, "persisted": 2, "neverBroke": 0, "other": [], "reappeared": 0})
+
+    def test_the_start_positions_of_a_run_are_carried_into_its_row(self):
+        data = dict(report(), startPositions={"host": {"x": 1.0, "y": 2.0}, "client": {"x": 4.0, "y": 6.0}, "separation": 5.0})
+        self.assertEqual(miningsummary.summarise_report(data)["startPositions"]["separation"], 5.0)
 
     def test_a_directory_is_read_in_repetition_order(self):
         with tempfile.TemporaryDirectory() as directory:

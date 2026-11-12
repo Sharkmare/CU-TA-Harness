@@ -51,6 +51,10 @@ def summarise_report(report, path=None):
            "hostCrackSteps": len((report.get("crackSteps") or {}).get("host") or []), "clientCrackSteps": len((report.get("crackSteps") or {}).get("client") or []),
            "hostBrokeAt": (findings.get("host") or {}).get("brokeAt"), "clientBrokeAt": (findings.get("client") or {}).get("brokeAt"),
            "hostPresentAtEnd": (findings.get("host") or {}).get("presentAtEnd"), "reappeared": bool((findings.get("host") or {}).get("reappeared") or (findings.get("client") or {}).get("reappeared"))}
+    control = report.get("positionControl") or {}
+    row["preflightOk"] = control.get("ok") if control else None
+    row["preflightIssues"] = control.get("issues") if control else None
+    row["startPositions"] = report.get("startPositions")
     row["endLocalSeconds"] = stamp_seconds(path)
     row["durationSeconds"] = duration_seconds(report)
     row["cause"] = cause_for(row)
@@ -67,6 +71,8 @@ def summarise_directory(directory):
 
 
 def counts(rows):
-    broke = [row for row in rows if row["verdict"] != NEVER_BROKE]
-    return {"runs": len(rows), "persisted": sum(1 for row in rows if row["verdict"] == "persisted"), "neverBroke": len(rows) - len(broke),
-            "other": sorted({row["verdict"] for row in rows} - {"persisted", NEVER_BROKE}), "reappeared": sum(1 for row in rows if row["reappeared"])}
+    """Runs whose position preflight failed are reported as invalid and left out of every other count."""
+    valid = [row for row in rows if row.get("preflightOk") is not False]
+    broke = [row for row in valid if row["verdict"] != NEVER_BROKE]
+    return {"runs": len(valid), "invalid": len(rows) - len(valid), "persisted": sum(1 for row in valid if row["verdict"] == "persisted"), "neverBroke": len(valid) - len(broke),
+            "other": sorted({row["verdict"] for row in valid} - {"persisted", NEVER_BROKE}), "reappeared": sum(1 for row in valid if row["reappeared"])}

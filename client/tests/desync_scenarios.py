@@ -3,6 +3,7 @@ import os
 import unittest
 import time
 
+from casualtieslink import positioncontrol
 from casualtieslink.desync import Scenario, SeriesScenario
 
 SETTLE_SECONDS = 3.0
@@ -603,12 +604,29 @@ def place_fresh_block(host, client, layout="side"):
     raise AssertionError("no free cell for a %s block next to the client; occupied (column, rise, block) %s" % (layout, seen))
 
 
+POSITION_CONTROL_ENABLED = True
+PARK_DIRECTION = "left"
+
+
+def apply_position_control(host, client, context):
+    """Hold the client where it stands, park and hold the host body away from the swing line, and record the start positions and the preflight."""
+    context["startPositions"] = positioncontrol.start_positions(host, client)
+    try:
+        context["positionControl"] = positioncontrol.seat_pair(host, client, positioncontrol.read_position(client), PARK_DIRECTION)
+    except Exception as failure:
+        context["positionControl"] = {"ok": False, "issues": ["position control failed: %s: %s" % (type(failure).__name__, str(failure)[:160])]}
+    return context
+
+
 def fresh_block_prepare_with(pattern, layout="side", walk=False):
     def prepare(host, client):
         empty_the_hand(client)
         cell, centre, block, health, placed = place_fresh_block(host, client, layout)
-        return {"position": centre, "blockId": block, "blockHealth": health, "cell": cell, "placedByHost": placed, "aimPattern": pattern, "layout": layout, "walk": walk,
-                "hostGame": host, "hostBodyHandle": body_handle_by_name(host, CLIENT_BODY_NAME), "swingLog": [], "firstCall": None, "lastWalk": 0.0, "walkIndex": 0}
+        context = {"position": centre, "blockId": block, "blockHealth": health, "cell": cell, "placedByHost": placed, "aimPattern": pattern, "layout": layout, "walk": walk,
+                   "hostGame": host, "hostBodyHandle": body_handle_by_name(host, CLIENT_BODY_NAME), "swingLog": [], "firstCall": None, "lastWalk": 0.0, "walkIndex": 0}
+        if POSITION_CONTROL_ENABLED:
+            apply_position_control(host, client, context)
+        return context
     return prepare
 
 
@@ -622,7 +640,14 @@ def walk_a_little(client, context):
     client.call("input", key=key, mode="tap", frames=WALK_TAP_FRAMES)
 
 
+def release_holds(*games):
+    for game in games:
+        if game is not None:
+            positioncontrol.release_quietly(game)
+
+
 def remove_fresh_block(host, client, context):
+    release_holds(host, client)
     centre = context["position"]
     if context.get("placedByHost") and block_value(host, centre) != 0:
         host.call("invoke", target="world", method="SetBlock", args=[context["cell"]["x"], context["cell"]["y"], 0], types=["Int32", "Int32", "UInt16"])

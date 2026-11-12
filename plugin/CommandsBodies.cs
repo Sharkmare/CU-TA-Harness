@@ -7,6 +7,7 @@ namespace CasualtiesLink
     public static partial class Commands
     {
         private const string GunAngleParameter = "gunangle";
+        private const float DefaultHoldTolerance = 0.05f;
 
         private static void RegisterBodies()
         {
@@ -25,6 +26,8 @@ namespace CasualtiesLink
                 }
                 return rows;
             });
+
+            RegisterHolds();
 
             Add("body_visuals", "Sprite names, limb child names, limb angles and the arms animator gunangle of one Body, for comparing how a player looks on different instances.", args =>
             {
@@ -60,6 +63,33 @@ namespace CasualtiesLink
                     { "bodyAnimatorPath", AnimatorPath(body.bodyAnimator, root) }, { "armsAnimatorPath", AnimatorPath(body.armsAnimator, root) },
                 };
             }, false, Arg("id", "int", "Instance id of a Body handle from 'bodies'"), Arg("local", "bool", "Use the local player's Body", false, false));
+        }
+
+        private static void RegisterHolds()
+        {
+            Add("hold_body", "Holds one Body at an exact position: every physics tick and before every frame the position is put back and every velocity under the body is zeroed, so it cannot drift, be pushed or fall. Returns the hold status.", args =>
+            {
+                Body body = BodyFromArguments(args);
+                BodyHoldDriver.EnsureInstalled();
+                PositionHold hold = BodyHoldDriver.Table.Set(body.GetInstanceID(), Float(args, "x", float.NaN), Float(args, "y", float.NaN), Float(args, "tolerance", DefaultHoldTolerance));
+                BodyHoldDriver.Apply(false);
+                return BodyHoldDriver.Describe(hold);
+            }, false, Arg("id", "int", "Instance id of a Body handle from 'bodies'"), Arg("local", "bool", "Hold the local player's Body", false, false),
+                Arg("x", "float", "Target x", true), Arg("y", "float", "Target y", true), Arg("tolerance", "float", "Allowed drift before a tick counts as exceeded", false, DefaultHoldTolerance));
+
+            Add("release_body", "Releases the hold on one Body (id or local), or on every held Body with all=true. Returns how many holds were removed.", args =>
+            {
+                if (Bool(args, "all", false)) return new Dictionary<string, object> { { "released", BodyHoldDriver.Table.Clear() } };
+                Body body = BodyFromArguments(args);
+                return new Dictionary<string, object> { { "released", BodyHoldDriver.Table.Remove(body.GetInstanceID()) ? 1 : 0 } };
+            }, false, Arg("id", "int", "Instance id of a Body handle from 'bodies'"), Arg("local", "bool", "Release the local player's Body", false, false), Arg("all", "bool", "Release every hold", false, false));
+
+            Add("hold_status", "Status of every active hold: target, current position, drift now, the largest drift seen before a correction, how many ticks exceeded the tolerance, and whether the body is still found.", args =>
+            {
+                var rows = new List<object>();
+                foreach (PositionHold hold in BodyHoldDriver.Table.Snapshot()) rows.Add(BodyHoldDriver.Describe(hold));
+                return rows;
+            });
         }
 
         private static Body BodyFromArguments(Newtonsoft.Json.Linq.JObject args)

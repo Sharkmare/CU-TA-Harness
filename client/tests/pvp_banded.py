@@ -1,6 +1,7 @@
 import time
 import unittest
 
+from casualtieslink import positioncontrol
 from casualtieslink.desync import Scenario
 
 from . import desync_scenarios as base
@@ -25,6 +26,7 @@ DRIFT_PAUSE_SECONDS = 0.4
 BAND_LOW = 2.5
 BAND_HIGH = 3.2
 FAILURE_CATEGORY = "pvp-distance-band-unreachable"
+POSITION_FAILURE_CATEGORY = "pvp-position-preflight-failed"
 RESTORE_FAILURE_CATEGORY = "pvp-victim-not-restored"
 RESTORE_TOLERANCE = 1.0
 RESTORE_SETTLE_SECONDS = 1.0
@@ -106,16 +108,55 @@ def readable(game, handle, path):
         return {"error": str(failure)[:100]}
 
 
+def victim_copy_state(client, context):
+    return {"victimOnClient": crates.crate_physics(client, context["clientVictim"])}
+
+
+def record_start(host, client, context):
+    context["startPositions"] = positioncontrol.start_positions(host, client, copy_state=lambda: victim_copy_state(client, context))
+
+
+def seat_victim(host, spot):
+    """The victim goes back to the same spot and is held there until just before the punch, so every punch starts from the same geometry."""
+    return positioncontrol.place_and_hold(host, spot)
+
+
+def preflight(host, client, spot, band):
+    return positioncontrol.preflight_pair(host, client, spot, band.get("seat") or base.player_position(client))
+
+
+def release_holds(host, client):
+    positioncontrol.release_quietly(client)
+    positioncontrol.release_quietly(host)
+
+
 def act(client, context, accept_range=None):
     host = context["host"]
     entries = []
     context["measurements"] = entries
     if context.get("restoreFailure"):
         return
+    try:
+        run_punches(host, client, context, entries, accept_range)
+    finally:
+        release_holds(host, client)
+
+
+def run_punches(host, client, context, entries, accept_range):
+    spot = None
     previous_after = None
     side = None
     for index in range(1, PUNCHES_PER_RUN + 1):
         victim = victim_position(host, context["hostVictim"])
+        moved_before_seat = None if previous_after is None else round(base.distance(victim, previous_after), 3)
+        if spot is None:
+            spot = victim
+            record_start(host, client, context)
+        victim_hold = seat_victim(host, spot)
+        if not victim_hold["ok"]:
+            context["positionFailure"] = {"ok": False, "issues": ["the victim hold did not verify before punch %d: drifts %s" % (index, victim_hold["drifts"])]}
+            break
+        victim = spot
         if side is None:
             side = side_of_victim(base.player_position(client), victim)
         band = crates.ensure_band(host, client, context["hostVictim"], victim, side=side)
@@ -125,18 +166,24 @@ def act(client, context, accept_range=None):
         if not band["ok"]:
             context["bandFailure"] = {"swing": index, "distances": band["distances"]}
             break
+        if index == 1:
+            context["positionControl"] = preflight(host, client, spot, band)
+            if not context["positionControl"]["ok"]:
+                context["positionFailure"] = context["positionControl"]
+                break
         victim = victim_position(host, context["hostVictim"])
         victim_on_client = victim_position(client, context["clientVictim"])
         player = base.player_position(client)
         drift = idle_drift(host, context)
         geometry = {"clientPosition": player, "victimHostPosition": victim, "victimClientPosition": victim_on_client, "distance": round(base.distance(player, victim), 3),
-                    "distanceToClientCopy": round(base.distance(player, victim_on_client), 3), "movedSincePreviousPunch": None if previous_after is None else round(base.distance(victim, previous_after), 3),
+                    "distanceToClientCopy": round(base.distance(player, victim_on_client), 3), "movedSincePreviousPunch": moved_before_seat,
                     "idleDriftPerSecond": drift, "victimConscious": readable(host, context["hostVictim"], "conscious"), "side": side}
         limb = crates.point_of(crates.optional_read(client, "limbs[1].transform.position"))
         geometry["limb1Position"] = limb
         geometry["limb1ToBodyDistance"] = None if limb is None else round(base.distance(limb, victim_on_client), 3)
         geometry["aimIsBodyCentre"] = True
         marks = {which: len(evidence.read_log(which).splitlines()) for which in ("host", "client")}
+        positioncontrol.release_quietly(host)
         before = (hooks.limb_total(host, context["hostVictim"]), hooks.limb_total(client, context["clientVictim"]), round(float(host.get(context["hostVictim"], base.BODY_PATH, depth=0)["x"]), 3))
         fired = hooks.fire_one_swing(client, victim_on_client)
         time.sleep(hooks.SETTLE_AFTER_SWING_SECONDS)
@@ -154,6 +201,11 @@ def act(client, context, accept_range=None):
 
 
 def check(context):
+    position_failure = context.get("positionFailure")
+    if position_failure:
+        message = "INVALID: the position preflight failed: %s" % "; ".join(position_failure["issues"])
+        crates.record_failure(POSITION_FAILURE_CATEGORY, message)
+        return [message]
     lost = context.get("restoreFailure")
     if lost:
         message = "INVALID: the victim's limbs could not be restored before the run (full host %.2f, host %.2f; full client %.2f, client %.2f)" % (

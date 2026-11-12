@@ -18,6 +18,10 @@ class Clock:
         self.now += seconds
 
 
+def teleport_seat(client, target):
+    client.set("player", crates.base.BODY_PATH, {"x": target["x"], "y": target["y"], "z": 0.0})
+
+
 class ActHarness(unittest.TestCase):
     def setUp(self):
         crates.reset_launch_state()
@@ -53,6 +57,10 @@ class ActHarness(unittest.TestCase):
             return True
         raise KeyError(path)
 
+    def seat_victim(self, host, spot):
+        self.victim = dict(spot)
+        return {"ok": True, "drifts": [0.0]}
+
     def run_act(self, **options):
         self.client.set.side_effect = self.teleport
         self.client.get.side_effect = lambda handle, path, depth=0: dict(self.victim)
@@ -62,7 +70,9 @@ class ActHarness(unittest.TestCase):
                    mock.patch.object(pvp_banded.hooks, "fire_one_swing", self.fire), mock.patch.object(pvp_banded.hooks, "limb_total", lambda game, handle: self.limbs),
                    mock.patch.object(pvp_banded.base, "player_position", lambda game: dict(self.player)), mock.patch.object(crates.base, "player_position", lambda game: dict(self.player)),
                    mock.patch.object(crates.world, "host_position", lambda game, handle: dict(self.victim)),
-                   mock.patch.object(pvp_banded.evidence, "read_log", lambda which: "")]
+                   mock.patch.object(pvp_banded.evidence, "read_log", lambda which: ""), mock.patch.object(crates, "seat_client", teleport_seat),
+                   mock.patch.object(pvp_banded, "seat_victim", self.seat_victim), mock.patch.object(pvp_banded, "record_start", lambda host, client, context: None),
+                   mock.patch.object(pvp_banded, "preflight", lambda host, client, spot, band: {"ok": True, "issues": []})]
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
@@ -373,7 +383,7 @@ class EnsureBandSideTests(unittest.TestCase):
     def test_the_side_argument_puts_the_teleport_on_the_requested_side(self):
         client = mock.Mock()
         position = {"x": 10.0, "y": 5.0}
-        with mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.world, "host_position", lambda host, handle: dict(position)), \
+        with mock.patch.object(crates, "seat_client", teleport_seat), mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.world, "host_position", lambda host, handle: dict(position)), \
                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 20.0, "y": 5.0}):
             crates.ensure_band(None, client, "id:1", position, side=1)
         self.assertEqual(client.set.call_args_list[0].args[2], {"x": 10.0 + crates.BAND_TARGET, "y": 5.0, "z": 0.0})
@@ -381,7 +391,7 @@ class EnsureBandSideTests(unittest.TestCase):
     def test_the_default_side_is_unchanged_for_crates(self):
         client = mock.Mock()
         position = {"x": 10.0, "y": 5.0}
-        with mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.world, "host_position", lambda host, handle: dict(position)), \
+        with mock.patch.object(crates, "seat_client", teleport_seat), mock.patch.object(crates.time, "sleep", lambda seconds: None), mock.patch.object(crates.world, "host_position", lambda host, handle: dict(position)), \
                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 0.0, "y": 5.0}):
             crates.ensure_band(None, client, "id:1", position)
         self.assertEqual(client.set.call_args_list[0].args[2], {"x": 10.0 - crates.BAND_TARGET, "y": 5.0, "z": 0.0})

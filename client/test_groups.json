@@ -114,7 +114,9 @@
         "unit.test_pagedverify",
         "unit.test_miningsummary",
         "unit.test_pr24log",
-        "unit.test_recovery"
+        "unit.test_recovery",
+        "unit.test_positioncontrol",
+        "unit.test_position_wiring"
       ],
       "needs_game": false
     },

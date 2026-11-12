@@ -229,5 +229,54 @@
     "old": "    return host in ALLOWED_CONTROL_HOSTS and (not given_port or given_port == str(port))",
     "new": "    return True",
     "label": "control accepts any Host header"
+  },
+  {
+    "suite": "plugin",
+    "file": "plugin/PositionHold.cs",
+    "old": "if (drift > Tolerance) ExceededTicks++;",
+    "new": "if (drift > Tolerance * 1000f) ExceededTicks++;",
+    "label": "hold never counts an exceeded tick"
+  },
+  {
+    "suite": "plugin",
+    "file": "plugin/PositionHold.cs",
+    "old": "return !Lost && Ticks > 0 && ExceededTicks == 0;",
+    "new": "return !Lost && ExceededTicks == 0;",
+    "label": "unobserved hold reported as held"
+  },
+  {
+    "suite": "plugin",
+    "file": "plugin/PositionHold.cs",
+    "old": "tolerance < MinimumTolerance || tolerance > MaximumTolerance",
+    "new": "tolerance > MaximumTolerance",
+    "label": "zero tolerance accepted"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/positioncontrol.py",
+    "old": "return {\"ok\": max(drifts) <= tolerance and held,",
+    "new": "return {\"ok\": True,",
+    "label": "hold verification always passes"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/positioncontrol.py",
+    "old": "    if separation < min_separation:",
+    "new": "    if False:",
+    "label": "overlap never detected"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/positioncontrol.py",
+    "old": "    if client_drift > tolerance:",
+    "new": "    if False:",
+    "label": "client drift never detected"
+  },
+  {
+    "suite": "python",
+    "file": "client/casualtieslink/positioncontrol.py",
+    "old": "    check[\"ok\"] = not check[\"issues\"]\n    check[\"clientHold\"]",
+    "new": "    check[\"clientHold\"]",
+    "label": "failed hold verification does not invalidate the seat"
   }
 ]

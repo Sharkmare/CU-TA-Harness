@@ -48,11 +48,14 @@ The client adds `--link-port` for you. Leave `BepInEx/plugins/CasualtiesLink/` o
 | Console | `console`, `console_log`, `game_commands`, `close_console` |
 | World | `spawn`, `list_items`, `player`, `damage`, `use_item_on_limb` |
 | Bodies | `bodies`, `body_visuals` (sprite names, limb children and angles, arm animator angle, animator controller names) |
+| Holds | `hold_body` (hold a Body at an exact x, y), `release_body` (one body or all), `hold_status` |
 | Input | `keybinds`, `input`, `mouse`, `input_probe`, `release_input` |
 | Time and view | `timescale`, `step`, `screenshot`, `log` |
 | Reflection | `find`, `get`, `set`, `invoke` (calls a method by name; `types` picks an overload, for example `["Vector2Int","UInt16"]`) |
 
 `get` and `set` take a target (`player`, `camera`, `world`, `console`, `static:Type`, `type:Type[#n]`, `name:GameObject`, or `id:N` from a handle in an earlier reply) and a dotted path with `[index]` steps, for example `limbs[3].bleedAmount`, or `main.currentMinigame` on `static:MinigameBase`. Values are converted to the field's type: enums by name, vectors as `{x,y}`, object references as `id:N`. Pass `nonpublic:true` to reach non public members.
+
+`hold_body` takes `id` or `local`, `x`, `y` and a `tolerance` (0.001 to 5, default 0.05). A held body is put back at the target on every physics tick and before every frame is drawn, and every velocity under the body is zeroed, so it cannot drift, be pushed or fall off a ledge. `hold_status` reports, per hold, the target, the current position, the drift now, the largest drift seen before a correction, how many ticks exceeded the tolerance and whether the body is still found; `heldWithinTolerance` is true only after at least one tick with none over the tolerance. A hold on a body only acts on the game that holds it, so hold each player on its own machine. `casualtieslink/positioncontrol.py` wraps it: `place_and_hold` seats a body and proves it stays, `seat_pair` holds the attacking client at its seat and parks the other player 12 units away, `preflight_pair` checks both bodies are at their targets within the tolerance and at least 2.0 apart, and `start_positions` records both bodies at the start of a run.
 
 Events: `link_started`, `scene_changed`, `player_ready`, `console`, `item_picked_up`, `damage` (a limb lost health, found by checking every frame), `death`, `exception` (a Unity error or exception).
 
@@ -251,6 +254,10 @@ python run_tests.py --pair --only friends-zip
 ### Paged character select (singleplayer, friends zip plus a test pack)
 
 `tools/paged_select.py --zip-md5 <md5> [--width W --height H --characters N]` starts one singleplayer game (`--mp-disable`) from a copy with the friends zip plugin set and a generated test pack (`casualtieslink/pagedselect.py`), snapshots the profile first, and keeps the game up with the link on port 7650 until a `stop` file appears in `.state/paged_select`. It then closes the game, deletes the copy and restores the profile. `--loader-dll PATH` puts a CasualtiesCharacters.dll over the zip's loader in the copy and records its md5. The screen is read through the link. `tools/paged_select_verify.py` drives the running session with real OS clicks and keys (`casualtieslink/oswindow.py`) at 16:9 and 16:10: arrow labels and paging, one click per slot, and the PageUp and PageDown keys, writing `.state/paged_select/verify.json`. The link's injected mouse does not reach the UI's EventSystem, so real input is needed for any UI button.
+
+### Position control in the swing scenarios
+
+The mining, crate and PvP scenarios hold the bodies instead of letting them stand free. Mining holds the client where it stands and parks and holds the host body 12 units to the left; the crate scenario does the same around its anchor and re-seats the client at the band middle by holding it there; the PvP scenario puts the victim back at its starting spot before every punch, holds it until just before the punch so the knockback is still measured, and keeps the client held at the band seat. Before the first swing a preflight checks both bodies against their targets and the minimum separation. A run that fails it is marked `INVALID` (crates and PvP: counted as a setup failure, never as a valid run or a missed swing; mining: its report carries `positionControl.ok = false` and `tools/mining_summary.py` counts it as `invalid` and leaves it out of every other count). Every mining report carries `startPositions` (host, client, separation, copy state) and `positionControl` (the preflight and the verification of each hold); crate and PvP reports carry the start positions in their target. `tools/recover_after_abort.py` stops stray games, restores the profile and deletes the scenario copies and a stale lock after an aborted run.
 
 ### Checking that the tests can fail
 

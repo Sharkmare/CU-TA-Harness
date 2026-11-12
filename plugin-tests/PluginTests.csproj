@@ -16,5 +16,6 @@
     <Compile Include="..\plugin\PathParser.cs" />
     <Compile Include="..\plugin\EventBuffer.cs" />
     <Compile Include="..\plugin\MessageCounter.cs" />
+    <Compile Include="..\plugin\PositionHold.cs" />
   </ItemGroup>
 </Project>
