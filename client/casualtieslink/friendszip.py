@@ -62,7 +62,7 @@ def plugin_names_in_copy(copy):
         return set()
 
 
-def extract_into_copy(zip_path, copy, together_folder="Together"):
+def extract_into_copy(zip_path, copy, together_folder="Together", remove_extras=False):
     if not os.path.isfile(zip_path):
         raise FileNotFoundError(zip_path)
     together = os.path.join(copy, "BepInEx", "plugins", together_folder)
@@ -82,9 +82,13 @@ def extract_into_copy(zip_path, copy, together_folder="Together"):
     if mismatched:
         raise ValueError("DLLs in the copy differ from the zip after extraction: %s" % mismatched)
     extras = sorted(plugin_names_in_copy(copy) - zip_plugins - {LINK_FOLDER})
-    if extras:
+    if extras and not remove_extras:
         raise ValueError("the copy has plugins that are not in the zip: %s" % extras)
-    return {"zip": zip_path, "zipMd5": md5_of_file(zip_path), "files": len(entries), "dllMd5": expected, "pluginFolders": sorted(zip_plugins)}
+    plugins_folder = os.path.join(copy, "BepInEx", "plugins")
+    for name in extras:
+        path = os.path.join(plugins_folder, name)
+        shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+    return {"removedFromCopy": extras, "zip": zip_path, "zipMd5": md5_of_file(zip_path), "files": len(entries), "dllMd5": expected, "pluginFolders": sorted(zip_plugins)}
 
 
 def verify_copy(zip_path, copy):

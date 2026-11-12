@@ -63,6 +63,7 @@ class FriendsZipLobbyCheck(unittest.TestCase):
         RECORD["zip"] = {"md5": friendszip.md5_of_file(friendszip.default_zip_path())}
         cls.host, cls.client = GAMES.start([], [], together=FRIENDS_ZIP_CHOICE, host_extra=checks.PVP_RULE_ARGUMENTS, client_extra=checks.PVP_RULE_ARGUMENTS)
         RECORD["zip"]["copyDllMatches"] = {which: friendszip.verify_copy(friendszip.default_zip_path(), copy) for which, copy in (("host", GAMES.host_copy), ("client", GAMES.client_copy))}
+        RECORD["pluginFoldersInCopy"] = {which: sorted(friendszip.plugin_names_in_copy(copy)) for which, copy in (("host", GAMES.host_copy), ("client", GAMES.client_copy))}
         try:
             RECORD["lobbyPath"] = "normal lobby wait: both games ready through Together.CharacterSelectWait.SetLocalReady after SelectCharacter"
             accepted = ready_up([cls.host, cls.client], before_ready={cls.host: chooser(checks.EXPERIMENT_CHARACTER, "host"), cls.client: chooser(checks.CUSTOM_CHARACTER, "client")})

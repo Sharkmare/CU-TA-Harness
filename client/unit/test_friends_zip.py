@@ -71,6 +71,13 @@ class InstallTests(unittest.TestCase):
             friendszip.extract_into_copy(self.archive_path, self.copy)
         self.assertIn("Stray", str(caught.exception))
 
+    def test_with_remove_extras_the_stray_plugin_is_deleted_from_the_copy_and_reported(self):
+        os.makedirs(os.path.join(self.copy, "BepInEx", "plugins", "Stray"))
+        found = friendszip.extract_into_copy(self.archive_path, self.copy, remove_extras=True)
+        self.assertEqual(found["removedFromCopy"], ["Stray"])
+        self.assertFalse(os.path.exists(os.path.join(self.copy, "BepInEx", "plugins", "Stray")))
+        self.assertTrue(os.path.isdir(os.path.join(self.copy, "BepInEx", "plugins", "CasualtiesLink")))
+
     def test_the_link_plugin_folder_is_the_only_allowed_extra(self):
         found = friendszip.extract_into_copy(self.archive_path, self.copy)
         self.assertEqual(found["pluginFolders"], ["CasualtiesCharacters", "CasualtiesCharacters-Avali", "Together"])

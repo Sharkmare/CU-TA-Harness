@@ -440,7 +440,7 @@ def configure_instance(copy, plugins, together="stock", debug=True):
     elif together == BASELINE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, baseline_stage_directory())
     elif together == FRIENDS_ZIP_CHOICE:
-        installed["together"] = friendszip.extract_into_copy(friendszip.default_zip_path(), copy)
+        installed["together"] = friendszip.extract_into_copy(friendszip.default_zip_path(), copy, remove_extras=True)
         if debug:
             write_debug_config(copy, LOADER_GUID)
     elif flavour_name(together):
