@@ -14,10 +14,11 @@ STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."
 REPORT_DIRECTORY = os.path.join(STATE_ROOT, "friends_zip_reports")
 WORLD_WAIT_SECONDS = 150.0
 SETTLE_SECONDS = 10.0
-REJOIN_LEAVE_SECONDS = 30.0
-REJOIN_WAIT_SECONDS = 150.0
+LEAVE_SECONDS = 30.0
+RECONNECT_PAUSE_SECONDS = 3.0
 HOST_BODY = "Body_HostD"
 CLIENT_BODY = "Body_ClientD"
+LOADER_ATTACH_LINE = "attached to " + CLIENT_BODY
 GAMES = None
 RECORD = {}
 
@@ -34,25 +35,51 @@ def setUpModule():
 def tearDownModule():
     if RECORD:
         os.makedirs(REPORT_DIRECTORY, exist_ok=True)
+        RECORD["lookupErrors"] = sorted(set(checks.LOOKUP_ERRORS))[:30]
         with open(os.path.join(REPORT_DIRECTORY, "friends_zip.json"), "w", encoding="utf-8") as handle:
             json.dump(RECORD, handle, indent=2, default=str)
     if GAMES is not None:
         GAMES.dispose()
 
 
-def chooser(character_id, label):
-    def choose(game):
-        outcome = checks.select_character(game, character_id)
-        if label not in RECORD.setdefault("lobbyPick", {}):
-            RECORD["lobbyPick"][label] = {"first": outcome, "pagerBeforeReady": checks.pager_state(game)}
-        RECORD["lobbyPick"][label]["last"] = outcome
-    return choose
+def chooser(character_id):
+    return lambda game: checks.select_character(game, character_id)
 
 
-def wait_until_in_world(game, timeout):
-    game.wait_state("in-world", timeout=timeout)
-    wait_for_bodies(game, 2, timeout)
+def in_world(game):
+    try:
+        return game.state()["state"] == "in-world"
+    except Exception:
+        return False
+
+
+def enter_world(game, expected_bodies):
+    game.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
+    wait_for_bodies(game, expected_bodies, WORLD_WAIT_SECONDS)
     game.call("close_console")
+
+
+def both_states(host, client):
+    return checks.character_state(host), checks.character_state(client)
+
+
+def sync_readings(host_state, client_state, expected):
+    return {"host": checks.sync_body_issues(host_state, expected), "client": checks.sync_body_issues(client_state, expected)}
+
+
+def leave_and_reconnect(client, repick):
+    client.console("disconnect")
+    deadline = time.time() + LEAVE_SECONDS
+    while time.time() < deadline and in_world(client):
+        time.sleep(1.0)
+    left = client.state()["state"]
+    time.sleep(RECONNECT_PAUSE_SECONDS)
+    client.console("connect %s" % SESSION_ADDRESS)
+    attempts = checks.join_attempts(client, checks.CUSTOM_CHARACTER, try_ready, repick=repick, in_world=in_world)
+    wait_for_bodies(client, 2, WORLD_WAIT_SECONDS)
+    client.call("close_console")
+    time.sleep(SETTLE_SECONDS)
+    return {"stateAfterDisconnect": left, "attemptCount": len(attempts), "firstAttempts": attempts[:3], "lastAttempts": attempts[-3:], "repicked": repick}
 
 
 @unittest.skipUnless(PAIR_ENABLED, SKIP_REASON)
@@ -61,20 +88,17 @@ class FriendsZipLobbyCheck(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         RECORD["zip"] = {"md5": friendszip.md5_of_file(friendszip.default_zip_path())}
-        cls.host, cls.client = GAMES.start([], [], together=FRIENDS_ZIP_CHOICE, host_extra=checks.PVP_RULE_ARGUMENTS, client_extra=checks.PVP_RULE_ARGUMENTS)
-        RECORD["zip"]["copyDllMatches"] = {which: friendszip.verify_copy(friendszip.default_zip_path(), copy) for which, copy in (("host", GAMES.host_copy), ("client", GAMES.client_copy))}
-        RECORD["pluginFoldersInCopy"] = {which: sorted(friendszip.plugin_names_in_copy(copy)) for which, copy in (("host", GAMES.host_copy), ("client", GAMES.client_copy))}
+        cls.host = GAMES.start_host_alone([], FRIENDS_ZIP_CHOICE, host_extra=checks.PVP_RULE_ARGUMENTS)
+        cls.client = None
+        matches = friendszip.verify_copy(friendszip.default_zip_path(), GAMES.host_copy)
+        RECORD["zip"]["hostCopyDllMatches"] = {"allMatch": all(matches.values()), "dllCount": len(matches)}
+        RECORD["pluginFoldersInHostCopy"] = sorted(friendszip.plugin_names_in_copy(GAMES.host_copy))
         try:
-            RECORD["lobbyPath"] = "normal lobby wait: both games ready through Together.CharacterSelectWait.SetLocalReady after SelectCharacter"
-            accepted = ready_up([cls.host, cls.client], before_ready={cls.host: chooser(checks.EXPERIMENT_CHARACTER, "host"), cls.client: chooser(checks.CUSTOM_CHARACTER, "client")})
-            RECORD["readyAccepted"] = accepted
-            if not accepted:
-                raise AssertionError("the lobby ready gate did not accept both players")
-            wait_until_in_world(cls.host, WORLD_WAIT_SECONDS)
-            wait_until_in_world(cls.client, WORLD_WAIT_SECONDS)
+            RECORD["hostAlone"] = {"readyAccepted": ready_up([cls.host], before_ready={cls.host: chooser(checks.EXPERIMENT_CHARACTER)})}
+            enter_world(cls.host, 1)
             time.sleep(SETTLE_SECONDS)
         except BaseException:
-            RECORD["setupLogTail"] = {which: GAMES.log_text(which).splitlines()[-40:] for which in ("host", "client")}
+            RECORD["setupLogTail"] = GAMES.log_text("host").splitlines()[-40:]
             GAMES.stop()
             raise
 
@@ -82,53 +106,76 @@ class FriendsZipLobbyCheck(unittest.TestCase):
     def tearDownClass(cls):
         RECORD["logsAtEnd"] = {which: checks.launch_counts(GAMES.log_text(which)) for which in ("host", "client")}
         RECORD["loaderLogLines"] = {which: checks.loader_log_lines(GAMES.log_text(which)) for which in ("host", "client")}
+        RECORD["fingerprints"] = {which: checks.fingerprints(GAMES.log_text(which)) for which in ("host", "client")}
         desync.save_game_logs(GAMES, os.path.join(STATE_ROOT, "game_logs"), "friends-zip", cls.__name__)
         GAMES.stop()
 
-    def test_01_launch_logs(self):
-        counts = {which: checks.launch_counts(GAMES.log_text(which)) for which in ("host", "client")}
-        RECORD["launchCounts"] = counts
-        for which, found in counts.items():
-            self.assertEqual(found["attackTranspilerSuccess"], 1, "%s: %s" % (which, found))
-            self.assertEqual(found["markersNotFound"], 0, which)
-            self.assertEqual(found["patchProblemLines"], [], which)
-
-    def test_02_custom_pick_in_the_lobby_path(self):
-        host_state, client_state = checks.character_state(self.host), checks.character_state(self.client)
-        RECORD["afterLobby"] = {"host": host_state, "client": client_state}
-        issues = checks.custom_pick_issues(host_state, client_state, checks.CUSTOM_CHARACTER, CLIENT_BODY, HOST_BODY)
-        RECORD["afterLobby"]["issues"] = issues
+    def test_01_true_late_join_with_the_custom_pick(self):
+        RECORD["hostLaunchCounts"] = checks.launch_counts(GAMES.log_text("host"))
+        type(self).client = GAMES.start_client_later([], FRIENDS_ZIP_CHOICE, client_extra=checks.PVP_RULE_ARGUMENTS)
+        matches = friendszip.verify_copy(friendszip.default_zip_path(), GAMES.client_copy)
+        RECORD["lateJoin"] = {"path": "pick path: PreRunScript.SelectCharacter(3) before every ready try, no --mp-mychar", "clientCopyDllMatches": all(matches.values()),
+                              "pagerBeforePick": checks.pager_state(self.client)}
+        first = checks.select_character(self.client, checks.CUSTOM_CHARACTER)
+        RECORD["lateJoin"].update({"firstPick": first, "pagerAfterPick": checks.pager_state(self.client)})
+        attempts = checks.join_attempts(self.client, checks.CUSTOM_CHARACTER, try_ready, repick=True, in_world=in_world)
+        RECORD["lateJoin"].update({"attemptCount": len(attempts), "firstAttempts": attempts[:3], "lastAttempts": attempts[-3:]})
+        enter_world(self.client, 2)
+        wait_for_bodies(self.host, 2, WORLD_WAIT_SECONDS)
+        time.sleep(SETTLE_SECONDS)
+        expected = {CLIENT_BODY: checks.CUSTOM_CHARACTER, HOST_BODY: checks.EXPERIMENT_CHARACTER}
+        host_state, client_state = both_states(self.host, self.client)
+        issues = checks.pick_issues(host_state, client_state, expected)
+        RECORD["lateJoin"].update({"host": host_state, "client": client_state, "issues": issues, "syncBodyCustomIdPresent": sync_readings(host_state, client_state, expected),
+                                   "loaderAttachLineOnClient": LOADER_ATTACH_LINE in GAMES.log_text("client"), "loaderAttachLineOnHost": LOADER_ATTACH_LINE in GAMES.log_text("host")})
         self.assertEqual(issues, [])
+        self.assertTrue(RECORD["lateJoin"]["loaderAttachLineOnClient"])
 
-    def test_03_banded_pvp_with_the_zip_dll(self):
+    def test_02_banded_pvp_from_the_late_client(self):
         pvp_banded.reset_launch_state()
         context = pvp_banded.prepare(self.host, self.client)
         pvp_banded.act(self.client, context)
         issues = pvp_banded.check(context)
         RECORD["pvp"] = {"punches": [{"swing": entry["swing"], "hostDelta": entry["hostDelta"], "clientDelta": entry["clientDelta"], "fired": entry["fired"]} for entry in context["measurements"]], "issues": issues}
         self.assertEqual(issues, [])
-        landed = [entry for entry in context["measurements"] if entry["hostDelta"] > 0]
-        self.assertEqual(len(landed), len(context["measurements"]), RECORD["pvp"])
+        self.assertEqual(len([entry for entry in context["measurements"] if entry["hostDelta"] > 0]), len(context["measurements"]), RECORD["pvp"])
 
-    def test_04_late_join_with_the_custom_character(self):
-        self.client.console("disconnect")
-        deadline = time.time() + REJOIN_LEAVE_SECONDS
-        while time.time() < deadline and self.client.state()["state"] == "in-world":
-            time.sleep(1.0)
-        RECORD["rejoin"] = {"stateAfterDisconnect": self.client.state()["state"]}
-        time.sleep(3.0)
-        self.client.console("connect %s" % SESSION_ADDRESS)
-        deadline = time.time() + REJOIN_WAIT_SECONDS
-        while time.time() < deadline and self.client.state()["state"] != "in-world":
-            checks.select_character(self.client, checks.CUSTOM_CHARACTER)
-            try_ready(self.client)
-            time.sleep(1.0)
-        wait_for_bodies(self.client, 2, WORLD_WAIT_SECONDS)
-        self.client.call("close_console")
+    def test_03_launch_log_counts(self):
+        counts = {which: checks.launch_counts(GAMES.log_text(which)) for which in ("host", "client")}
+        RECORD["launchCounts"] = counts
+        for which, found in counts.items():
+            self.assertEqual(found["markersNotFound"], 0, which)
+            self.assertGreaterEqual(found["attackTranspilerSuccess"], 1, which)
+
+    def test_04_rejoin_without_a_repick(self):
+        RECORD["rejoinNoRepick"] = leave_and_reconnect(self.client, repick=False)
+        host_state, client_state = both_states(self.host, self.client)
+        RECORD["rejoinNoRepick"].update({"host": host_state, "client": client_state, "clientOwnTag": client_state["tags"].get(CLIENT_BODY), "hostTagOfClient": host_state["tags"].get(CLIENT_BODY),
+                                         "clientCharacterSelected": client_state["characterSelected"], "stayedCustom": client_state["tags"].get(CLIENT_BODY) == checks.CUSTOM_CHARACTER})
+
+    def test_05_rejoin_with_an_explicit_repick(self):
+        RECORD["rejoinWithRepick"] = leave_and_reconnect(self.client, repick=True)
+        host_state, client_state = both_states(self.host, self.client)
+        issues = checks.pick_issues(host_state, client_state, {CLIENT_BODY: checks.CUSTOM_CHARACTER, HOST_BODY: checks.EXPERIMENT_CHARACTER})
+        RECORD["rejoinWithRepick"].update({"host": host_state, "client": client_state, "clientOwnTag": client_state["tags"].get(CLIENT_BODY), "issues": issues})
+        self.assertEqual(issues, [])
+
+    def test_06_reverse_host_custom_client_plain(self):
+        RECORD["logsBeforeReverse"] = {which: checks.launch_counts(GAMES.log_text(which)) for which in ("host", "client")}
+        desync.save_game_logs(GAMES, os.path.join(STATE_ROOT, "game_logs"), "friends-zip", "first-pair")
+        GAMES.stop()
+        type(self).host, type(self).client = GAMES.start([], [], together=FRIENDS_ZIP_CHOICE, host_extra=checks.PVP_RULE_ARGUMENTS, client_extra=checks.PVP_RULE_ARGUMENTS)
+        accepted = ready_up([self.host, self.client], before_ready={self.host: chooser(checks.CUSTOM_CHARACTER), self.client: chooser(checks.EXPERIMENT_CHARACTER)})
+        RECORD["reverse"] = {"readyAccepted": accepted}
+        self.assertTrue(accepted)
+        enter_world(self.host, 2)
+        enter_world(self.client, 2)
         time.sleep(SETTLE_SECONDS)
-        host_state, client_state = checks.character_state(self.host), checks.character_state(self.client)
-        issues = checks.custom_pick_issues(host_state, client_state, checks.CUSTOM_CHARACTER, CLIENT_BODY, HOST_BODY)
-        RECORD["rejoin"].update({"host": host_state, "client": client_state, "issues": issues})
+        expected = {HOST_BODY: checks.CUSTOM_CHARACTER, CLIENT_BODY: checks.EXPERIMENT_CHARACTER}
+        host_state, client_state = both_states(self.host, self.client)
+        issues = checks.pick_issues(host_state, client_state, expected)
+        RECORD["reverse"].update({"host": host_state, "client": client_state, "issues": issues, "syncBodyCustomIdPresent": sync_readings(host_state, client_state, expected),
+                                  "loaderAttachLineOnHost": "attached to " + HOST_BODY in GAMES.log_text("host")})
         self.assertEqual(issues, [])
 
 

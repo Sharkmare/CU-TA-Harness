@@ -110,25 +110,31 @@ class FakeGame:
 
     def call(self, command, **arguments):
         if command == "find":
-            return [{"object": {"id": identifier, "name": name}} for identifier, name in self.objects.get(arguments["type"], [])]
+            if arguments["type"] not in self.objects:
+                raise RuntimeError("no type named " + arguments["type"])
+            return [{"object": {"id": identifier, "name": name}} for identifier, name in self.objects[arguments["type"]]]
         if command == "invoke":
             self.invoked.append((arguments["target"], arguments["method"], arguments["args"]))
             return {}
+        if command == "get":
+            key = (arguments["target"], arguments["path"])
+            if key not in self.values:
+                raise RuntimeError("no such member")
+            return self.values[key]
         raise AssertionError(command)
 
     def get(self, target, path="", depth=1):
-        key = (target, path)
-        if key not in self.values:
-            raise RuntimeError("no such member")
-        return self.values[key]
+        return self.call("get", target=target, path=path, depth=depth)
 
 
-def machine(species, custom_id, tag_id=3, loader_id=3):
-    objects = {"PreRunScript": [(1, "pre")], "ScavPlayer": [(10, "p1"), (11, "p2")], "CharacterIdTag": [(20, "tag")], "CustomCharacter": [(30, "cc")],
-               "Body": [(40, "Body_HostD"), (41, "Body_ClientD"), (42, "Crate")], "SyncBody": [(50, "sync")]}
-    values = {("id:10", "customCharacter"): 0, ("id:11", "customCharacter"): custom_id, ("id:20", "Id"): tag_id, ("id:20", ""): {"Id": tag_id},
-              ("id:30", "Body"): {"name": "Body_ClientD"}, ("id:30", "Id"): loader_id, ("id:40", "charType"): 0, ("id:41", "charType"): species,
-              ("id:42", "charType"): 9, ("static:PreRunScript", "characterSelected"): custom_id, ("id:50", ""): {"x": 1}}
+def machine(species, custom_id, tag_id=3, loader_id=3, players=(0, 3), host_tag=0, host_species=0):
+    objects = {"PreRunScript": [(1, "pre")], "Together.ScavPlayer": [(10, "p1"), (11, "p2")], "CharacterIdTag": [(20, "Body_ClientD"), (21, "Body_HostD")], "CustomCharacter": [(30, "cc")],
+               "Body": [(40, "Body_HostD"), (41, "Body_ClientD"), (42, "Crate")], "NetBody": [(60, "Body_ClientD")]}
+    values = {("id:10", "customCharacter"): players[0], ("id:11", "customCharacter"): players[1], ("id:20", "Id"): tag_id, ("id:21", "Id"): host_tag,
+              ("id:30", "Body"): {"name": "Body_ClientD"}, ("id:30", "Id"): loader_id, ("id:40", "charType"): host_species, ("id:41", "charType"): species,
+              ("id:42", "charType"): 9, ("static:PreRunScript", "characterSelected"): custom_id, ("static:Together.ScavPlayer", "LocalPlayer.customCharacter"): custom_id,
+              ("id:60", "syncBody"): {"characterSelected": {"Value": 0}, "customCharacterId": {"Value": custom_id}, "_position": {"x": 1}},
+              ("static:CasualtiesCharacters.CharacterMenu", "view.Page"): 1, ("static:CasualtiesCharacters.CharacterMenu", "view.Counter.text"): "Page 2 / 2"}
     return FakeGame(objects, values)
 
 
@@ -139,29 +145,54 @@ class CheckTests(unittest.TestCase):
     def test_a_matching_pair_has_no_issues(self):
         self.assertEqual(self.issues(machine(0, 3), machine(0, 3)), [])
 
-    def test_a_client_body_that_is_not_experiment_is_reported(self):
-        issues = self.issues(machine(2, 3), machine(2, 3))
-        self.assertTrue(any("not the Experiment species" in issue for issue in issues), issues)
-
-    def test_species_that_differs_between_machines_is_reported(self):
+    def test_a_client_body_that_is_not_experiment_is_reported_on_that_machine(self):
         issues = self.issues(machine(0, 3), machine(2, 3))
-        self.assertTrue(any("differs between machines" in issue for issue in issues), issues)
+        self.assertTrue(any("has species 2 on the client machine" in issue for issue in issues), issues)
+        self.assertFalse(any("on the host machine" in issue for issue in issues), issues)
 
     def test_a_host_that_lost_the_custom_id_is_reported(self):
-        issues = self.issues(machine(0, 0), machine(0, 3))
-        self.assertTrue(any("host's ScavPlayer rows" in issue for issue in issues), issues)
+        issues = self.issues(machine(0, 0, players=(0, 0)), machine(0, 3))
+        self.assertTrue(any("ScavPlayer.customCharacter on the host machine" in issue for issue in issues), issues)
 
     def test_a_loader_component_with_another_id_is_reported_for_that_machine(self):
         issues = self.issues(machine(0, 3, loader_id=0), machine(0, 3))
-        self.assertTrue(any("on the host machine" in issue for issue in issues), issues)
+        self.assertTrue(any("CustomCharacter on Body_ClientD is 0 on the host machine" in issue for issue in issues), issues)
         self.assertFalse(any("on the client machine" in issue for issue in issues), issues)
 
-    def test_a_missing_tag_is_reported(self):
+    def test_a_tag_that_reset_to_zero_on_the_client_is_reported(self):
         issues = self.issues(machine(0, 3), machine(0, 3, tag_id=0))
-        self.assertTrue(any("CharacterIdTag" in issue and "client machine" in issue for issue in issues), issues)
+        self.assertTrue(any("CharacterIdTag of Body_ClientD is 0 on the client machine" in issue for issue in issues), issues)
+
+    def test_the_reverse_pick_expects_the_custom_character_on_the_host_body_and_none_on_the_client_body(self):
+        reverse = {"Body_HostD": 3, "Body_ClientD": 0}
+        game = machine(0, 3, tag_id=0, host_tag=3)
+        game.objects["CustomCharacter"] = [(31, "cc2")]
+        game.values[("id:31", "Body")] = {"name": "Body_HostD"}
+        game.values[("id:31", "Id")] = 3
+        self.assertEqual(checks.pick_issues(checks.character_state(game), checks.character_state(game), reverse), [])
+
+    def test_a_plain_pick_that_got_a_loader_component_is_reported(self):
+        issues = checks.pick_issues(checks.character_state(machine(0, 0)), checks.character_state(machine(0, 0)), {"Body_ClientD": 0})
+        self.assertTrue(any("attached a custom character" in issue for issue in issues), issues)
 
     def test_body_species_ignores_objects_that_are_not_player_bodies(self):
         self.assertEqual(checks.body_species(machine(0, 3)), {"Body_HostD": 0, "Body_ClientD": 0})
+
+    def test_players_are_found_through_the_namespaced_type_and_the_local_player_static(self):
+        found = checks.player_custom_ids(machine(0, 3))
+        self.assertEqual(found["ids"], [0, 3])
+        self.assertEqual(found["localPlayer"], 3)
+
+    def test_a_lookup_that_fails_is_recorded_and_returns_nothing(self):
+        checks.LOOKUP_ERRORS.clear()
+        self.assertEqual(checks.object_rows(FakeGame({}, {}), "Nothing"), [])
+        self.assertEqual(len(checks.LOOKUP_ERRORS), 2)
+
+    def test_sync_body_values_keep_the_keys_that_mention_custom_or_character(self):
+        values = checks.sync_body_values(machine(0, 3))
+        self.assertEqual(sorted(values["Body_ClientD"]), ["characterSelected", "customCharacterId"])
+        self.assertEqual(checks.sync_body_issues(checks.character_state(machine(0, 3)), {"Body_ClientD": 3}), {"Body_ClientD": True})
+        self.assertEqual(checks.sync_body_issues(checks.character_state(machine(0, 0)), {"Body_ClientD": 3}), {"Body_ClientD": False})
 
     def test_select_character_goes_through_the_menu_object_and_reads_the_raw_id_back(self):
         game = machine(0, 3)
@@ -176,16 +207,45 @@ class CheckTests(unittest.TestCase):
         game.set.assert_not_called()
 
     def test_select_character_without_a_menu_object_says_so(self):
-        game = FakeGame({}, {})
-        self.assertFalse(checks.select_character(game, 3)["selected"])
+        self.assertFalse(checks.select_character(FakeGame({}, {}), 3)["selected"])
 
-    def test_the_pager_state_lists_each_type_that_exists_with_a_dump(self):
+    def test_the_pager_state_reads_the_loaders_menu_static(self):
+        state = checks.pager_state(machine(0, 3))
+        self.assertEqual((state["page"], state["counterText"], state["menuPresent"]), (1, "Page 2 / 2", True))
+        self.assertIsNone(state["pageCount"])
+
+    def test_the_pager_state_says_when_the_menu_is_not_there(self):
+        self.assertFalse(checks.pager_state(FakeGame({}, {}))["menuPresent"])
+
+
+class JoinTests(unittest.TestCase):
+    def run_join(self, repick, worlds_after):
         game = machine(0, 3)
-        game.objects["CharacterPager"] = [(60, "pager")]
-        game.values[("id:60", "")] = {"page": 1}
-        state = checks.pager_state(game)
-        self.assertEqual(state["CharacterPager"][0]["dump"], '{"page": 1}')
-        self.assertEqual(state["PagedCharacterCounter"], [])
+        calls = {"n": 0}
+
+        def in_world(_):
+            calls["n"] += 1
+            return calls["n"] > worlds_after
+
+        clock = [0.0]
+        attempts = checks.join_attempts(game, 3, lambda g: False, repick=repick, in_world=in_world, timeout=100.0, clock=lambda: clock[0],
+                                        sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+        return game, attempts
+
+    def test_each_try_picks_then_readies_until_the_world_is_live(self):
+        game, attempts = self.run_join(True, 2)
+        self.assertEqual(len(game.invoked), 2)
+        self.assertEqual(attempts[-1], {"inWorld": True})
+
+    def test_without_a_repick_nothing_is_selected(self):
+        game, attempts = self.run_join(False, 2)
+        self.assertEqual(game.invoked, [])
+        self.assertIsNone(attempts[0]["pick"])
+
+    def test_a_world_that_never_comes_ends_at_the_timeout(self):
+        game, attempts = self.run_join(True, 10 ** 6)
+        self.assertEqual(len(attempts), 100)
+        self.assertNotIn({"inWorld": True}, attempts)
 
 
 class LogTests(unittest.TestCase):
