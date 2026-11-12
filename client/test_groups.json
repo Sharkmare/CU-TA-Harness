@@ -111,7 +111,8 @@
         "unit.test_spectator_cam",
         "unit.test_friends_zip",
         "unit.test_pagedselect",
-        "unit.test_pagedverify"
+        "unit.test_pagedverify",
+        "unit.test_miningsummary"
       ],
       "needs_game": false
     },
