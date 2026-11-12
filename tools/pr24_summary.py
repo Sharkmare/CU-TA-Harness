@@ -24,7 +24,7 @@ def main(argv=None):
     print("log swings %d, report swings %d, left over %d" % (len(swings), sum(row["swingsFired"] for row in rows), leftover))
     for row, run in zip(rows, runs):
         print(json.dumps({"run": row["repetition"], "verdict": row["verdict"], "block": row["block"], "reach": row["firstDistance"], **pr24log.summarise(run)}))
-        if row["swingsFired"] > LONG_RUN_SWINGS:
+        if row["swingsFired"] > LONG_RUN_SWINGS or row["verdict"] == "never-broke":
             for swing in run[:FIRST_LINES]:
                 print("    " + " | ".join(swing["raw"])[:400])
     return 0

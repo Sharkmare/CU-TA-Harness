@@ -347,7 +347,7 @@ def pr24_fixed_stage_directory():
 
 
 def pr24_verbose_stage_directory():
-    return fullbuild_stage_directory(PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose")
+    return fullbuild_stage_directory(PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose2")
 
 
 def spectator_fix_stage_directory():

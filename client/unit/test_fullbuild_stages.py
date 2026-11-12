@@ -11,10 +11,10 @@ BUILDS = (("fullbuild-control", "fullbuild-control-stage", instances.FULLBUILD_C
           ("fullbuild-fixed", "fullbuild-fixed-stage", instances.FULLBUILD_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_fullbuild_fixed"),
           ("pr24-control", "pr24-control-stage", instances.PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control"),
           ("pr24-fixed", "pr24-fixed-stage", instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed"),
-          ("pr24-fixed-verbose", "pr24-fixed-verbose-stage", instances.PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose"))
+          ("pr24-fixed-verbose", "pr24-fixed-verbose-stage", instances.PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose2"))
 PINNED_MD5 = {"fullbuild-control": "5f44699a7e034bdcbdb8ba66969d04de", "fullbuild-fixed": "2eda43381ed4445d367e27af5edefedb",
               "pr24-control": "f209be8eb9d37eda5a4aafa407deda0f", "pr24-fixed": "aac74832f4e3dd8a2c13d12cba785e3a",
-              "pr24-fixed-verbose": "88eec417e56bc1bcf74780e1e24583c8"}
+              "pr24-fixed-verbose": "ce681dc17f3c76d448e107275a9b76f5"}
 
 
 class StageTests(unittest.TestCase):
