@@ -137,6 +137,19 @@ class Verifier:
         self.key_paging(label)
         self.shot("%s_end" % label)
 
+    def capture_pages(self, label):
+        guard = 0
+        while self.read("view.Page") != 0 and guard < 10:
+            self.actions.key("PageUp")
+            self.sleep(SETTLE_SECONDS)
+            guard += 1
+        for page in range(self.read("view.Pager.PageCount")):
+            state = self.page_state()
+            shot = self.shot("%s_page%d" % (label, page))
+            self.record("%s: page %d captured" % (label, page), state["page"] == page, {"counter": state["counter"], "selected": state["selected"], "screenshot": os.path.basename(shot["path"]) if isinstance(shot, dict) and "path" in shot else None})
+            self.actions.key("PageDown")
+            self.sleep(SETTLE_SECONDS)
+
     def click_back(self, label):
         rows = self.game.call("find", type="UnityEngine.UI.Button")
         candidates = [row for row in rows if row["object"]["name"] == "Back" and row["position"]["y"] < BACK_BAR_HEIGHT and row["position"]["x"] < BACK_BAR_WIDTH]

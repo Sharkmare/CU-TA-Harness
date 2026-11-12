@@ -128,6 +128,18 @@ class VerifierTests(unittest.TestCase):
         run(world)
         self.assertEqual(world.keys, ["PageDown", "PageUp"])
 
+    def test_every_page_is_captured_once_from_the_first_to_the_last(self):
+        world = FakeWorld()
+        world.page = 2
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        verifier = pagedverify.Verifier(world, world, directory.name, clock=lambda seconds: None)
+        verifier.capture_pages("r")
+        captured = [row for row in verifier.results if "captured" in row["check"]]
+        self.assertEqual([row["check"] for row in captured], ["r: page 0 captured", "r: page 1 captured", "r: page 2 captured"])
+        self.assertTrue(all(row["passed"] for row in captured))
+        self.assertEqual(len(world.shots), 3)
+
     def test_a_slot_that_selects_on_hover_fails_the_hover_check(self):
         world = FakeWorld()
         world.hover_selects = True

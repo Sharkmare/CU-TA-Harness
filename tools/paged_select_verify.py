@@ -101,6 +101,7 @@ def main(argv=None):
     if opened:
         for label, width, height in SIZES:
             verifier.verify_size(label, width, height)
+            verifier.capture_pages(label)
         verifier.click_back("the game's real Back button closes the character screen")
     verifier.results.append({"check": "loader SELFCHECK lines", "passed": any("SELFCHECK PASS" in line for line in self_check), "observed": self_check})
     verifier.write(arguments.output)
