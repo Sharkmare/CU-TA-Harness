@@ -37,6 +37,10 @@ FULLBUILD_CONTROL_STAGE_CHOICE = "fullbuild-control-stage"
 FULLBUILD_FIXED_STAGE_CHOICE = "fullbuild-fixed-stage"
 SPECTATOR_FIX_STAGE_CHOICE = "spectator-fix-stage"
 FRIENDS_ZIP_CHOICE = "friends-zip"
+PR24_CONTROL_STAGE_CHOICE = "pr24-control-stage"
+PR24_FIXED_STAGE_CHOICE = "pr24-fixed-stage"
+PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_STAGE"
+PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_FIXED_STAGE"
 FULLGAME_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_STAGE"
 BASELINE_STAGE_ENVIRONMENT_VARIABLE = "CU_BASELINE_STAGE"
 FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_DIAG_STAGE"
@@ -332,6 +336,14 @@ def fullbuild_fixed_stage_directory():
     return fullbuild_stage_directory(FULLBUILD_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_fullbuild_fixed")
 
 
+def pr24_control_stage_directory():
+    return fullbuild_stage_directory(PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control")
+
+
+def pr24_fixed_stage_directory():
+    return fullbuild_stage_directory(PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed")
+
+
 def spectator_fix_stage_directory():
     return fullbuild_stage_directory(SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_spectator_fix")
 
@@ -348,7 +360,8 @@ def stage_directory_by_build():
             "upstream-diag3": diag_stage3_directory, "upstream-fixed": fullgame_stage_directory, "upstream-baseline": baseline_stage_directory,
             "upstream-fixed-diag": fullgame_diag_stage_directory, "upstream-fixed-nobuild": fullgame_nobuild_stage_directory,
             "upstream-fixed-v2": fullgame_v2_stage_directory, "upstream-fixed-final": fullgame_final_stage_directory, "official-5.5.0": official_stage_directory,
-            "fullbuild-control": fullbuild_control_stage_directory, "fullbuild-fixed": fullbuild_fixed_stage_directory, "spectator-fix": spectator_fix_stage_directory}
+            "fullbuild-control": fullbuild_control_stage_directory, "fullbuild-fixed": fullbuild_fixed_stage_directory, "spectator-fix": spectator_fix_stage_directory,
+            "pr24-control": pr24_control_stage_directory, "pr24-fixed": pr24_fixed_stage_directory}
 
 
 def install_stage_together(copy, directory=None):
@@ -437,6 +450,10 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, fullbuild_fixed_stage_directory())
     elif together == SPECTATOR_FIX_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, spectator_fix_stage_directory())
+    elif together == PR24_CONTROL_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, pr24_control_stage_directory())
+    elif together == PR24_FIXED_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, pr24_fixed_stage_directory())
     elif together == BASELINE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, baseline_stage_directory())
     elif together == FRIENDS_ZIP_CHOICE:
