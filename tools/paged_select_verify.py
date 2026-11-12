@@ -18,6 +18,7 @@ SESSION_DIRECTORY = os.path.join(HARNESS, ".state", "paged_select")
 SIZES = (("r16x9", 1280, 720), ("r16x10", 1280, 800))
 MENU_SETTLE_SECONDS = 1.5
 SELF_CHECK_WAIT_SECONDS = 2.0
+INTRO_SKIP_TRIES = 4
 CHAR_SELECT_WAIT_SECONDS = 20.0
 
 
@@ -63,6 +64,11 @@ def open_character_screen(verifier, game):
     unity_size = verifier.unity_size()
     if verifier.read("instance.contentWarning.activeSelf", PRE_RUN):
         verifier.actions.click(unity_size[0] / 2.0, unity_size[1] / 2.0, unity_size)
+        time.sleep(MENU_SETTLE_SECONDS)
+    for _ in range(INTRO_SKIP_TRIES):
+        if not verifier.read("textExists", "static:ScrollableText"):
+            break
+        verifier.actions.key("Escape")
         time.sleep(MENU_SETTLE_SECONDS)
     if not verifier.read("instance.runSettingsScreen.activeSelf", PRE_RUN):
         play = next(row for row in game.call("find", type="AdaptiveButton") if game.get("id:%d" % row["object"]["id"], "action", depth=0) == "Play")
