@@ -113,7 +113,8 @@
         "unit.test_pagedselect",
         "unit.test_pagedverify",
         "unit.test_miningsummary",
-        "unit.test_pr24log"
+        "unit.test_pr24log",
+        "unit.test_recovery"
       ],
       "needs_game": false
     },

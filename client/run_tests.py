@@ -26,6 +26,8 @@ REFUSED_EXIT_CODE = 2
 DEFAULT_MP_FLAGS = ["disable"]
 SLOW_UNIT_SECONDS = 5.0
 SCENARIO_BUDGET_SECONDS_PER_RUN = 60.0
+LONG_SCENARIO_BUDGET_SECONDS_PER_RUN = 150.0
+LONG_SCENARIO_FRAGMENTS = ("v2check", "mining", "dig")
 LAUNCH_STARTUP_SECONDS = 150.0
 
 
@@ -239,6 +241,11 @@ def main(argv=None):
     return 1 if failed or over_budget else 0
 
 
+def scenario_budget(match_fragments, runs):
+    long_run = any(fragment in name for fragment in LONG_SCENARIO_FRAGMENTS for name in match_fragments)
+    return (LONG_SCENARIO_BUDGET_SECONDS_PER_RUN if long_run else SCENARIO_BUDGET_SECONDS_PER_RUN) * runs + LAUNCH_STARTUP_SECONDS
+
+
 def run_launch_plan(arguments):
     from tests.desync_scenarios import counts_by_group
     builds = [desync.parse_build(build) for build in arguments.builds]
@@ -262,12 +269,14 @@ def run_launch_plan(arguments):
     for launch in launches:
         started = time.time()
         runs = launchplan.runs_in_launch(launch, counts)
-        budget = SCENARIO_BUDGET_SECONDS_PER_RUN * runs + LAUNCH_STARTUP_SECONDS
+        budget = scenario_budget(arguments.match or [], runs)
         command = [sys.executable, os.path.abspath(__file__), "--pair", "--only", "desync"] + launch.arguments() + ["--budget-seconds", str(budget)]
         try:
             code = subprocess.run(command, timeout=budget + LAUNCH_STARTUP_SECONDS).returncode
         except subprocess.TimeoutExpired:
             code = -1
+            from casualtieslink import recovery
+            print("TIMEOUT after %.0fs: killed games %s; the profile was NOT restored and the lock may be stale. Copy any logs out of the %%TEMP%% scenario copies, then run: python tools/recover_after_abort.py" % (budget + LAUNCH_STARTUP_SECONDS, recovery.stop_stray_games()))
         failed = failed or code != 0
         print("%s: exit %s in %.0fs" % (launch.identifier, code, time.time() - started), flush=True)
     return 1 if failed else 0
