@@ -5,6 +5,9 @@ from ctypes import wintypes
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
 KEYEVENTF_KEYUP = 0x0002
+KEYEVENTF_EXTENDEDKEY = 0x0001
+MAPVK_VK_TO_VSC = 0
+EXTENDED_KEYS = ("PageUp", "PageDown", "Left", "Up", "Right", "Down")
 CLICK_HOLD_SECONDS = 0.08
 SETTLE_SECONDS = 0.3
 VIRTUAL_KEYS = {"PageUp": 0x21, "PageDown": 0x22, "Left": 0x25, "Up": 0x26, "Right": 0x27, "Down": 0x28, "Return": 0x0D, "Tab": 0x09, "Escape": 0x1B}
@@ -77,7 +80,9 @@ def move_screen(x, y):
 def press_key(name, hold=CLICK_HOLD_SECONDS):
     user32 = ctypes.windll.user32
     code = VIRTUAL_KEYS[name]
-    user32.keybd_event(code, 0, 0, 0)
+    scan = user32.MapVirtualKeyW(code, MAPVK_VK_TO_VSC)
+    extended = KEYEVENTF_EXTENDEDKEY if name in EXTENDED_KEYS else 0
+    user32.keybd_event(code, scan, extended, 0)
     time.sleep(hold)
-    user32.keybd_event(code, 0, KEYEVENTF_KEYUP, 0)
+    user32.keybd_event(code, scan, extended | KEYEVENTF_KEYUP, 0)
     time.sleep(SETTLE_SECONDS)

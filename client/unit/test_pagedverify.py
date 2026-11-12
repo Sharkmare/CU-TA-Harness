@@ -35,7 +35,7 @@ class FakeWorld:
             self.size = tuple(arguments["args"][:2])
             return None
         if command == "find":
-            if arguments["type"] == "Button":
+            if arguments["type"] == "UnityEngine.UI.Button":
                 return [{"object": {"id": 9, "name": "Start"}, "position": {"x": 441.0, "y": 24.0}}, {"object": {"id": 8, "name": "Back"}, "position": {"x": 65.0, "y": 23.0}},
                         {"object": {"id": 7, "name": "Back"}, "position": {"x": 1230.0, "y": 700.0}}]
             return [{"object": {"id": 1, "name": "x"}}, {"object": {"id": 2, "name": "y"}}]

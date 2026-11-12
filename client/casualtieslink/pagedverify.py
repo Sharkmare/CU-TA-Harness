@@ -108,7 +108,10 @@ class Verifier:
             self.record("%s: clicking slot %d selects it" % (size_label, index), selected == ids[index], {"slotIds": ids, "selected": selected})
             names.append(self.selected_name())
             self.shot("%s_slot%d" % (size_label, index))
-        self.record("%s: the name text follows each clicked slot" % size_label, len(names) > 0 and len(set(names)) == len(names) and all(names), {"names": names})
+        if names:
+            self.record("%s: the name text follows each clicked slot" % size_label, len(set(names)) == len(names) and all(names), {"names": names})
+        else:
+            self.record("%s: the screen showed pack slots to click" % size_label, False, {"names": names})
 
     def key_paging(self, size_label):
         for key, direction in (("PageDown", 1), ("PageUp", -1)):
@@ -135,7 +138,7 @@ class Verifier:
         self.shot("%s_end" % label)
 
     def click_back(self, label):
-        rows = self.game.call("find", type="Button")
+        rows = self.game.call("find", type="UnityEngine.UI.Button")
         candidates = [row for row in rows if row["object"]["name"] == "Back" and row["position"]["y"] < BACK_BAR_HEIGHT and row["position"]["x"] < BACK_BAR_WIDTH]
         if not candidates:
             return self.record(label, False, {"error": "no Back button in the bottom bar", "buttons": [row["object"]["name"] for row in rows][:20]})
