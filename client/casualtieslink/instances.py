@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import zipfile
 
-from . import testcopy
+from . import friendszip, testcopy
 from .launcher import GameProcess, mp_arguments
 from .pair import PREFS_REGISTRY_KEY, ProfileGuard
 from .udpproxy import DelayProxy
@@ -36,6 +36,7 @@ OFFICIAL_STAGE_CHOICE = "official-stage"
 FULLBUILD_CONTROL_STAGE_CHOICE = "fullbuild-control-stage"
 FULLBUILD_FIXED_STAGE_CHOICE = "fullbuild-fixed-stage"
 SPECTATOR_FIX_STAGE_CHOICE = "spectator-fix-stage"
+FRIENDS_ZIP_CHOICE = "friends-zip"
 FULLGAME_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_STAGE"
 BASELINE_STAGE_ENVIRONMENT_VARIABLE = "CU_BASELINE_STAGE"
 FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_DIAG_STAGE"
@@ -438,6 +439,10 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, spectator_fix_stage_directory())
     elif together == BASELINE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, baseline_stage_directory())
+    elif together == FRIENDS_ZIP_CHOICE:
+        installed["together"] = friendszip.extract_into_copy(friendszip.default_zip_path(), copy)
+        if debug:
+            write_debug_config(copy, LOADER_GUID)
     elif flavour_name(together):
         installed["together"] = install_flavour_package(copy)
     elif together != "keep":

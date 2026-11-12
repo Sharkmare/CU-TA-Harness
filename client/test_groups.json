@@ -30,6 +30,15 @@
       "watch_plugin": true
     },
     {
+      "id": "friends-zip",
+      "modules": [
+        "tests.test_friends_zip"
+      ],
+      "needs_game": false,
+      "owns_game": true,
+      "watch_plugin": true
+    },
+    {
       "id": "desync",
       "modules": [
         "tests.test_desync"
@@ -99,7 +108,8 @@
         "unit.test_static_copy",
         "unit.test_installed_launch_guard",
         "unit.test_console_leak",
-        "unit.test_spectator_cam"
+        "unit.test_spectator_cam",
+        "unit.test_friends_zip"
       ],
       "needs_game": false
     },

@@ -238,6 +238,16 @@ python tools/desync_summary.py L1-upstream-diag-hand-mining
 
 The offline tests (`unit/test_desync.py`, `unit/test_desync_series.py`, `unit/test_desync_scenarios.py`, `unit/test_launchplan.py`, `unit/test_udpproxy.py`, `unit/test_run_arguments.py`) cover the verdicts, the report text, the file names, the build and hash handling, the launch plan, the run expansion, the proxy and its control, and the scenario helpers against the fake game server. The game-side reads are untested until the scenarios have run on a game.
 
+### Friends zip lobby check (the shipped mod set on two game copies)
+
+`tests/test_friends_zip.py` (group `friends-zip`) gives both game copies exactly the plugin set of a friends zip: `casualtieslink/friendszip.py` unpacks the zip over the copy (all files except `INSTALL.txt` and `changelog.txt`), replaces the copy's `Together` folder, compares every DLL's md5 with the zip, and fails if the copy holds a plugin folder the zip does not ship. The only addition is the CasualtiesLink plugin (the harness needs it to drive the games) and a loader debug config. The zip comes from `CU_FRIENDS_ZIP` (default `Downloads/CasualtiesUnknown-Mods.zip`); the build choice is `friends-zip`.
+
+One launch runs, in order: the launch log counts per game (Body.Attack transpiler lines, markers not found, patch problems, exceptions), the lobby with the client picking custom id 3 through `PreRunScript.SelectCharacter` (never by writing `characterSelected`) and the host picking Experiment, the custom-id assertions on both machines, one banded PvP run of five punches, and a rejoin of the client with the custom character. Results are written to `.state/friends_zip_reports/friends_zip.json`. Continue from a save and a host-custom reverse are not wired.
+
+```bash
+python run_tests.py --pair --only friends-zip
+```
+
 ### Checking that the tests can fail
 
 `tools/mutation_check.py` breaks the code on purpose in scratch copies, one change at a time (the list is `tools/mutants.json`), runs the offline tests against each copy and reports any change they did not notice. For example a second game being allowed, the save backup left behind, the plugin accepting an empty `Origin`, a held key one frame short.
