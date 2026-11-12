@@ -110,7 +110,8 @@
         "unit.test_console_leak",
         "unit.test_spectator_cam",
         "unit.test_friends_zip",
-        "unit.test_pagedselect"
+        "unit.test_pagedselect",
+        "unit.test_pagedverify"
       ],
       "needs_game": false
     },

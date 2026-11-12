@@ -19,11 +19,12 @@ def main(argv=None):
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--characters", type=int, default=4, help="characters in the test pack")
+    parser.add_argument("--loader-dll", default=None, help="a CasualtiesCharacters.dll to put over the zip's loader in the copy")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--session-directory", default=DEFAULT_SESSION_DIRECTORY)
     arguments = parser.parse_args(argv)
     pagedselect.run_session(arguments.session_directory, os.path.join(STATE_ROOT, "paged_select_snapshots"), arguments.port, arguments.width, arguments.height,
-                            arguments.characters, arguments.zip_md5, instances.mods_root())
+                            arguments.characters, arguments.zip_md5, instances.mods_root(), arguments.loader_dll)
     return 0
 
 

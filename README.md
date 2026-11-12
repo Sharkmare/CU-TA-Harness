@@ -250,7 +250,7 @@ python run_tests.py --pair --only friends-zip
 
 ### Paged character select (singleplayer, friends zip plus a test pack)
 
-`tools/paged_select.py --zip-md5 <md5> [--width W --height H --characters N]` starts one singleplayer game (`--mp-disable`) from a copy with the friends zip plugin set and a generated test pack (`casualtieslink/pagedselect.py`), snapshots the profile first, and keeps the game up with the link on port 7650 until a `stop` file appears in `.state/paged_select`. It then closes the game, deletes the copy and restores the profile. The screen is driven through the link (`screenshot`, `mouse`, `input`).
+`tools/paged_select.py --zip-md5 <md5> [--width W --height H --characters N]` starts one singleplayer game (`--mp-disable`) from a copy with the friends zip plugin set and a generated test pack (`casualtieslink/pagedselect.py`), snapshots the profile first, and keeps the game up with the link on port 7650 until a `stop` file appears in `.state/paged_select`. It then closes the game, deletes the copy and restores the profile. `--loader-dll PATH` puts a CasualtiesCharacters.dll over the zip's loader in the copy and records its md5. The screen is read through the link. `tools/paged_select_verify.py` drives the running session with real OS clicks and keys (`casualtieslink/oswindow.py`) at 16:9 and 16:10: arrow labels and paging, one click per slot, and the PageUp and PageDown keys, writing `.state/paged_select/verify.json`. The link's injected mouse does not reach the UI's EventSystem, so real input is needed for any UI button.
 
 ### Checking that the tests can fail
 

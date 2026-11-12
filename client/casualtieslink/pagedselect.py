@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import shutil
 import time
 
 from . import friendszip, instances, testcopy
@@ -17,6 +18,7 @@ SESSION_FILE_NAME = "session.json"
 STOP_POLL_SECONDS = 2.0
 SINGLEPLAYER_ARGUMENTS = ["--mp-disable"]
 GAME_COPY_NAME = "CU-paged-select"
+LOADER_DLL_NAME = "CasualtiesCharacters.dll"
 
 
 def write_test_pack(plugins_folder, count, template_path):
@@ -41,11 +43,21 @@ def write_test_pack(plugins_folder, count, template_path):
     return keys
 
 
+def install_loader_dll(copy_directory, loader_dll):
+    if not os.path.isfile(loader_dll):
+        raise FileNotFoundError(loader_dll)
+    target = os.path.join(copy_directory, instances.PLUGINS_RELATIVE, instances.LOADER_FOLDER, LOADER_DLL_NAME)
+    if not os.path.isfile(target):
+        raise FileNotFoundError("the copy has no loader to replace: " + target)
+    shutil.copy2(loader_dll, target)
+    return friendszip.md5_of_file(target)
+
+
 def window_arguments(width, height):
     return ["-screen-fullscreen", "0", "-screen-width", str(width), "-screen-height", str(height)]
 
 
-def run_session(session_directory, snapshot_root, port, width, height, character_count, expected_zip_md5, mods_root):
+def run_session(session_directory, snapshot_root, port, width, height, character_count, expected_zip_md5, mods_root, loader_dll=None):
     zip_path = friendszip.default_zip_path()
     actual = friendszip.md5_of_file(zip_path)
     if actual != expected_zip_md5:
@@ -64,12 +76,13 @@ def run_session(session_directory, snapshot_root, port, width, height, character
         try:
             testcopy.make_copy(destination)
             installed = instances.configure_instance(destination, [], together=instances.FRIENDS_ZIP_CHOICE)
+            loader_md5 = install_loader_dll(destination, loader_dll) if loader_dll else None
             keys = write_test_pack(os.path.join(destination, instances.PLUGINS_RELATIVE), character_count, os.path.join(mods_root, TEMPLATE_RELATIVE))
             process = GameProcess(port, SINGLEPLAYER_ARGUMENTS, directory=destination, manage_save=False, window_args=window_arguments(width, height))
             status = process.start(instances.START_TIMEOUT_SECONDS)
             with open(os.path.join(session_directory, SESSION_FILE_NAME), "w", encoding="utf-8") as handle:
                 json.dump({"port": port, "width": width, "height": height, "testPackKeys": keys, "zipMd5": actual, "removedFromCopy": installed["together"]["removedFromCopy"],
-                           "gameVersion": status.get("version")}, handle, indent=2)
+                           "gameVersion": status.get("version"), "loaderDllMd5": loader_md5}, handle, indent=2)
             while not os.path.exists(stop_path):
                 if process.process.poll() is not None:
                     break
