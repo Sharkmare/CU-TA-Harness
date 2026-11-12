@@ -8,13 +8,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HARNESS = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(HARNESS, "client"))
 
-from casualtieslink import instances, oswindow, pagedverify
+from casualtieslink import instances, oswindow, pagedselect, pagedverify
 from casualtieslink.commands import Game
 from casualtieslink.launcher import running_game_pids
 
 SESSION_DIRECTORY = os.path.join(HARNESS, ".state", "paged_select")
 SIZES = (("r16x9", 1280, 720), ("r16x10", 1280, 800))
 MENU_SETTLE_SECONDS = 1.5
+SELF_CHECK_WAIT_SECONDS = 2.0
 CHAR_SELECT_WAIT_SECONDS = 20.0
 
 
@@ -36,9 +37,24 @@ class OsActions:
         target = oswindow.unity_to_screen(origin, size, unity_size, x, y)
         oswindow.click_screen(*target)
 
+    def hover(self, x, y, unity_size):
+        hwnd = self.hwnd()
+        origin, size = oswindow.client_geometry(hwnd)
+        oswindow.focus(hwnd)
+        oswindow.move_screen(*oswindow.unity_to_screen(origin, size, unity_size, x, y))
+
     def key(self, name):
         oswindow.focus(self.hwnd())
         oswindow.press_key(name)
+
+
+def self_check_lines():
+    path = os.path.join(instances.copy_directory(pagedselect.GAME_COPY_NAME), "BepInEx", "LogOutput.log")
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            return [line.rstrip() for line in handle if "SELFCHECK" in line]
+    except OSError:
+        return []
 
 
 def open_character_screen(verifier, game):
@@ -73,9 +89,14 @@ def main(argv=None):
     verifier.set_resolution(*SIZES[0][1:])
     opened = open_character_screen(verifier, game)
     verifier.record("the character screen opened through real clicks", opened, {"pids": pids})
+    time.sleep(SELF_CHECK_WAIT_SECONDS)
+    self_check = self_check_lines()
+    print("\n".join(self_check) or "no SELFCHECK lines in the log")
     if opened:
         for label, width, height in SIZES:
             verifier.verify_size(label, width, height)
+        verifier.click_back("the game's real Back button closes the character screen")
+    verifier.results.append({"check": "loader SELFCHECK lines", "passed": any("SELFCHECK PASS" in line for line in self_check), "observed": self_check})
     verifier.write(arguments.output)
     summary = json.load(open(arguments.output, encoding="utf-8"))
     print("passed %d, failed %d" % (summary["passed"], summary["failed"]))

@@ -20,11 +20,13 @@ def main(argv=None):
     parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--characters", type=int, default=4, help="characters in the test pack")
     parser.add_argument("--loader-dll", default=None, help="a CasualtiesCharacters.dll to put over the zip's loader in the copy")
+    parser.add_argument("--pack-directory", default=None, help="a character pack folder (with pack.json) to copy into the plugins instead of the generated test pack")
+    parser.add_argument("--self-check", action="store_true", help="turn on the loader's CharacterScreenSelfCheck")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--session-directory", default=DEFAULT_SESSION_DIRECTORY)
     arguments = parser.parse_args(argv)
     pagedselect.run_session(arguments.session_directory, os.path.join(STATE_ROOT, "paged_select_snapshots"), arguments.port, arguments.width, arguments.height,
-                            arguments.characters, arguments.zip_md5, instances.mods_root(), arguments.loader_dll)
+                            arguments.characters, arguments.zip_md5, instances.mods_root(), arguments.loader_dll, arguments.pack_directory, arguments.self_check)
     return 0
 
 

@@ -69,6 +69,11 @@ def click_screen(x, y, hold=CLICK_HOLD_SECONDS):
     time.sleep(SETTLE_SECONDS)
 
 
+def move_screen(x, y):
+    ctypes.windll.user32.SetCursorPos(int(x), int(y))
+    time.sleep(SETTLE_SECONDS * 2)
+
+
 def press_key(name, hold=CLICK_HOLD_SECONDS):
     user32 = ctypes.windll.user32
     code = VIRTUAL_KEYS[name]

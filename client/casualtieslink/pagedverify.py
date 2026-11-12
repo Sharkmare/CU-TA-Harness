@@ -9,6 +9,8 @@ SLOT_COUNT = 3
 SETTLE_SECONDS = 1.2
 RESOLUTION_SETTLE_SECONDS = 3.0
 ARROW_PREFIX = "PagedCharacterArrow"
+BACK_BAR_HEIGHT = 80.0
+BACK_BAR_WIDTH = 220.0
 EXPECTED_ARROW_LABELS = {"PreviousArrow": "<", "NextArrow": ">"}
 
 
@@ -86,15 +88,27 @@ class Verifier:
         expected = next_page(before["page"], before["pageCount"], direction)
         self.record(label, after["page"] == expected, {"before": before["page"], "after": after["page"], "expected": expected, "counter": after["counter"]})
 
+    def selected_name(self):
+        return self.read("instance.charSelectName.text", PRE_RUN)
+
     def click_slots(self, size_label):
+        names = []
         for index in range(SLOT_COUNT):
             ids = [self.read("view.Slots[%d].CharacterId" % slot) for slot in range(SLOT_COUNT)]
             if ids[index] < 0:
                 continue
-            self.click_at(self.read("view.Slots[%d].Root.transform.position" % index))
+            position = self.read("view.Slots[%d].Root.transform.position" % index)
+            before_hover = self.read("characterSelected", PRE_RUN)
+            self.actions.hover(position["x"], position["y"], self.unity_size())
+            self.sleep(SETTLE_SECONDS)
+            after_hover = self.read("characterSelected", PRE_RUN)
+            self.record("%s: hovering slot %d alone does not select it" % (size_label, index), before_hover == after_hover, {"before": before_hover, "afterHover": after_hover})
+            self.click_at(position)
             selected = self.read("characterSelected", PRE_RUN)
             self.record("%s: clicking slot %d selects it" % (size_label, index), selected == ids[index], {"slotIds": ids, "selected": selected})
+            names.append(self.selected_name())
             self.shot("%s_slot%d" % (size_label, index))
+        self.record("%s: the name text follows each clicked slot" % size_label, len(names) > 0 and len(set(names)) == len(names) and all(names), {"names": names})
 
     def key_paging(self, size_label):
         for key, direction in (("PageDown", 1), ("PageUp", -1)):
@@ -119,6 +133,15 @@ class Verifier:
         self.click_arrow("PreviousArrow", -1, "%s: previous arrow" % label)
         self.key_paging(label)
         self.shot("%s_end" % label)
+
+    def click_back(self, label):
+        rows = self.game.call("find", type="Button")
+        candidates = [row for row in rows if row["object"]["name"] == "Back" and row["position"]["y"] < BACK_BAR_HEIGHT and row["position"]["x"] < BACK_BAR_WIDTH]
+        if not candidates:
+            return self.record(label, False, {"error": "no Back button in the bottom bar", "buttons": [row["object"]["name"] for row in rows][:20]})
+        self.click_at(candidates[0]["position"])
+        still_open = self.read("view.Slide.gameObject.activeInHierarchy")
+        return self.record(label, still_open is False, {"slideActiveAfterBack": still_open, "position": candidates[0]["position"]})
 
     def write(self, path):
         with open(path, "w", encoding="utf-8") as handle:

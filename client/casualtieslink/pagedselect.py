@@ -19,6 +19,7 @@ STOP_POLL_SECONDS = 2.0
 SINGLEPLAYER_ARGUMENTS = ["--mp-disable"]
 GAME_COPY_NAME = "CU-paged-select"
 LOADER_DLL_NAME = "CasualtiesCharacters.dll"
+SELF_CHECK_CONFIG_TEXT = "[Debug]\n\nEnabled = true\n\nCharacterScreenSelfCheck = true\n"
 
 
 def write_test_pack(plugins_folder, count, template_path):
@@ -43,6 +44,21 @@ def write_test_pack(plugins_folder, count, template_path):
     return keys
 
 
+def copy_pack(pack_directory, plugins_folder):
+    if not os.path.isfile(os.path.join(pack_directory, "pack.json")):
+        raise FileNotFoundError("no pack.json in " + pack_directory)
+    target = os.path.join(plugins_folder, "CasualtiesCharacters-" + os.path.basename(pack_directory.rstrip("/\\")))
+    shutil.copytree(pack_directory, target)
+    return sorted(os.path.splitext(name)[0] for name in os.listdir(os.path.join(target, "characters")))
+
+
+def write_self_check_config(copy_directory):
+    path = os.path.join(copy_directory, instances.CONFIG_RELATIVE, instances.LOADER_GUID + ".cfg")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(SELF_CHECK_CONFIG_TEXT)
+
+
 def install_loader_dll(copy_directory, loader_dll):
     if not os.path.isfile(loader_dll):
         raise FileNotFoundError(loader_dll)
@@ -57,7 +73,7 @@ def window_arguments(width, height):
     return ["-screen-fullscreen", "0", "-screen-width", str(width), "-screen-height", str(height)]
 
 
-def run_session(session_directory, snapshot_root, port, width, height, character_count, expected_zip_md5, mods_root, loader_dll=None):
+def run_session(session_directory, snapshot_root, port, width, height, character_count, expected_zip_md5, mods_root, loader_dll=None, pack_directory=None, self_check=False):
     zip_path = friendszip.default_zip_path()
     actual = friendszip.md5_of_file(zip_path)
     if actual != expected_zip_md5:
@@ -77,12 +93,15 @@ def run_session(session_directory, snapshot_root, port, width, height, character
             testcopy.make_copy(destination)
             installed = instances.configure_instance(destination, [], together=instances.FRIENDS_ZIP_CHOICE)
             loader_md5 = install_loader_dll(destination, loader_dll) if loader_dll else None
-            keys = write_test_pack(os.path.join(destination, instances.PLUGINS_RELATIVE), character_count, os.path.join(mods_root, TEMPLATE_RELATIVE))
+            plugins_folder = os.path.join(destination, instances.PLUGINS_RELATIVE)
+            keys = copy_pack(pack_directory, plugins_folder) if pack_directory else write_test_pack(plugins_folder, character_count, os.path.join(mods_root, TEMPLATE_RELATIVE))
+            if self_check:
+                write_self_check_config(destination)
             process = GameProcess(port, SINGLEPLAYER_ARGUMENTS, directory=destination, manage_save=False, window_args=window_arguments(width, height))
             status = process.start(instances.START_TIMEOUT_SECONDS)
             with open(os.path.join(session_directory, SESSION_FILE_NAME), "w", encoding="utf-8") as handle:
                 json.dump({"port": port, "width": width, "height": height, "testPackKeys": keys, "zipMd5": actual, "removedFromCopy": installed["together"]["removedFromCopy"],
-                           "gameVersion": status.get("version"), "loaderDllMd5": loader_md5}, handle, indent=2)
+                           "gameVersion": status.get("version"), "loaderDllMd5": loader_md5, "packDirectory": os.path.basename(pack_directory) if pack_directory else None, "selfCheck": self_check}, handle, indent=2)
             while not os.path.exists(stop_path):
                 if process.process.poll() is not None:
                     break

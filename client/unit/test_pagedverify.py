@@ -20,6 +20,9 @@ class FakeWorld:
         self.keys = []
         self.size = (1280, 720)
         self.shots = []
+        self.slide_open = True
+        self.hover_selects = False
+        self.back_works = True
 
     def ids(self):
         return [-1, -1, -1] if self.page == 0 else [3, 62, 99]
@@ -32,8 +35,15 @@ class FakeWorld:
             self.size = tuple(arguments["args"][:2])
             return None
         if command == "find":
+            if arguments["type"] == "Button":
+                return [{"object": {"id": 9, "name": "Start"}, "position": {"x": 441.0, "y": 24.0}}, {"object": {"id": 8, "name": "Back"}, "position": {"x": 65.0, "y": 23.0}},
+                        {"object": {"id": 7, "name": "Back"}, "position": {"x": 1230.0, "y": 700.0}}]
             return [{"object": {"id": 1, "name": "x"}}, {"object": {"id": 2, "name": "y"}}]
         path = arguments["path"]
+        if path == "instance.charSelectName.text":
+            return "name%d" % self.selected
+        if path == "view.Slide.gameObject.activeInHierarchy":
+            return self.slide_open
         if path in ("width", "height"):
             return self.size[0 if path == "width" else 1]
         if path == "view.Page":
@@ -59,7 +69,9 @@ class FakeWorld:
         raise RuntimeError("unknown path " + path)
 
     def click(self, x, y, size):
-        if (x, y) == (PREVIOUS["x"], PREVIOUS["y"]) and self.arrows_work:
+        if (x, y) == (65.0, 23.0):
+            self.slide_open = self.slide_open and not self.back_works
+        elif (x, y) == (PREVIOUS["x"], PREVIOUS["y"]) and self.arrows_work:
             self.page = (self.page - 1) % self.count
         elif (x, y) == (NEXT["x"], NEXT["y"]) and self.arrows_work:
             self.page = (self.page + 1) % self.count
@@ -74,6 +86,10 @@ class FakeWorld:
 
     def focus(self):
         return True
+
+    def hover(self, x, y, size):
+        if self.hover_selects:
+            self.selected = 62
 
 
 def run(world):
@@ -111,6 +127,40 @@ class VerifierTests(unittest.TestCase):
         world = FakeWorld()
         run(world)
         self.assertEqual(world.keys, ["PageDown", "PageUp"])
+
+    def test_a_slot_that_selects_on_hover_fails_the_hover_check(self):
+        world = FakeWorld()
+        world.hover_selects = True
+        verifier = run(world)
+        failed = [row["check"] for row in verifier.results if not row["passed"]]
+        self.assertTrue(any("hovering slot" in name for name in failed), failed)
+
+    def test_the_name_text_check_passes_when_each_click_gives_its_own_name(self):
+        verifier = run(FakeWorld())
+        row = next(row for row in verifier.results if "name text" in row["check"])
+        self.assertTrue(row["passed"])
+        self.assertEqual(len(row["observed"]["names"]), 3)
+
+    def test_a_name_text_that_stays_the_same_fails_the_check(self):
+        world = FakeWorld(slots_select_middle=True)
+        verifier = run(world)
+        self.assertIn("r: the name text follows each clicked slot", [row["check"] for row in verifier.results if not row["passed"]])
+
+    def test_the_back_button_check_clicks_the_bottom_bar_button_not_the_arrow_clone(self):
+        world = FakeWorld()
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        verifier = pagedverify.Verifier(world, world, directory.name, clock=lambda seconds: None)
+        self.assertTrue(verifier.click_back("back"))
+        self.assertFalse(world.slide_open)
+
+    def test_a_back_button_that_does_nothing_fails(self):
+        world = FakeWorld()
+        world.back_works = False
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        verifier = pagedverify.Verifier(world, world, directory.name, clock=lambda seconds: None)
+        self.assertFalse(verifier.click_back("back"))
 
     def test_paging_wraps_in_both_directions(self):
         self.assertEqual((pagedverify.next_page(2, 3, 1), pagedverify.next_page(0, 3, -1)), (0, 2))
