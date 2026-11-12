@@ -42,6 +42,16 @@ class RowTests(unittest.TestCase):
             rows = miningsummary.summarise_directory(directory)
         self.assertEqual([row["repetition"] for row in rows], [1, 2, 3])
 
+    def test_the_end_time_comes_from_the_file_name_and_the_duration_from_the_last_sample(self):
+        data = report()
+        data["samples"] = [{"t": 0.0}, {"t": 12.5}]
+        row = miningsummary.summarise_report(data, "x/v2check_dig_cracks__a__d100-j0_r3__083532.json")
+        self.assertEqual((row["endLocalSeconds"], row["durationSeconds"]), (8 * 3600 + 35 * 60 + 32, 12.5))
+
+    def test_a_path_without_a_time_stamp_gives_none(self):
+        row = miningsummary.summarise_report(report(), "x/other.json")
+        self.assertIsNone(row["endLocalSeconds"])
+
     def test_a_report_without_swings_does_not_crash(self):
         row = miningsummary.summarise_report({"verdict": "never-broke", "repetition": 1})
         self.assertEqual(row["swingsFired"], 0)

@@ -53,6 +53,33 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(pr24log.parse_swings("nothing here\n " + HOOK_BODY), [])
 
 
+TIMED = "\n".join(
+    "[Info   :  Together] [00:00:%02d.500] [PR24V] swing=%d t=%d.0 result=False hookCalls=1 vanillaBlockDamages=%d lastHitWasBlock=False lastHitPos=0.0,0.0 attackerPos=1.0,2.0 " % (second, second, second, damage)
+    + "hook#0(Body_HostD tag=Player at=1.3,2.4 dist=0.5 building=False body=True took=%s breakLoop=True block=False)" % took
+    for second, damage, took in ((10, 0, "True"), (11, 0, "True"), (30, 1, "False"), (31, 1, "False")))
+
+
+class WindowTests(unittest.TestCase):
+    def test_the_wall_clock_of_a_swing_line_is_read_in_seconds_of_the_day(self):
+        swings = pr24log.parse_swings(TIMED)
+        self.assertEqual([s["wall"] for s in swings], [10.5, 11.5, 30.5, 31.5])
+        self.assertIsNone(pr24log.parse_swings(LOG)[0]["wall"])
+
+    def test_swings_are_assigned_to_the_run_whose_window_holds_them(self):
+        runs = pr24log.split_by_windows(pr24log.parse_swings(TIMED), [(9.0, 12.0), (29.0, 32.0), (100.0, 110.0)])
+        self.assertEqual([len(run) for run in runs], [2, 2, 0])
+
+    def test_the_host_body_offset_from_the_attacker_is_reported_for_taken_hits_only(self):
+        swings = pr24log.parse_swings(TIMED)
+        self.assertEqual(pr24log.host_offsets(swings), [(0.3, 0.4), (0.3, 0.4)])
+
+    def test_the_summary_counts_took_swings_and_swings_with_block_damage_per_window(self):
+        first, second = pr24log.split_by_windows(pr24log.parse_swings(TIMED), [(9.0, 12.0), (29.0, 32.0)])
+        self.assertEqual((pr24log.summarise(first)["swingsWithTookTrue"], pr24log.summarise(first)["swingsWithBlockDamage"]), (2, 0))
+        self.assertEqual((pr24log.summarise(second)["swingsWithTookTrue"], pr24log.summarise(second)["swingsWithBlockDamage"]), (0, 2))
+        self.assertEqual(pr24log.summarise(first)["hostOffsetMin"], (0.3, 0.4))
+
+
 class SummaryTests(unittest.TestCase):
     def test_a_swing_spent_on_a_body_counts_as_took_true_with_no_block_damage(self):
         summary = pr24log.summarise(pr24log.parse_swings(LOG))

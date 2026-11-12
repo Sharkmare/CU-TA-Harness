@@ -2,6 +2,7 @@ import glob
 import json
 import math
 import os
+import re
 
 REPORT_PATTERN = "v2check_dig_cracks__*.json"
 NEVER_BROKE = "never-broke"
@@ -27,7 +28,18 @@ def cause_for(row):
     return "not shown"
 
 
-def summarise_report(report):
+def stamp_seconds(path):
+    """Seconds of the local day from the HHMMSS at the end of a report file name."""
+    match = re.search(r"__(\d{2})(\d{2})(\d{2})\.json$", os.path.basename(path or ""))
+    return int(match.group(1)) * 3600 + int(match.group(2)) * 60 + int(match.group(3)) if match else None
+
+
+def duration_seconds(report):
+    samples = report.get("samples") or []
+    return samples[-1]["t"] if samples else None
+
+
+def summarise_report(report, path=None):
     swing = report.get("swings") or {}
     listed = swing.get("list") or []
     reach = distances(report)
@@ -39,6 +51,8 @@ def summarise_report(report):
            "hostCrackSteps": len((report.get("crackSteps") or {}).get("host") or []), "clientCrackSteps": len((report.get("crackSteps") or {}).get("client") or []),
            "hostBrokeAt": (findings.get("host") or {}).get("brokeAt"), "clientBrokeAt": (findings.get("client") or {}).get("brokeAt"),
            "hostPresentAtEnd": (findings.get("host") or {}).get("presentAtEnd"), "reappeared": bool((findings.get("host") or {}).get("reappeared") or (findings.get("client") or {}).get("reappeared"))}
+    row["endLocalSeconds"] = stamp_seconds(path)
+    row["durationSeconds"] = duration_seconds(report)
     row["cause"] = cause_for(row)
     return row
 
@@ -47,7 +61,7 @@ def summarise_directory(directory):
     rows = []
     for path in sorted(glob.glob(os.path.join(directory, REPORT_PATTERN))):
         with open(path, encoding="utf-8") as handle:
-            rows.append(summarise_report(json.load(handle)))
+            rows.append(summarise_report(json.load(handle), path))
     rows.sort(key=lambda row: row["repetition"] or 0)
     return rows
 

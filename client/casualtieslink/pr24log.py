@@ -3,6 +3,7 @@ import re
 HEADER = re.compile(r"\[PR24V\] swing=(\d+) t=(\S+) result=(\w+) hookCalls=(\d+) vanillaBlockDamages=(\d+) lastHitWasBlock=(\w+) lastHitPos=(\S+) attackerPos=(\S+)(.*)")
 HOOK = re.compile(r"hook#(\d+)\((.*?) tag=(\S*) at=(\S+) dist=(\S+) building=(\w+) body=(\w+) took=(\w+) breakLoop=(\w+) block=(\w+)\)")
 DAMAGE = re.compile(r"damageBlock\(pos=(\S+) dmg=(\S+) total=(\S+)\)")
+WALL_CLOCK = re.compile(r"\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\] \[PR24V\]")
 ANIMAL = re.compile(r"animal\((.*?) at=(\S+) cantHit=(\w+)\)")
 COOLDOWN = re.compile(r"cooldownAfter=(\S+)")
 CONTINUATION = re.compile(r"^\s+(hook#|damageBlock\(|animal\()")
@@ -17,6 +18,8 @@ def parse_swings(text):
             current = {"swing": int(found.group(1)), "t": float(found.group(2)), "result": found.group(3) == "True", "hookCalls": int(found.group(4)),
                        "vanillaBlockDamages": int(found.group(5)), "lastHitWasBlock": found.group(6) == "True", "lastHitPos": found.group(7), "attackerPos": found.group(8),
                        "hooks": [], "damageBlocks": [], "animals": [], "cooldownAfter": None, "raw": [line.strip()]}
+            wall = WALL_CLOCK.search(line)
+            current["wall"] = int(wall.group(1)) * 3600 + int(wall.group(2)) * 60 + int(wall.group(3)) + int(wall.group(4)) / 1000.0 if wall else None
             swings.append(current)
             tail = found.group(9)
         elif current is not None and CONTINUATION.match(line):
@@ -46,6 +49,22 @@ def split_by_counts(swings, counts):
     return runs, len(swings) - start
 
 
+def split_by_windows(swings, windows):
+    return [[s for s in swings if s.get("wall") is not None and start <= s["wall"] <= end] for start, end in windows]
+
+
+def host_offsets(swings):
+    """Where the host body stood relative to the attacker for every hook call that took the hit on a player body."""
+    result = []
+    for swing in swings:
+        attacker = [float(value) for value in swing["attackerPos"].split(",")]
+        for hook in swing["hooks"]:
+            if hook["took"] and hook["body"]:
+                at = [float(value) for value in hook["at"].split(",")]
+                result.append((round(at[0] - attacker[0], 2), round(at[1] - attacker[1], 2)))
+    return result
+
+
 def intervals(swings):
     return [round(second["t"] - first["t"], 3) for first, second in zip(swings, swings[1:])]
 
@@ -59,4 +78,6 @@ def summarise(swings):
             "tookInFirstFourSwings": len([s for s in swings[:4] if any(h["took"] for h in s["hooks"])]),
             "cooldownAfterFirstFour": [s["cooldownAfter"] for s in swings[:4]], "swingsWithAnimalsNear": len([s for s in swings if s["animals"]]),
             "animalNames": sorted({a["name"] for s in swings for a in s["animals"]}),
+            "swingsWithBlockDamage": len([s for s in swings if s["vanillaBlockDamages"] > 0]),
+            "hostOffsetMin": min(host_offsets(swings), default=None), "hostOffsetMax": max(host_offsets(swings), default=None),
             "tookColliders": sorted({h["collider"] + "/" + h["tag"] for s in took for h in s["hooks"] if h["took"]})}
