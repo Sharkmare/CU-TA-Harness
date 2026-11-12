@@ -112,7 +112,8 @@
         "unit.test_friends_zip",
         "unit.test_pagedselect",
         "unit.test_pagedverify",
-        "unit.test_miningsummary"
+        "unit.test_miningsummary",
+        "unit.test_pr24log"
       ],
       "needs_game": false
     },
