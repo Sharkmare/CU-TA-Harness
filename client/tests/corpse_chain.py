@@ -21,6 +21,7 @@ CADENCE_SECONDS = 0.35
 SEAT_DISTANCE = 2.5
 MAX_SWING_DISTANCE = 4.5
 AFTER_LAST_SWING_SECONDS = 2.0
+FACING_SETTLE_SECONDS = 0.5
 SAMPLE_INTERVAL_SECONDS = 0.1
 RETURN_TOLERANCE_FRACTION = 0.05
 HEALTH_DROP_EPSILON = 0.5
@@ -98,6 +99,19 @@ def hold_problems(snapshots, entries):
     return problems
 
 
+def point_mouse_at(client, corpse):
+    """The game turns the body toward the mouse every frame, so the injected mouse has to sit on the corpse for the body to face it."""
+    client.call("mouse", wx=corpse["x"], wy=corpse["y"])
+    time.sleep(FACING_SETTLE_SECONDS)
+
+
+def release_mouse_quietly(client):
+    try:
+        client.call("mouse", clear=True)
+    except Exception:
+        pass
+
+
 def prepare(host, client):
     base.empty_the_hand(client)
     characters = banded.characters_in_play(host, client)
@@ -148,7 +162,11 @@ def act(client, context):
             context["positionFailure"] = target["positionControl"]
             return
         corpse = corpse_point(host, context)
+        point_mouse_at(client, corpse)
         target["facingBefore"] = facing_record(client, corpse)
+        if not target["facingBefore"]["facingCorpse"]:
+            context["facingBeforeFailure"] = target["facingBefore"]
+            return
         distance = base.distance(base.player_position(client), corpse)
         target["swingDistance"] = round(distance, 3)
         if distance > MAX_SWING_DISTANCE:
@@ -182,6 +200,7 @@ def act(client, context):
         target["prediction"] = prediction
     finally:
         banded.destroy(host, context["hostHandle"])
+        release_mouse_quietly(client)
         positioncontrol.release_quietly(client)
         positioncontrol.release_quietly(host)
 
@@ -219,7 +238,7 @@ def evaluate(entries, samples, host_flags, client_flags):
 
 
 def check(context):
-    for key, label in (("positionFailure", "the position preflight failed"), ("facingFailure", "the client does not face the corpse after the first swing")):
+    for key, label in (("positionFailure", "the position preflight failed"), ("facingBeforeFailure", "the client does not face the corpse before the first swing"), ("facingFailure", "the client does not face the corpse after the first swing")):
         failure = context.get(key)
         if failure:
             STATE["setup_failed"] += 1

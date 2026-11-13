@@ -178,7 +178,7 @@ class ActTests(unittest.TestCase):
         look = {"x": CORPSE["x"], "y": CORPSE["y"]}
         return [mock.patch.object(chain.time, "time", lambda: self.clock[0]), mock.patch.object(chain.time, "sleep", self.sleep),
                 mock.patch.object(chain.world, "host_position", lambda host, handle: dict(CORPSE)), mock.patch.object(chain.base, "player_position", lambda game: {"x": 10.0, "y": 5.0}),
-                mock.patch.object(chain.crates, "optional_read", lambda game, path: look if path == "targetLookPos" else facing),
+                mock.patch.object(chain.crates, "optional_read", lambda game, path: look if path == "targetLookPos" else (facing() if callable(facing) else facing)),
                 mock.patch.object(chain.hooks, "fire_one_swing", self.fire),
                 mock.patch.object(chain, "read_health", lambda game, handle: 250.0 if game is self.host else self.client_hp), mock.patch.object(chain, "read_flag", lambda game, handle: game is self.host),
                 mock.patch.object(chain.banded, "destroy"), mock.patch.object(chain.positioncontrol, "release_quietly")]
@@ -230,11 +230,25 @@ class ActTests(unittest.TestCase):
         self.run_act(context)
         self.assertTrue(all(aim == CORPSE for aim in self.fired))
 
-    def test_a_client_that_still_faces_away_after_the_first_swing_stops_after_that_swing_and_the_run_is_invalid(self):
+    def test_a_client_that_does_not_face_the_corpse_with_the_mouse_on_it_fires_nothing_and_the_run_is_invalid(self):
         context = self.context()
         self.run_act(context, facing=False)
+        self.assertEqual(self.fired, [])
+        issues = chain.check(context)
+        self.assertTrue(issues[0].startswith("INVALID: the client does not face the corpse before the first swing"), issues)
+
+    def test_the_injected_mouse_is_put_on_the_corpse_before_the_first_swing_and_cleared_afterwards(self):
+        context = self.context()
+        self.run_act(context)
+        calls = [call for call in self.client.call.call_args_list if call.args and call.args[0] == "mouse"]
+        self.assertEqual(calls[0].kwargs, {"wx": CORPSE["x"], "wy": CORPSE["y"]})
+        self.assertEqual(calls[-1].kwargs, {"clear": True})
+
+    def test_a_client_that_turns_away_during_the_first_swing_stops_after_that_swing_and_the_run_is_invalid(self):
+        context = self.context()
+        self.run_act(context, facing=lambda: not self.fired)
         self.assertEqual(len(self.fired), 1)
-        self.assertFalse(context["target"]["facingBefore"]["facingCorpse"])
+        self.assertTrue(context["target"]["facingBefore"]["facingCorpse"])
         self.assertFalse(context["target"]["facingAfterFirstSwing"]["facingCorpse"])
         issues = chain.check(context)
         self.assertTrue(issues[0].startswith("INVALID: the client does not face the corpse after the first swing"), issues)
