@@ -248,6 +248,13 @@ def trace_client_and_crate(host, client, context, seconds=TRACE_SECONDS, interva
     return rows
 
 
+def standing_height(client, context):
+    """The height the client is re-seated at: its anchor height in the crate runs; in the static runs the crate stands 40 or more tiles away at another height, so it is the client's own current height there."""
+    if context.get("seatHeightFromClient"):
+        return base.player_position(client)["y"]
+    return None if STATE["anchor"] is None else STATE["anchor"]["y"]
+
+
 def ensure_band(host, client, handle, fallback, side=-1, seat_y=None):
     """Re-seat the client until it stands inside the distance band. The seat height is the crate's own height unless seat_y is given: a crate rests lower than a standing body, so a seat at the crate height pulls the held body into the floor and it fights the hold."""
     history = []
@@ -419,7 +426,7 @@ def record_parked_host(host, client, context, index):
 
 def before_swing(client, context, index, aim):
     host = context["host"]
-    band = ensure_band(host, client, context["hostHandle"], context["position"], seat_y=None if STATE["anchor"] is None else STATE["anchor"]["y"])
+    band = ensure_band(host, client, context["hostHandle"], context["position"], seat_y=standing_height(client, context))
     if not band["ok"]:
         context["bandFailure"] = {"swing": index, "distances": band["distances"]}
         return None

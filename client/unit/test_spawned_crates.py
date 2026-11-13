@@ -515,6 +515,15 @@ class SettledSetupTests(unittest.TestCase):
                 self.assertTrue(seats)
                 self.assertEqual({seat["y"] for seat in seats}, {expected})
 
+    def test_a_static_run_reseats_at_the_clients_own_height_not_the_anchor_height_forty_tiles_away(self):
+        crates.STATE["anchor"] = {"x": 0.0, "y": 503.6}
+        context = {"host": self.host, "hostHandle": "id:7", "position": {"x": 45.0, "y": 470.0}, "seatHeightFromClient": True}
+        seen = {}
+        with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback, **k: seen.update(k) or {"ok": False, "distances": [4.0]}), \
+                mock.patch.object(crates.base, "player_position", lambda game: {"x": 42.0, "y": 470.6}):
+            crates.before_swing(self.client, context, 1, {"x": 45.0, "y": 470.0})
+        self.assertEqual(seen, {"seat_y": 470.6})
+
     def test_the_first_swing_reseats_at_the_anchor_height(self):
         crates.STATE["anchor"] = {"x": 0.0, "y": 503.6}
         context = {"host": self.host, "hostHandle": "id:7", "position": {"x": 2.8, "y": 503.0}}

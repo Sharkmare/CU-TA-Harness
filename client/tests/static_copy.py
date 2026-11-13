@@ -94,7 +94,7 @@ def adopt_static_building(offer, anchor, states):
                   adopted=True, startHealth=described["health"], healthBefore=described["health"], distance=offer["distance"], spawnOffset=None, spawnedAt=None, spawnNumber=0,
                   settleTrace=[], skippedPicks=[], timesUsedBefore=0)
     return {"position": described["position"], "name": None, "host": None, "hostHandle": described["handle"], "clientHandle": offer["clientHandle"], "target": target, "measurements": [],
-            "anchor": anchor}
+            "anchor": anchor, "seatHeightFromClient": True}
 
 
 def try_adopt(host, client, anchor, states, why):
@@ -164,7 +164,7 @@ def prepare(host, client):
     STATE["static_at_far"] += 1
     target = dict(target, farDistance=round(far_distance, 1), hostFarState=host_far, clientFarState=client_flags, anchor=anchor, farAttempts=states)
     return {"position": target["position"], "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"],
-            "target": target, "measurements": [], "anchor": anchor}
+            "target": target, "measurements": [], "anchor": anchor, "seatHeightFromClient": True}
 
 
 def crates_destroy(host, handle):
