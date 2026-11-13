@@ -193,6 +193,40 @@ class SeatPairTests(unittest.TestCase):
         self.assertTrue(any("client hold did not verify" in issue for issue in check["issues"]), check["issues"])
 
 
+class SeatRetryTests(unittest.TestCase):
+    def test_a_seat_that_fails_once_and_then_verifies_is_ok_and_keeps_the_first_issues(self):
+        host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
+        real = host.call
+        state = {"holds": 0}
+
+        def flaky(command, **arguments):
+            result = real(command, **arguments)
+            if command == control.HOLD_COMMAND:
+                state["holds"] += 1
+                if state["holds"] == 1:
+                    host.position = {"x": arguments["x"] + 0.7, "y": arguments["y"]}
+            return result
+
+        host.call = flaky
+        check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep)
+        self.assertTrue(check["ok"], check["issues"])
+        self.assertEqual(check["seatAttempts"], 2)
+        self.assertEqual(len(check["earlierAttemptIssues"]), 1)
+        self.assertTrue(any("host" in issue for issue in check["earlierAttemptIssues"][0]))
+
+    def test_a_lock_that_keeps_leaking_fails_every_attempt(self):
+        host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6}, leaky=True)
+        check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep)
+        self.assertFalse(check["ok"])
+        self.assertEqual(check["seatAttempts"], control.SEAT_ATTEMPTS)
+        self.assertEqual(len(check["earlierAttemptIssues"]), control.SEAT_ATTEMPTS - 1)
+
+    def test_a_first_time_seat_reports_one_attempt(self):
+        host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
+        check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep)
+        self.assertEqual((check["seatAttempts"], check["earlierAttemptIssues"]), (1, []))
+
+
 class StartPositionTests(unittest.TestCase):
     def test_the_start_positions_are_recorded_even_when_nothing_is_held(self):
         record = control.start_positions(FakeBodyGame({"x": 1, "y": 2}), FakeBodyGame({"x": 4, "y": 6}), copy_state={"victimOnClient": "Dynamic"})

@@ -11,6 +11,7 @@ HOLD_TOLERANCE = 0.05
 MIN_SEPARATION = 2.0
 PARK_DISTANCE = 12.0
 VERIFY_POLLS = 4
+SEAT_ATTEMPTS = 3
 VERIFY_INTERVAL_SECONDS = 0.15
 DIRECTIONS = {"left": (-1.0, 0.0), "right": (1.0, 0.0), "up": (0.0, 1.0), "down": (0.0, -1.0)}
 
@@ -124,7 +125,23 @@ def preflight_pair(host, client, host_target, client_target, tolerance=HOLD_TOLE
             "copyState": state}
 
 
-def seat_pair(host, client, client_target, park_direction, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, park_distance=PARK_DISTANCE, copy_state=None, sleep=None):
+def seat_pair(host, client, client_target, park_direction, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, park_distance=PARK_DISTANCE, copy_state=None, sleep=None, attempts=SEAT_ATTEMPTS):
+    """Seat the pair, and when a seat fails its verification release both holds and seat again, up to the attempt count. A body that
+    keeps drifting fails every attempt; a single bad position read does not decide the run. Every attempt's issues stay in the report."""
+    earlier_issues = []
+    for attempt in range(1, attempts + 1):
+        check = seat_pair_once(host, client, client_target, park_direction, tolerance, min_separation, park_distance, copy_state, sleep)
+        check["seatAttempts"] = attempt
+        check["earlierAttemptIssues"] = list(earlier_issues)
+        if check["ok"]:
+            return check
+        earlier_issues.append(check["issues"])
+        release_quietly(client)
+        release_quietly(host)
+    return check
+
+
+def seat_pair_once(host, client, client_target, park_direction, tolerance, min_separation, park_distance, copy_state, sleep):
     """Hold the attacking client at its seat and park the other player away from the swing line, then run the preflight."""
     client_target = validate_point(client_target, "client target")
     host_target = point_at(client_target, park_direction, park_distance)
