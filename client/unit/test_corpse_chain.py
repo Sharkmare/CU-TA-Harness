@@ -161,6 +161,7 @@ class PrepareTests(unittest.TestCase):
             context = chain.prepare(mock.Mock(), mock.Mock())
         self.assertEqual(seat_pair.call_args.args[2], {"x": CORPSE["x"] - chain.SEAT_DISTANCE, "y": CORPSE["y"]})
         self.assertEqual(seat_pair.call_args.args[3], chain.PARK_DIRECTION)
+        self.assertEqual(seat_pair.call_args.kwargs["parked_policy"], chain.positioncontrol.PARKED_RECORDED)
         self.assertLess(chain.SEAT_DISTANCE, chain.MAX_SWING_DISTANCE)
         self.assertEqual(context["target"]["startPositions"], {"separation": 20.0})
 
@@ -179,10 +180,16 @@ class ActTests(unittest.TestCase):
         self.sleeps = []
         self.fired = []
         self.client_hp = 250.0
+        self.parked_x = []
 
     def context(self, seat_ok=True):
-        target = {"positionControl": {"ok": seat_ok, "issues": [] if seat_ok else ["the bodies overlap"]}, "hostFlags": {"cantHit": True}, "clientFlags": {"cantHit": False}}
+        parked = {"paths": ["rb.position"], "observations": [self.parked_snapshot(None, [])] * 2, "afterPreflight": self.parked_snapshot(None, [])}
+        target = {"positionControl": {"ok": seat_ok, "issues": [] if seat_ok else ["the bodies overlap"], "parkedHost": parked, "clientTarget": {"x": 10.0, "y": 5.0}}, "hostFlags": {"cantHit": True}, "clientFlags": {"cantHit": False}}
         return {"position": dict(CORPSE), "host": self.host, "hostHandle": "id:7", "clientHandle": "id:-7", "target": target, "measurements": [], "samples": []}
+
+    def parked_snapshot(self, game, paths):
+        position = {"x": self.parked_x[0] if self.parked_x else -2.0, "y": 5.0}
+        return {"linkRead": position, "holder": position, "paths": {"rb.position": position}}
 
     def fire(self, game, aim, pause=None, attempts=None):
         self.fired.append(aim)
@@ -203,7 +210,8 @@ class ActTests(unittest.TestCase):
                 mock.patch.object(chain.crates, "optional_read", lambda game, path: look if path == "targetLookPos" else (facing() if callable(facing) else facing)),
                 mock.patch.object(chain.hooks, "fire_one_swing", self.fire),
                 mock.patch.object(chain, "read_health", lambda game, handle: 250.0 if game is self.host else self.client_hp), mock.patch.object(chain, "read_flag", lambda game, handle: game is self.host),
-                mock.patch.object(chain.banded, "destroy"), mock.patch.object(chain.positioncontrol, "release_quietly")]
+                mock.patch.object(chain.banded, "destroy"), mock.patch.object(chain.positioncontrol, "release_quietly"),
+                mock.patch.object(chain.positioncontrol, "parked_snapshot", self.parked_snapshot)]
 
     def run_act(self, context, facing=True):
         patches = self.patches(facing)
@@ -250,6 +258,41 @@ class ActTests(unittest.TestCase):
         self.assertTrue(prediction["verdict"].startswith("confounded"))
         self.assertEqual(prediction["ifRead"], "prediction holds")
         self.assertTrue(prediction["confoundedBy"])
+
+    def test_a_parked_host_that_stays_far_enough_leaves_the_verdict_standing_and_records_the_distances(self):
+        context = self.context()
+        self.run_act(context)
+        target = context["target"]
+        self.assertEqual(target["prediction"]["verdict"], "prediction holds")
+        self.assertEqual(target["holdProblems"], [])
+        self.assertGreaterEqual(target["parkedDistances"]["smallestSeen"], chain.MIN_PARKED_DISTANCE)
+        self.assertEqual(len(target["parkedDistances"]["perMoment"]), 2 + 1 + chain.SWINGS)
+        self.assertTrue(all("parkedHost" in item for item in context["measurements"]))
+
+    def test_a_swing_with_the_parked_host_closer_than_the_minimum_labels_the_corpse_result_confounded(self):
+        context = self.context()
+        close_at_swing = 7
+        original = self.parked_snapshot
+
+        def snapshot(game, paths):
+            if len(self.fired) == close_at_swing:
+                position = {"x": CORPSE["x"] - 5.0, "y": CORPSE["y"]}
+                return {"linkRead": {"x": -2.0, "y": 5.0}, "holder": {"x": -2.0, "y": 5.0}, "paths": {"rb.position": position}}
+            return original(game, paths)
+
+        self.parked_snapshot = snapshot
+        self.run_act(context)
+        prediction = context["target"]["prediction"]
+        self.assertTrue(prediction["verdict"].startswith("confounded"))
+        self.assertTrue(any("at swing %d" % close_at_swing in problem and "rb.position" in problem for problem in prediction["confoundedBy"]), prediction["confoundedBy"])
+        self.assertEqual(len(prediction["confoundedBy"]), 1)
+
+    def test_a_parked_host_with_no_readable_position_labels_the_result_confounded(self):
+        context = self.context()
+        self.parked_snapshot = lambda game, paths: {"linkRead": None, "holder": None, "paths": {}}
+        self.run_act(context)
+        self.assertTrue(context["target"]["prediction"]["verdict"].startswith("confounded"))
+        self.assertTrue(any("no readable parked host position" in problem for problem in context["target"]["holdProblems"]))
 
     def test_every_swing_aims_at_the_corpse(self):
         context = self.context()

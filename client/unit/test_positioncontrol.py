@@ -38,7 +38,7 @@ class FakeBodyGame:
             if self.held is None:
                 return []
             drift = math.hypot(self.position["x"] - self.held["x"], self.position["y"] - self.held["y"])
-            return [{"id": self.body_id, "heldWithinTolerance": self.hold_works_in_status and drift <= self.held["tolerance"], "lost": False, "maxDrift": drift, "exceededTicks": 0 if drift <= self.held["tolerance"] else 5}]
+            return [{"id": self.body_id, "position": dict(self.position), "heldWithinTolerance": self.hold_works_in_status and drift <= self.held["tolerance"], "lost": False, "maxDrift": drift, "exceededTicks": 0 if drift <= self.held["tolerance"] else 5}]
         raise AssertionError(command)
 
     def set(self, target, path, value):
@@ -227,7 +227,20 @@ class SeatRetryTests(unittest.TestCase):
         self.assertEqual((check["seatAttempts"], check["earlierAttemptIssues"]), (1, []))
 
 
-class ParkedHostToleranceTests(unittest.TestCase):
+class SilentPathsGame(FakeBodyGame):
+    """Answers only the listed extra paths, the way a game with a different object layout would."""
+
+    def __init__(self, position, answers=(), **kwargs):
+        super().__init__(position, **kwargs)
+        self.answers = tuple(answers)
+
+    def get(self, target, path="", depth=1):
+        if path in control.DIAGNOSTIC_PATHS and path not in self.answers:
+            raise RuntimeError("no member named " + path)
+        return super().get(target, path, depth)
+
+
+class ParkedHostTests(unittest.TestCase):
     def wander(self, body, offset):
         real = body.call
 
@@ -239,47 +252,82 @@ class ParkedHostToleranceTests(unittest.TestCase):
 
         body.call = moved
 
-    def test_the_parked_tolerance_is_a_named_constant_looser_than_the_client_tolerance(self):
-        self.assertEqual(control.PARKED_TOLERANCE, 0.5)
-        self.assertEqual(control.HOLD_TOLERANCE, 0.05)
+    def test_the_tolerances_are_named_constants(self):
+        self.assertEqual((control.HOLD_TOLERANCE, control.PARKED_TOLERANCE), (0.05, 0.5))
 
-    def test_a_parked_host_that_wanders_within_the_parked_tolerance_still_seats(self):
+    def test_the_default_policy_holds_and_checks_the_parked_host_as_strictly_as_the_client(self):
         host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
         self.wander(host, 0.3)
         check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep)
-        self.assertTrue(check["ok"], check["issues"])
-        self.assertEqual(check["hostTolerance"], control.PARKED_TOLERANCE)
+        self.assertFalse(check["ok"])
+        self.assertTrue(any("the host body is" in issue and "tolerance 0.050" in issue for issue in check["issues"]), check["issues"])
+        self.assertEqual(check["parkedHost"]["policy"], control.PARKED_STRICT)
+        self.assertEqual(check["parkedHost"]["tolerance"], control.HOLD_TOLERANCE)
 
-    def test_a_parked_host_beyond_the_parked_tolerance_still_fails_every_attempt(self):
+    def test_the_recorded_policy_never_fails_the_seat_on_the_parked_host_drift_but_records_it(self):
         host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
         self.wander(host, 0.7)
-        check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep)
-        self.assertFalse(check["ok"])
-        self.assertTrue(any("the host body is" in issue and "tolerance 0.500" in issue for issue in check["issues"]), check["issues"])
-        self.assertEqual(check["seatAttempts"], control.SEAT_ATTEMPTS)
-
-    def test_the_client_is_still_held_to_the_strict_tolerance(self):
-        host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
-        self.wander(client, 0.3)
-        check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep)
-        self.assertFalse(check["ok"])
-        self.assertEqual(check["tolerance"], control.HOLD_TOLERANCE)
-        client_holds = [arguments["tolerance"] for command, arguments in client.calls if command == control.HOLD_COMMAND]
-        self.assertEqual(client_holds, [control.HOLD_TOLERANCE] * control.SEAT_ATTEMPTS)
-        self.assertTrue(any("the client body is" in issue and "tolerance 0.050" in issue for issue in check["issues"]), check["issues"])
-
-    def test_the_parked_host_is_held_with_the_parked_tolerance_and_its_drift_is_recorded(self):
-        host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
-        self.wander(host, 0.3)
-        check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep)
-        self.assertEqual(host.held["tolerance"], control.PARKED_TOLERANCE)
+        check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep, parked_policy=control.PARKED_RECORDED)
+        self.assertTrue(check["ok"], check["issues"])
+        self.assertEqual(check["seatAttempts"], 1)
         parked = check["parkedHost"]
+        self.assertEqual(parked["policy"], control.PARKED_RECORDED)
         self.assertEqual(parked["tolerance"], control.PARKED_TOLERANCE)
-        self.assertEqual(parked["rawDriftReads"], [0.3] * control.VERIFY_POLLS)
-        self.assertEqual(parked["largestRead"], 0.3)
-        self.assertEqual(parked["driftNow"], 0.3)
+        self.assertEqual(parked["rawDriftReads"], [0.7] * control.VERIFY_POLLS)
+        self.assertEqual((parked["largestRead"], parked["driftNow"]), (0.7, 0.7))
         self.assertEqual(parked["target"], {"x": 5.0 - control.PARK_DISTANCE, "y": 6.0})
-        self.assertIn("position", parked)
+        self.assertEqual(host.held["tolerance"], control.PARKED_TOLERANCE)
+
+    def test_the_client_is_held_to_the_strict_tolerance_under_both_policies(self):
+        for policy in (control.PARKED_STRICT, control.PARKED_RECORDED):
+            host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
+            self.wander(client, 0.3)
+            check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep, parked_policy=policy)
+            self.assertFalse(check["ok"], policy)
+            self.assertEqual(check["tolerance"], control.HOLD_TOLERANCE)
+            client_holds = [arguments["tolerance"] for command, arguments in client.calls if command == control.HOLD_COMMAND]
+            self.assertEqual(client_holds, [control.HOLD_TOLERANCE] * control.SEAT_ATTEMPTS, policy)
+            self.assertTrue(any("the client body is" in issue and "tolerance 0.050" in issue for issue in check["issues"]), check["issues"])
+
+    def test_the_recorded_policy_keeps_a_snapshot_of_the_parked_host_at_every_verification_poll(self):
+        host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
+        check = control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep, parked_policy=control.PARKED_RECORDED)
+        observations = check["parkedHost"]["observations"]
+        self.assertEqual(len(observations), control.VERIFY_POLLS)
+        for snapshot in observations:
+            self.assertEqual(snapshot["linkRead"], {"x": 5.0 - control.PARK_DISTANCE, "y": 6.0})
+            self.assertEqual(snapshot["holder"], {"x": 5.0 - control.PARK_DISTANCE, "y": 6.0})
+            self.assertEqual(sorted(snapshot["paths"]), sorted(check["parkedHost"]["paths"]))
+        self.assertIsNotNone(check["parkedHost"]["afterPreflight"])
+
+    def test_an_unknown_policy_is_refused(self):
+        host, client = FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6})
+        with self.assertRaises(control.PositionControlError):
+            control.seat_pair(host, client, {"x": 5, "y": 6}, "left", sleep=no_sleep, parked_policy="loose")
+
+    def test_only_the_paths_the_game_answers_are_discovered_and_read(self):
+        game = SilentPathsGame({"x": 1, "y": 2}, answers=("rb.position", "rb.velocity"))
+        paths = control.discover_diagnostic_paths(game)
+        self.assertEqual(paths, ["rb.position", "rb.velocity"])
+        snapshot = control.parked_snapshot(game, paths)
+        self.assertEqual(sorted(snapshot["paths"]), ["rb.position", "rb.velocity"])
+        self.assertEqual(snapshot["linkRead"], {"x": 1.0, "y": 2.0})
+        self.assertIsNone(snapshot["holder"])
+
+    def test_the_holder_position_comes_from_the_status_row(self):
+        game = FakeBodyGame({"x": 1, "y": 2})
+        game.call(control.HOLD_COMMAND, x=1, y=2, tolerance=0.5, local=True)
+        game.call = lambda command, **arguments: [{"position": {"x": 3.0, "y": 4.0}}]
+        self.assertEqual(control.holder_position(game), {"x": 3.0, "y": 4.0})
+        game.call = lambda command, **arguments: []
+        self.assertIsNone(control.holder_position(game))
+
+    def test_the_closest_approach_uses_the_nearest_readable_position_and_names_the_read(self):
+        snapshot = {"linkRead": {"x": 0.0, "y": 0.0}, "holder": {"x": 10.0, "y": 0.0}, "paths": {"rb.position": {"x": 4.0, "y": 0.0}, "rb.velocity": {"x": 100.0, "y": 0.0}}}
+        self.assertEqual(control.closest_approach(snapshot, [{"x": 20.0, "y": 0.0}]), {"distance": 10.0, "source": "holder"})
+        self.assertEqual(control.closest_approach(snapshot, [{"x": -3.0, "y": 0.0}]), {"distance": 3.0, "source": "linkRead"})
+        self.assertEqual(control.closest_approach(snapshot, [{"x": 4.5, "y": 0.0}, {"x": 99.0, "y": 0.0}]), {"distance": 0.5, "source": "rb.position"})
+        self.assertIsNone(control.closest_approach({"linkRead": None, "holder": None, "paths": {}}, [{"x": 0.0, "y": 0.0}]))
 
 
 class StartPositionTests(unittest.TestCase):

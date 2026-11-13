@@ -19,6 +19,7 @@ MIN_CORPSE_HEALTH = 1.0
 SWINGS = 25
 SWING_POLL_SECONDS = 0.01
 SEAT_DISTANCE = 2.5
+MIN_PARKED_DISTANCE = 6.0
 MAX_SWING_DISTANCE = 4.5
 AFTER_LAST_SWING_SECONDS = 2.0
 FACING_SETTLE_SECONDS = 0.5
@@ -131,7 +132,8 @@ def prepare(host, client):
         crates.record_failure(failure.category, str(failure))
         raise
     corpse = target["position"]
-    seat = positioncontrol.seat_pair(host, client, {"x": corpse["x"] - SEAT_DISTANCE, "y": corpse["y"]}, PARK_DIRECTION)
+    seat = positioncontrol.seat_pair(host, client, {"x": corpse["x"] - SEAT_DISTANCE, "y": corpse["y"]}, PARK_DIRECTION,
+                                      parked_policy=positioncontrol.PARKED_RECORDED)
     target = dict(target, characters=characters, hostFlags=banded.copy_flags(host, target["handle"]), clientFlags=banded.copy_flags(client, target["clientHandle"]), startPositions=start,
                   positionControl=seat)
     return {"position": corpse, "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"], "target": target, "measurements": [], "samples": []}
@@ -180,6 +182,7 @@ def act(client, context):
         snapshots = target["holds"] = {"beforeFirstSwing": hold_snapshot(host, client)}
         before = read_both(client, context)
         previous_fired_at = None
+        parked_paths = target["positionControl"]["parkedHost"]["paths"]
         for index in range(1, SWINGS + 1):
             attempts = {"ignored": 0}
             fired = hooks.fire_one_swing(client, corpse_point(host, context), pause=SWING_POLL_SECONDS, attempts=attempts)
@@ -187,6 +190,7 @@ def act(client, context):
             after = read_both(client, context)
             entries.append(record_swing(index, started, fired, before, after, context, client, fired_at))
             entries[-1]["ignoredAttempts"] = attempts["ignored"]
+            entries[-1]["parkedHost"] = positioncontrol.parked_snapshot(host, parked_paths)
             entries[-1]["intervalSincePrevious"] = None if previous_fired_at is None else round(fired_at - previous_fired_at, 3)
             previous_fired_at = fired_at
             before = after
@@ -203,7 +207,7 @@ def act(client, context):
         target["samples"] = context["samples"]
         snapshots["end"] = hold_snapshot(host, client)
         prediction = evaluate(entries, context["samples"], target["hostFlags"], target["clientFlags"])
-        problems = hold_problems(snapshots, entries)
+        problems = hold_problems(snapshots, entries) + parked_problems(target, entries, target["positionControl"]["clientTarget"], corpse)
         target["holdProblems"] = problems
         if problems:
             prediction = dict(prediction, ifRead=prediction["verdict"], verdict="confounded: the corpse result is not read against the prediction", confoundedBy=problems)
@@ -221,6 +225,26 @@ def swing_rate(entries):
         return {"intervals": 0}
     return {"intervals": len(intervals), "minSeconds": intervals[0], "medianSeconds": intervals[len(intervals) // 2], "maxSeconds": intervals[-1],
             "ignoredAttemptsTotal": sum(entry.get("ignoredAttempts") or 0 for entry in entries)}
+
+
+def parked_problems(target, entries, client_point, corpse):
+    """The parked host is not held strictly, so what matters for the swing is that it never comes closer than MIN_PARKED_DISTANCE to the client or the corpse, by the nearest of
+    its position reads. Anything closer, or nothing readable, labels the corpse result confounded."""
+    parked = target["positionControl"]["parkedHost"]
+    moments = [("preflight read %d" % number, snapshot) for number, snapshot in enumerate(parked["observations"], 1)] + [("after preflight", parked["afterPreflight"])]
+    moments += [("swing %d" % entry["swing"], entry.get("parkedHost")) for entry in entries]
+    closest = []
+    problems = []
+    for moment, snapshot in moments:
+        approach = positioncontrol.closest_approach(snapshot, [client_point, corpse]) if snapshot else None
+        closest.append({"moment": moment, "closest": approach})
+        if approach is None:
+            problems.append("no readable parked host position at %s" % moment)
+        elif approach["distance"] < MIN_PARKED_DISTANCE:
+            problems.append("the parked host was %.2f from the client or the corpse at %s (by %s), below %.1f" % (approach["distance"], moment, approach["source"], MIN_PARKED_DISTANCE))
+    readable = [item["closest"]["distance"] for item in closest if item["closest"]]
+    target["parkedDistances"] = {"minimumAllowed": MIN_PARKED_DISTANCE, "smallestSeen": min(readable, default=None), "perMoment": closest}
+    return problems
 
 
 def start_health(entries, which):
