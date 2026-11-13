@@ -1,0 +1,12 @@
+{
+ "build": "pr24-3d060fe-corpse-fix",
+ "dllSha256": "53f280bbd1a338a1930b7efe9f85813acacd1f24387b1c5438d305e4f72ba19f",
+ "gameVersion": "1.0.1",
+ "issues": [
+  "INVALID: the client could not be brought into the 2.5 to 3.2 band before swing 1 (distances tried [43.41, 4.16, 3.21, 2.47, 2.32])"
+ ],
+ "measurements": [],
+ "scenario": "staticcrate_hit_by_client",
+ "target": {},
+ "verdict": "never-changed"
+}

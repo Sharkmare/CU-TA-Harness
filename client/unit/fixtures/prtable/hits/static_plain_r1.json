@@ -1,0 +1,53 @@
+{
+ "build": "pr24-3d060fe-plain",
+ "dllSha256": "eb318d8214702603ebed26bcb9692301922a3f8801c1f5bcd543c2e6fbe0a758",
+ "gameVersion": "1.0.1",
+ "issues": [
+  "swing 1: host 0.00, client 0.00 (client copy physicsActive False)"
+ ],
+ "measurements": [
+  {
+   "clientDelta": 0.0,
+   "geometry": {
+    "limb1Distance": 7.344
+   },
+   "hostDelta": 0.0,
+   "swing": 1
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.992
+   },
+   "hostDelta": 19.332,
+   "swing": 2
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.928
+   },
+   "hostDelta": 19.332,
+   "swing": 3
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.973
+   },
+   "hostDelta": 19.332,
+   "swing": 4
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.953
+   },
+   "hostDelta": 19.332,
+   "swing": 5
+  }
+ ],
+ "scenario": "staticcrate_hit_by_client",
+ "target": {},
+ "verdict": "never-changed"
+}

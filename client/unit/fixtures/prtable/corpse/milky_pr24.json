@@ -1,0 +1,457 @@
+{
+ "build": "pr24-corpse-verbose",
+ "dllSha256": "0cc6861249f99fc61ca4ab31fd7515dd8b71a873bcea525b2fd5bb427be16cae",
+ "gameVersion": "1.0.1",
+ "issues": [],
+ "measurements": [
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 1
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 2
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 3
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 4
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 5
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 6
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 7
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 8
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 9
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 10
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 11
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 12
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 13
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 14
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 15
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 16
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 17
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 18
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 19
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 20
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 21
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 22
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 23
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 24
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 25
+  }
+ ],
+ "scenario": "corpse_chain_milky_milky_by_client",
+ "target": {
+  "holds": {
+   "present": true
+  },
+  "prediction": {
+   "verdict": "prediction refuted"
+  },
+  "samples": [
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 5.919
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.0
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.07
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.184
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.252
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.351
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.42
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.535
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.618
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.667
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.736
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.834
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 6.935
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.001
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.1
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.185
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.317
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.384
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.484
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.585
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.651
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": true,
+    "t": 7.786
+   }
+  ],
+  "swingDistance": 2.5,
+  "swingRate": {
+   "ignoredAttemptsTotal": 54,
+   "intervals": 24,
+   "maxSeconds": 0.267,
+   "medianSeconds": 0.233,
+   "minSeconds": 0.202
+  }
+ },
+ "verdict": "never-changed"
+}

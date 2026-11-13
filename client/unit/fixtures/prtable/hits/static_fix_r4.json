@@ -1,0 +1,55 @@
+{
+ "build": "pr24-3d060fe-corpse-fix",
+ "dllSha256": "53f280bbd1a338a1930b7efe9f85813acacd1f24387b1c5438d305e4f72ba19f",
+ "gameVersion": "1.0.1",
+ "issues": [
+  "swing 1: host 0.00, client 0.00 (client copy physicsActive False)",
+  "swing 2: host 0.00, client 0.00 (client copy physicsActive False)",
+  "swing 3: host 0.00, client 0.00 (client copy physicsActive False)"
+ ],
+ "measurements": [
+  {
+   "clientDelta": 0.0,
+   "geometry": {
+    "limb1Distance": 9.903
+   },
+   "hostDelta": 0.0,
+   "swing": 1
+  },
+  {
+   "clientDelta": 0.0,
+   "geometry": {
+    "limb1Distance": 9.392
+   },
+   "hostDelta": 0.0,
+   "swing": 2
+  },
+  {
+   "clientDelta": 0.0,
+   "geometry": {
+    "limb1Distance": 9.667
+   },
+   "hostDelta": 0.0,
+   "swing": 3
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.41
+   },
+   "hostDelta": 19.332,
+   "swing": 4
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.497
+   },
+   "hostDelta": 19.332,
+   "swing": 5
+  }
+ ],
+ "scenario": "staticcrate_hit_by_client",
+ "target": {},
+ "verdict": "never-changed"
+}

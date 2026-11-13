@@ -1,0 +1,471 @@
+{
+ "build": "pr24-corpse-fix",
+ "dllSha256": "3d910c4e4edbfdb4ff51cea67753814c03d0f3e09df6bfb073d8c9e6344ac23f",
+ "gameVersion": "1.0.1",
+ "issues": [],
+ "measurements": [
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 1
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 2
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 3
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 4
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 5
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 6
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 7
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 8
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 9
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 10
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 11
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 12
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 13
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 14
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 15
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 16
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 17
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 18
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 19
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 20
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 21
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 22
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 23
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 24
+  },
+  {
+   "clientHp": [
+    250.0,
+    250.0
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 25
+  }
+ ],
+ "scenario": "corpse_chain_dune_milky_by_client",
+ "target": {
+  "holds": {
+   "present": true
+  },
+  "prediction": {
+   "verdict": "prediction refuted"
+  },
+  "samples": [
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 5.766
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 5.85
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 5.967
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.033
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.1
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.217
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.299
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.383
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.482
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.532
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.631
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.717
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.783
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 6.917
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.0
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.048
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.15
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.248
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.333
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.416
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.516
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.584
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.667
+   },
+   {
+    "client": 250.0,
+    "clientCantHit": true,
+    "host": 250.0,
+    "hostCantHit": false,
+    "t": 7.8
+   }
+  ],
+  "swingDistance": 2.5,
+  "swingRate": {
+   "ignoredAttemptsTotal": 51,
+   "intervals": 24,
+   "maxSeconds": 0.284,
+   "medianSeconds": 0.233,
+   "minSeconds": 0.201
+  }
+ },
+ "verdict": "never-changed"
+}

@@ -1,0 +1,36 @@
+{
+ "build": "pr24-3d060fe-plain",
+ "dllSha256": "eb318d8214702603ebed26bcb9692301922a3f8801c1f5bcd543c2e6fbe0a758",
+ "gameVersion": "1.0.1",
+ "issues": [],
+ "measurements": [
+  {
+   "clientDelta": 18.005,
+   "hostDelta": 18.432,
+   "swing": 1
+  },
+  {
+   "clientDelta": 17.948,
+   "hostDelta": 18.2,
+   "swing": 2
+  },
+  {
+   "clientDelta": 17.707,
+   "hostDelta": 18.111,
+   "swing": 3
+  },
+  {
+   "clientDelta": 17.591,
+   "hostDelta": 18.103,
+   "swing": 4
+  },
+  {
+   "clientDelta": 18.142,
+   "hostDelta": 18.13,
+   "swing": 5
+  }
+ ],
+ "scenario": "pvp_banded_by_client",
+ "target": {},
+ "verdict": "never-changed"
+}

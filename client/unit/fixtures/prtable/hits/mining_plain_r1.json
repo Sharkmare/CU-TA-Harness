@@ -1,0 +1,9 @@
+{
+ "build": "pr24-3d060fe-plain",
+ "dllSha256": "eb318d8214702603ebed26bcb9692301922a3f8801c1f5bcd543c2e6fbe0a758",
+ "gameVersion": "1.0.1",
+ "measurements": [],
+ "scenario": "v2check_dig_cracks",
+ "target": {},
+ "verdict": "persisted"
+}

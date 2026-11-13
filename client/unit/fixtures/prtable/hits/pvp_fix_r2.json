@@ -1,0 +1,36 @@
+{
+ "build": "pr24-3d060fe-corpse-fix",
+ "dllSha256": "53f280bbd1a338a1930b7efe9f85813acacd1f24387b1c5438d305e4f72ba19f",
+ "gameVersion": "1.0.1",
+ "issues": [],
+ "measurements": [
+  {
+   "clientDelta": 17.959,
+   "hostDelta": 18.429,
+   "swing": 1
+  },
+  {
+   "clientDelta": 17.341,
+   "hostDelta": 18.185,
+   "swing": 2
+  },
+  {
+   "clientDelta": 18.925,
+   "hostDelta": 18.108,
+   "swing": 3
+  },
+  {
+   "clientDelta": 17.244,
+   "hostDelta": 18.104,
+   "swing": 4
+  },
+  {
+   "clientDelta": 18.863,
+   "hostDelta": 18.099,
+   "swing": 5
+  }
+ ],
+ "scenario": "pvp_banded_by_client",
+ "target": {},
+ "verdict": "never-changed"
+}

@@ -1,0 +1,499 @@
+{
+ "build": "pr24-corpse-fix",
+ "dllSha256": "3d910c4e4edbfdb4ff51cea67753814c03d0f3e09df6bfb073d8c9e6344ac23f",
+ "gameVersion": "1.0.1",
+ "issues": [],
+ "measurements": [
+  {
+   "clientHp": [
+    225.324,
+    225.324
+   ],
+   "hostHp": [
+    250.0,
+    250.0
+   ],
+   "swing": 1
+  },
+  {
+   "clientHp": [
+    225.324,
+    200.64801
+   ],
+   "hostHp": [
+    250.0,
+    225.324
+   ],
+   "swing": 2
+  },
+  {
+   "clientHp": [
+    200.64801,
+    175.972015
+   ],
+   "hostHp": [
+    200.64801,
+    175.972015
+   ],
+   "swing": 3
+  },
+  {
+   "clientHp": [
+    175.972015,
+    151.296021
+   ],
+   "hostHp": [
+    175.972015,
+    151.296021
+   ],
+   "swing": 4
+  },
+  {
+   "clientHp": [
+    151.296021,
+    126.620026
+   ],
+   "hostHp": [
+    151.296021,
+    126.620026
+   ],
+   "swing": 5
+  },
+  {
+   "clientHp": [
+    126.620026,
+    101.944023
+   ],
+   "hostHp": [
+    126.620026,
+    101.944031
+   ],
+   "swing": 6
+  },
+  {
+   "clientHp": [
+    101.944023,
+    77.26802
+   ],
+   "hostHp": [
+    101.944031,
+    77.26803
+   ],
+   "swing": 7
+  },
+  {
+   "clientHp": [
+    77.26802,
+    52.59202
+   ],
+   "hostHp": [
+    77.26803,
+    52.5920258
+   ],
+   "swing": 8
+  },
+  {
+   "clientHp": [
+    52.59202,
+    27.9160271
+   ],
+   "hostHp": [
+    52.5920258,
+    27.9160252
+   ],
+   "swing": 9
+  },
+  {
+   "clientHp": [
+    27.9160271,
+    3.240343
+   ],
+   "hostHp": [
+    27.9160252,
+    3.24030066
+   ],
+   "swing": 10
+  },
+  {
+   "clientHp": [
+    3.240343,
+    -21.4348679
+   ],
+   "hostHp": [
+    3.24030066,
+    null
+   ],
+   "swing": 11
+  },
+  {
+   "clientHp": [
+    -21.4348679,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 12
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 13
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 14
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 15
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 16
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 17
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 18
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 19
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 20
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 21
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 22
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 23
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 24
+  },
+  {
+   "clientHp": [
+    null,
+    null
+   ],
+   "hostHp": [
+    null,
+    null
+   ],
+   "swing": 25
+  }
+ ],
+ "scenario": "corpse_chain_by_client",
+ "target": {
+  "holds": {
+   "present": true
+  },
+  "prediction": {
+   "verdict": "prediction refuted"
+  },
+  "samples": [
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.117
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.183
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.232
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.315
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.382
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.449
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.532
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.582
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.65
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.699
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.799
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.865
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 6.949
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.049
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.132
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.215
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.282
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.332
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.434
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.483
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.566
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.649
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.732
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.766
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.815
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 7.949
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 8.016
+   },
+   {
+    "client": null,
+    "clientCantHit": null,
+    "host": null,
+    "hostCantHit": null,
+    "t": 8.082
+   }
+  ],
+  "swingDistance": 2.5,
+  "swingRate": {
+   "ignoredAttemptsTotal": 55,
+   "intervals": 24,
+   "maxSeconds": 0.318,
+   "medianSeconds": 0.249,
+   "minSeconds": 0.215
+  }
+ },
+ "verdict": "never-changed"
+}

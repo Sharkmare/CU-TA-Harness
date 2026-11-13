@@ -1,0 +1,12 @@
+{
+ "build": "pr24-3d060fe-corpse-fix",
+ "dllSha256": "53f280bbd1a338a1930b7efe9f85813acacd1f24387b1c5438d305e4f72ba19f",
+ "gameVersion": "1.0.1",
+ "issues": [
+  "INVALID: the position preflight failed before the first swing: the client seat did not verify: the holder's view is 0.059 from the target (tolerance 0.050); the client seat did not verify: rb.position is 0.600 from the target (tolerance 0.050); the client seat did not verify: the holder's view and rb.position are 0.541 apart (tolerance 0.050); the client seat did not verify: the holder's view and rb.position are 0.600 apart (tolerance 0.050); the client seat did not verify: the holder's view is 0.460 from the target (tolerance 0.050); the client seat did not verify: the holder's view and rb.position are 0.140 apart (tolerance 0.050)"
+ ],
+ "measurements": [],
+ "scenario": "spawned_crate_hit_by_client",
+ "target": {},
+ "verdict": "never-changed"
+}

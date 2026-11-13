@@ -1,0 +1,9 @@
+{
+ "build": "pr24-3d060fe-corpse-fix",
+ "dllSha256": "53f280bbd1a338a1930b7efe9f85813acacd1f24387b1c5438d305e4f72ba19f",
+ "gameVersion": "1.0.1",
+ "measurements": [],
+ "scenario": "v2check_dig_cracks",
+ "target": {},
+ "verdict": "persisted"
+}

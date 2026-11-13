@@ -1,0 +1,51 @@
+{
+ "build": "pr24-3d060fe-plain",
+ "dllSha256": "eb318d8214702603ebed26bcb9692301922a3f8801c1f5bcd543c2e6fbe0a758",
+ "gameVersion": "1.0.1",
+ "issues": [],
+ "measurements": [
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 4.026
+   },
+   "hostDelta": 19.332,
+   "swing": 1
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 2.167
+   },
+   "hostDelta": 19.332,
+   "swing": 2
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.535
+   },
+   "hostDelta": 19.332,
+   "swing": 3
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.627
+   },
+   "hostDelta": 19.332,
+   "swing": 4
+  },
+  {
+   "clientDelta": 19.332,
+   "geometry": {
+    "limb1Distance": 3.683
+   },
+   "hostDelta": 19.332,
+   "swing": 5
+  }
+ ],
+ "scenario": "spawned_crate_hit_by_client",
+ "target": {},
+ "verdict": "never-changed"
+}
