@@ -293,7 +293,7 @@ class ObservedDelayTests(unittest.TestCase):
         mark = proxy.trace_mark()
         proxy.schedule(None, None, b"de", "toClient")
         proxy.schedule(None, None, b"fghi", "toHost")
-        self.assertEqual(proxy.trace_since(mark), [(10.5, "toClient", 2, 40.0), (11.0, "toHost", 4, 40.0)])
+        self.assertEqual(proxy.trace_since(mark), [(10.5, "toClient", 2, 40.0, 10.54), (11.0, "toHost", 4, 40.0, 11.04)])
         self.assertEqual(len(proxy.trace_since()), 3)
 
     def test_a_dropped_packet_is_not_traced(self):
@@ -313,6 +313,220 @@ class ObservedDelayTests(unittest.TestCase):
         self.assertGreaterEqual(stats["minMs"], 100.0)
         self.assertLessEqual(stats["maxMs"], 160.0)
         self.assertEqual(stats["packets"], 50)
+
+
+class StallClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+def stall_proxy(clock, seed=7, **settings):
+    proxy = DelayProxy(1, 2, clock=clock, seed=seed, **settings)
+    with proxy.condition:
+        proxy.configure_stalls(clock.now)
+    return proxy
+
+
+def send(proxy, clock, moment, label, direction="toHost"):
+    clock.now = moment
+    proxy.schedule(None, None, label, direction)
+
+
+def advance(proxy, clock, moment):
+    clock.now = moment
+    with proxy.condition:
+        proxy.advance_stalls(moment)
+
+
+def dues(proxy):
+    return {entry[4]: entry[0] for entry in proxy.queue}
+
+
+def consecutive_gaps(proxy, labels):
+    table = dues(proxy)
+    return [round(table[later] - table[earlier], 6) for earlier, later in zip(labels, labels[1:])]
+
+
+SWINGS = [(0.9, b"a"), (1.1, b"b"), (1.3, b"c"), (1.5, b"d")]
+
+
+class StallAndFlushTests(unittest.TestCase):
+    def run_swings(self, **settings):
+        clock = StallClock()
+        proxy = stall_proxy(clock, **settings)
+        for moment, label in SWINGS:
+            send(proxy, clock, moment, label)
+        advance(proxy, clock, 3.0)
+        return proxy
+
+    def test_a_stall_of_0_3_with_swings_0_2_apart_releases_packets_under_0_124_s_apart(self):
+        proxy = self.run_swings(stall_interval_ms=1000, stall_duration_ms=300)
+        gaps = consecutive_gaps(proxy, [b"a", b"b", b"c", b"d"])
+        self.assertLess(min(gaps), 0.124)
+        self.assertEqual(round(dues(proxy)[b"b"], 6), 1.3)
+
+    def test_without_a_stall_the_same_swings_stay_0_2_s_apart(self):
+        proxy = self.run_swings()
+        self.assertEqual(consecutive_gaps(proxy, [b"a", b"b", b"c", b"d"]), [0.2, 0.2, 0.2])
+        self.assertEqual(proxy.stall_trace, [])
+
+    def test_every_held_packet_is_released_at_the_end_in_arrival_order_and_none_is_lost(self):
+        clock = StallClock()
+        proxy = stall_proxy(clock, stall_interval_ms=1000, stall_duration_ms=300)
+        labels = [bytes([65 + index]) for index in range(8)]
+        for index, label in enumerate(labels):
+            send(proxy, clock, 1.0 + 0.04 * index, label)
+        advance(proxy, clock, 3.0)
+        self.assertEqual(len(proxy.queue), 8)
+        self.assertEqual(proxy.stall_trace[0]["held"], 8)
+        released = [dues(proxy)[label] for label in labels]
+        self.assertEqual(released, sorted(released))
+        self.assertEqual(proxy.dropped, {"toHost": 0, "toClient": 0})
+
+    def test_the_stall_never_reorders_packets_over_many_random_arrivals(self):
+        import random
+        generator = random.Random(3)
+        clock = StallClock()
+        proxy = stall_proxy(clock, delay_ms=50, stall_interval_ms=400, stall_interval_spread_ms=200, stall_duration_ms=250, stall_duration_spread_ms=100, seed=11)
+        moment = 0.0
+        labels = []
+        for index in range(300):
+            moment += generator.uniform(0.005, 0.12)
+            label = index.to_bytes(2, "big")
+            labels.append(label)
+            send(proxy, clock, moment, label)
+        advance(proxy, clock, moment + 5.0)
+        table = dues(proxy)
+        self.assertEqual(len(table), 300)
+        ordered = [table[label] for label in labels]
+        self.assertEqual(ordered, sorted(ordered))
+        self.assertGreater(len(proxy.stall_trace), 3)
+
+    def test_the_trace_records_start_end_packets_held_and_the_release_times_of_each_stall(self):
+        proxy = self.run_swings(stall_interval_ms=1000, stall_duration_ms=300)
+        first = proxy.stall_trace[0]
+        self.assertEqual((first["direction"], round(first["start"], 6), round(first["end"], 6), first["held"]), ("toHost", 1.0, 1.3, 1))
+        self.assertEqual((round(first["releaseFirst"], 6), round(first["releaseLast"], 6), first["gapSeconds"]), (1.3, 1.3, 0.0))
+        self.assertEqual(proxy.stall_trace_since(proxy.stall_trace_mark()), [])
+        self.assertEqual(len(proxy.stall_trace_since(0)), len(proxy.stall_trace))
+
+    def test_the_release_gap_spaces_the_flushed_packets(self):
+        clock = StallClock()
+        proxy = stall_proxy(clock, stall_interval_ms=1000, stall_duration_ms=300, stall_gap_ms=10)
+        for moment, label in ((1.1, b"x"), (1.15, b"y"), (1.2, b"z")):
+            send(proxy, clock, moment, label)
+        advance(proxy, clock, 2.0)
+        self.assertEqual([round(dues(proxy)[label], 6) for label in (b"x", b"y", b"z")], [1.3, 1.31, 1.32])
+
+    def test_packets_after_the_stall_resume_the_normal_delay_and_stay_behind_the_flushed_ones(self):
+        clock = StallClock()
+        proxy = stall_proxy(clock, delay_ms=100, stall_interval_ms=1000, stall_duration_ms=300, stall_gap_ms=20)
+        for moment, label in ((1.1, b"x"), (1.15, b"y"), (1.4, b"z")):
+            send(proxy, clock, moment, label)
+        advance(proxy, clock, 3.0)
+        self.assertEqual(round(dues(proxy)[b"z"], 6), 1.5)
+        self.assertLessEqual(dues(proxy)[b"y"], dues(proxy)[b"z"])
+
+    def test_a_flush_waits_for_a_packet_queued_before_the_stall_that_is_still_in_flight(self):
+        clock = StallClock()
+        proxy = stall_proxy(clock, delay_ms=500, stall_interval_ms=1000, stall_duration_ms=300)
+        send(proxy, clock, 0.95, b"a")
+        send(proxy, clock, 1.1, b"b")
+        advance(proxy, clock, 3.0)
+        self.assertGreaterEqual(dues(proxy)[b"b"], dues(proxy)[b"a"])
+
+    def test_a_packet_arriving_after_the_stall_is_never_due_before_the_last_flushed_one(self):
+        clock = StallClock()
+        proxy = stall_proxy(clock, stall_interval_ms=1000, stall_duration_ms=300, stall_gap_ms=100)
+        for moment, label in ((1.05, b"x"), (1.1, b"y"), (1.15, b"w"), (1.35, b"z")):
+            send(proxy, clock, moment, label)
+        advance(proxy, clock, 3.0)
+        table = dues(proxy)
+        self.assertEqual([round(table[label], 6) for label in (b"x", b"y", b"w")], [1.3, 1.4, 1.5])
+        self.assertGreaterEqual(table[b"z"], table[b"w"])
+
+    def test_the_next_stall_starts_an_interval_after_the_last_one_ended(self):
+        clock = StallClock()
+        proxy = stall_proxy(clock, stall_interval_ms=1000, stall_duration_ms=300)
+        advance(proxy, clock, 3.0)
+        starts = [round(entry["start"], 6) for entry in proxy.stall_trace]
+        self.assertEqual(starts, [1.0, 2.3])
+
+    def test_only_the_client_to_host_direction_stalls_unless_the_other_one_is_asked_for(self):
+        clock = StallClock()
+        proxy = stall_proxy(clock, stall_interval_ms=1000, stall_duration_ms=300)
+        send(proxy, clock, 1.1, b"h", "toHost")
+        send(proxy, clock, 1.1, b"c", "toClient")
+        self.assertEqual(round(dues(proxy)[b"c"], 6), 1.1)
+        self.assertNotIn(b"h", dues(proxy))
+        both_clock = StallClock()
+        both = stall_proxy(both_clock, stall_interval_ms=1000, stall_duration_ms=300, stall_to_client=1)
+        send(both, both_clock, 1.1, b"c", "toClient")
+        self.assertNotIn(b"c", dues(both))
+
+    def test_the_same_seed_gives_the_same_stalls_and_the_stall_does_not_change_the_jitter_sequence(self):
+        def stalls(seed):
+            clock = StallClock()
+            proxy = stall_proxy(clock, seed=seed, stall_interval_ms=500, stall_interval_spread_ms=300, stall_duration_ms=200, stall_duration_spread_ms=100)
+            advance(proxy, clock, 20.0)
+            return [(round(entry["start"], 6), round(entry["end"], 6)) for entry in proxy.stall_trace]
+
+        self.assertEqual(stalls(5), stalls(5))
+        self.assertNotEqual(stalls(5), stalls(6))
+        clock = StallClock()
+        with_stall = stall_proxy(clock, delay_ms=100, jitter_ms=60, seed=5, stall_interval_ms=500, stall_duration_ms=200)
+        advance(with_stall, clock, 10.0)
+        without = DelayProxy(1, 2, delay_ms=100, jitter_ms=60, seed=5)
+        self.assertGreater(len(with_stall.stall_trace), 5)
+        self.assertEqual([with_stall.plan_packet() for _ in range(20)], [without.plan_packet() for _ in range(20)])
+
+    def test_stall_values_are_validated_at_the_boundary(self):
+        for settings in ({"stall_interval_ms": -1}, {"stall_interval_ms": 100, "stall_interval_spread_ms": 200}, {"stall_duration_ms": 100, "stall_duration_spread_ms": 101},
+                         {"stall_interval_ms": 1e9}, {"stall_gap_ms": -5}, {"stall_to_client": 2}):
+            with self.subTest(settings=settings):
+                with self.assertRaises(ValueError):
+                    DelayProxy(1, 2, **settings)
+        proxy = DelayProxy(1, 2)
+        with self.assertRaises(ValueError):
+            proxy.set(stall_interval_ms=100, stall_interval_spread_ms=200)
+        with self.assertRaises(ValueError):
+            proxy.set(stall_nonsense=1)
+        self.assertEqual(proxy.get()["stall_interval_ms"], 0.0)
+
+    def test_turning_the_stall_off_releases_what_is_held_at_once(self):
+        clock = StallClock()
+        proxy = stall_proxy(clock, stall_interval_ms=1000, stall_duration_ms=300)
+        send(proxy, clock, 1.1, b"x")
+        clock.now = 1.15
+        proxy.set(stall_interval_ms=0.0)
+        self.assertEqual(round(dues(proxy)[b"x"], 6), 1.15)
+        self.assertEqual(proxy.get()["stall_interval_ms"], 0.0)
+        self.assertEqual(proxy.stall_trace[0]["held"], 1)
+
+    def test_the_settings_report_the_stall_fields(self):
+        settings = DelayProxy(1, 2, stall_interval_ms=500, stall_duration_ms=100, stall_gap_ms=3, stall_to_client=1).get()
+        self.assertEqual((settings["stall_interval_ms"], settings["stall_duration_ms"], settings["stall_gap_ms"], settings["stall_to_client"]), (500.0, 100.0, 3.0, 1))
+
+    def test_a_live_stall_holds_a_packet_until_the_stall_ends_and_then_delivers_it(self):
+        host = udp_socket()
+        proxy = DelayProxy(free_udp_port(), host.getsockname()[1], 0, 0, seed=1, stall_interval_ms=50, stall_duration_ms=300).start()
+        client = udp_socket()
+        try:
+            began = time.monotonic()
+            time.sleep(0.12)
+            client.sendto(b"held", (LOOPBACK, proxy.listen_port))
+            host.recvfrom(4096)
+            elapsed = time.monotonic() - began
+        finally:
+            proxy.stop()
+            host.close()
+            client.close()
+        self.assertGreaterEqual(elapsed, 0.30)
+        self.assertLess(elapsed, 1.5)
+        self.assertEqual(proxy.stall_trace[0]["held"], 1)
 
 
 class ControlServerTests(unittest.TestCase):

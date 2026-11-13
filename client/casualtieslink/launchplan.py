@@ -2,22 +2,35 @@ import re
 
 DIRECT_LABEL = "direct"
 PROFILE_FIELDS = ("delay_ms", "jitter_ms", "loss", "reorder")
+STALL_FIELDS = ("stall_interval_ms", "stall_interval_spread_ms", "stall_duration_ms", "stall_duration_spread_ms", "stall_gap_ms", "stall_to_client")
 
 
 class NetworkProfile:
-    def __init__(self, delay_ms=0.0, jitter_ms=0.0, loss=0.0, reorder=0.0, repeat=None):
+    """delay:jitter:loss:reorder, optionally followed by the stall-and-flush fields stall interval:interval spread:duration:duration spread:release gap:to client (all ms, to client 0 or 1)."""
+
+    def __init__(self, delay_ms=0.0, jitter_ms=0.0, loss=0.0, reorder=0.0, stall_interval_ms=0.0, stall_interval_spread_ms=0.0, stall_duration_ms=0.0, stall_duration_spread_ms=0.0,
+                 stall_gap_ms=0.0, stall_to_client=0.0, repeat=None):
         self.repeat = repeat
         self.delay_ms = float(delay_ms)
         self.jitter_ms = float(jitter_ms)
         self.loss = float(loss)
         self.reorder = float(reorder)
-        if min(self.delay_ms, self.jitter_ms, self.loss, self.reorder) < 0:
+        self.stalls = (float(stall_interval_ms), float(stall_interval_spread_ms), float(stall_duration_ms), float(stall_duration_spread_ms), float(stall_gap_ms), float(stall_to_client))
+        if min((self.delay_ms, self.jitter_ms, self.loss, self.reorder) + self.stalls) < 0:
             raise ValueError("network values must not be negative")
         if self.loss > 1 or self.reorder > 1:
             raise ValueError("loss and reorder are probabilities between 0 and 1")
+        if self.stalls[5] not in (0.0, 1.0):
+            raise ValueError("the stall to-client flag is 0 or 1")
+        if self.stalls[1] > self.stalls[0] or self.stalls[3] > self.stalls[2]:
+            raise ValueError("a stall spread may not exceed its mean")
+
+    def stall_active(self):
+        return self.stalls[0] > 0 and self.stalls[2] > 0
 
     def key(self):
-        return (self.delay_ms, self.jitter_ms, self.loss, self.reorder)
+        base = (self.delay_ms, self.jitter_ms, self.loss, self.reorder)
+        return base + self.stalls if self.stall_active() else base
 
     def label(self):
         text = "d%g-j%g" % (self.delay_ms, self.jitter_ms)
@@ -25,10 +38,19 @@ class NetworkProfile:
             text += "-l%g" % self.loss
         if self.reorder:
             text += "-r%g" % self.reorder
+        if self.stall_active():
+            text += "-s%gx%g" % (self.stalls[0], self.stalls[2])
+            if self.stalls[4]:
+                text += "g%g" % self.stalls[4]
+            if self.stalls[5]:
+                text += "c"
         return text
 
     def as_dict(self):
-        return dict(zip(PROFILE_FIELDS, self.key()))
+        """Every setting the proxy knows, the stall fields included (all zero when the profile has no stall), so applying a profile also switches a stall off."""
+        values = dict(zip(PROFILE_FIELDS, (self.delay_ms, self.jitter_ms, self.loss, self.reorder)))
+        values.update(zip(STALL_FIELDS, self.stalls))
+        return values
 
     def spec(self):
         text = ":".join("%g" % value for value in self.key())

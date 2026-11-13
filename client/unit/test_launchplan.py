@@ -41,6 +41,27 @@ class ParseProfileTests(unittest.TestCase):
 
 
 class ProfileRepeatTests(unittest.TestCase):
+    def test_stall_fields_follow_the_four_network_fields_and_round_trip(self):
+        profile = launchplan.parse_profile("100:75:0:0:800:300:400:100:10:1")
+        self.assertTrue(profile.stall_active())
+        self.assertEqual(profile.as_dict()["stall_interval_ms"], 800.0)
+        self.assertEqual((profile.as_dict()["stall_gap_ms"], profile.as_dict()["stall_to_client"]), (10.0, 1.0))
+        self.assertEqual(launchplan.parse_profile(profile.spec()).key(), profile.key())
+        self.assertEqual(profile.label(), "d100-j75-s800x400g10c")
+
+    def test_a_profile_without_a_stall_keeps_its_four_value_key_and_switches_the_stall_off(self):
+        profile = launchplan.parse_profile("100:60")
+        self.assertEqual(profile.key(), (100.0, 60.0, 0.0, 0.0))
+        self.assertFalse(profile.stall_active())
+        self.assertEqual(profile.as_dict()["stall_interval_ms"], 0.0)
+        self.assertEqual(profile.label(), "d100-j60")
+
+    def test_bad_stall_values_are_refused(self):
+        for text in ("0:0:0:0:100:200:50:0", "0:0:0:0:100:0:50:60", "0:0:0:0:-1:0:50:0", "0:0:0:0:100:0:50:0:0:2"):
+            with self.subTest(text=text):
+                with self.assertRaises(ValueError):
+                    launchplan.parse_profile(text)
+
     def test_a_profile_repeat_is_read_and_round_trips(self):
         profile = launchplan.parse_profile("100:60@20")
         self.assertEqual((profile.key(), profile.repeat), ((100.0, 60.0, 0.0, 0.0), 20))

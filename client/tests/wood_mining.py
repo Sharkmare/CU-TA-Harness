@@ -166,12 +166,13 @@ def swing_intervals(swings):
 
 def estimate_arrivals(swings, packets):
     """Host arrival time of each swing, estimated: the first packet the client sent at or after the invoke carries the swing message (the reliable message goes out with the next
-    outgoing packet); its arrival is the moment the proxy received it plus the delay the proxy gave it. packets: (received at, direction, size, delay ms), same monotonic clock."""
-    sent = sorted((received, delay_ms) for received, direction, _, delay_ms in packets if direction == "toHost")
+    outgoing packet); its arrival is the moment the proxy was due to send it (received plus delay and jitter, or the release of a stall). packets: (received at, direction, size, delay ms,
+    due at), same monotonic clock."""
+    sent = sorted((received, due) for received, direction, _, _, due in packets if direction == "toHost")
     arrivals = []
     for entry in swings:
-        found = next(((received, delay_ms) for received, delay_ms in sent if received >= entry["invokedAt"]), None)
-        arrivals.append(None if found is None else found[0] + found[1] / 1000.0)
+        found = next((due for received, due in sent if received >= entry["invokedAt"]), None)
+        arrivals.append(found)
     return arrivals
 
 

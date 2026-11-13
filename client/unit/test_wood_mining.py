@@ -128,13 +128,13 @@ class SamplerDerivedTests(unittest.TestCase):
 class BunchingTests(unittest.TestCase):
     def test_the_arrival_of_a_swing_is_the_first_packet_after_the_invoke_plus_its_delay(self):
         swings = [{"invokedAt": 100.05}, {"invokedAt": 100.30}]
-        packets = [(100.04, "toHost", 80, 10.0), (100.06, "toHost", 80, 100.0), (100.31, "toClient", 80, 1.0), (100.32, "toHost", 80, 150.0)]
+        packets = [(100.04, "toHost", 80, 10.0, 100.05), (100.06, "toHost", 80, 100.0, 100.16), (100.31, "toClient", 80, 1.0, 100.311), (100.32, "toHost", 80, 150.0, 100.47)]
         arrivals = wood.estimate_arrivals(swings, packets)
         self.assertAlmostEqual(arrivals[0], 100.16)
         self.assertAlmostEqual(arrivals[1], 100.47)
 
     def test_a_swing_with_no_later_packet_has_no_arrival_estimate(self):
-        self.assertEqual(wood.estimate_arrivals([{"invokedAt": 200.0}], [(100.0, "toHost", 80, 5.0)]), [None])
+        self.assertEqual(wood.estimate_arrivals([{"invokedAt": 200.0}], [(100.0, "toHost", 80, 5.0, 100.005)]), [None])
 
     def test_spacings_are_in_swing_order_and_negative_when_a_later_swing_overtakes(self):
         self.assertEqual(wood.arrival_spacings([1.0, 1.2, 1.15, None, 2.0]), [0.2, -0.05])
@@ -232,7 +232,7 @@ class ReportTests(unittest.TestCase):
         return series(climb(3), climb(3))
 
     def test_a_persisted_run_reports_no_issue_and_carries_the_damage_record_and_the_bunching(self):
-        packets = [(100.0 + 0.1 * index, "toHost", 80, 100.0) for index in range(20)]
+        packets = [(100.0 + 0.1 * index, "toHost", 80, 100.0, 100.1 + 0.1 * index) for index in range(20)]
         report, issues = self.extend(good_context(), self.good_samples(), {"client": finding(0.4), "host": finding(0.4)}, packets=packets)
         self.assertEqual(issues, [])
         record = report["woodRun"]["damage"]
