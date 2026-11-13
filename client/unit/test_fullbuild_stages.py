@@ -31,6 +31,32 @@ PINNED_MD5 = {"fullbuild-control": "5f44699a7e034bdcbdb8ba66969d04de", "fullbuil
 CUCORELIB_MD5 = "d696c8a1ccce7cb934c85a0e8cb21091"
 
 
+class SwingBurstPackageTests(unittest.TestCase):
+    def test_the_package_build_is_known_record_only_and_needs_cucorelib(self):
+        self.assertIn("swingburst-package", desync.KNOWN_BUILDS)
+        self.assertIn("swingburst-package", test_desync.RECORD_ONLY_BUILDS)
+        self.assertIn("swingburst-package", instances.BUILDS_NEEDING_CUCORELIB)
+        self.assertEqual(desync.STAGE_CHOICES["swingburst-package"], instances.SWINGBURST_PACKAGE_STAGE_CHOICE)
+
+    def test_the_directory_is_the_variable_and_has_no_default_folder(self):
+        with mock.patch.dict(os.environ, {instances.SWINGBURST_PACKAGE_STAGE_ENVIRONMENT_VARIABLE: "X:/extract/BepInEx"}):
+            self.assertEqual(instances.stage_directory_by_build()["swingburst-package"](), "X:/extract/BepInEx")
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(instances.SWINGBURST_PACKAGE_STAGE_ENVIRONMENT_VARIABLE, None)
+            self.assertIn("UNSET_set_CU_SWINGBURST_PACKAGE_STAGE", instances.stage_directory_by_build()["swingburst-package"]())
+
+    def test_the_package_stage_installs_its_own_together_and_cucorelib_folders(self):
+        with tempfile.TemporaryDirectory() as stage, tempfile.TemporaryDirectory() as copy:
+            for folder, name in (("Together", "CasualtiesMP.dll"), ("Together", "LiteNetLib.dll"), ("CUCoreLib", "CUCoreLib.dll")):
+                os.makedirs(os.path.join(stage, "plugins", folder), exist_ok=True)
+                with open(os.path.join(stage, "plugins", folder, name), "w") as handle:
+                    handle.write(name)
+            with mock.patch.dict(os.environ, {instances.SWINGBURST_PACKAGE_STAGE_ENVIRONMENT_VARIABLE: stage}):
+                instances.install_stage_together(copy, instances.swingburst_package_stage_directory())
+            self.assertEqual(sorted(os.listdir(os.path.join(copy, "BepInEx", "plugins", "Together"))), ["CasualtiesMP.dll", "LiteNetLib.dll"])
+            self.assertEqual(os.listdir(os.path.join(copy, "BepInEx", "plugins", "CUCoreLib")), ["CUCoreLib.dll"])
+
+
 class StageTests(unittest.TestCase):
     def test_each_build_is_known_and_has_its_own_choice_and_folder(self):
         for build, choice, variable, folder in BUILDS:

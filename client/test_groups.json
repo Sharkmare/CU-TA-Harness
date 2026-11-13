@@ -116,7 +116,7 @@
         "unit.test_recovery",
         "unit.test_positioncontrol",
         "unit.test_position_wiring",
-        "unit.test_corpse_chain", "unit.test_prtable", "unit.test_swinggate", "unit.test_wood_mining", "unit.test_steam_selfjoin"
+        "unit.test_corpse_chain", "unit.test_prtable", "unit.test_swinggate", "unit.test_wood_mining", "unit.test_steam_selfjoin", "unit.test_package_log_check"
       ],
       "needs_game": false
     },
