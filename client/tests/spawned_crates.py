@@ -45,7 +45,14 @@ PHYSICS_ENGINE_TYPE = world.PHYSICS_ENGINE_TYPE
 STOP_AFTER_SETUP_FAILURES = 5
 FAILURE_FILE = "spawned_crate_failures.json"
 FAILURE_DIRECTORY = None
-STATE = {"anchor": None, "valid": 0, "swing_failed": 0, "setup_failed": 0, "spawned": 0, "reasons": collections.Counter(), "attempts": []}
+DIAGNOSTIC_RUN = 1
+TRACE_SECONDS = 2.0
+TRACE_INTERVAL_SECONDS = 0.07
+SETTLED_OFFSETS = (BAND_TARGET, BAND_HIGH - 0.1)
+CRATE_STILL_SPEED = 0.02
+CRATE_STILL_SECONDS = 0.5
+CRATE_STILL_TIMEOUT_SECONDS = 5.0
+STATE = {"anchor": None, "valid": 0, "swing_failed": 0, "setup_failed": 0, "spawned": 0, "prepared": 0, "reasons": collections.Counter(), "attempts": []}
 
 
 class SetupFailure(AssertionError):
@@ -55,7 +62,7 @@ class SetupFailure(AssertionError):
 
 
 def reset_launch_state():
-    STATE.update({"anchor": None, "valid": 0, "swing_failed": 0, "setup_failed": 0, "spawned": 0, "reasons": collections.Counter(), "attempts": []})
+    STATE.update({"anchor": None, "valid": 0, "swing_failed": 0, "setup_failed": 0, "spawned": 0, "prepared": 0, "reasons": collections.Counter(), "attempts": []})
 
 
 def record_failure(category, message):
@@ -165,6 +172,82 @@ def spawn_object(host, client, object_id, min_health, spot=None):
     distance = base.distance(base.player_position(client), settled)
     return dict(described, position=settled, startHealth=described["health"], healthBefore=described["health"], distance=round(distance, 2), spawnOffset=SPAWN_OFFSET,
                 spawnedAt=spot, clientHandle="id:%d" % client_row["object"]["id"], spawnNumber=STATE["spawned"], settleTrace=trace, skippedPicks=[], timesUsedBefore=0)
+
+
+def read_at(game, handle, path):
+    try:
+        return game.get(handle, path, depth=0)
+    except Exception:
+        return None
+
+
+def vector_length(value):
+    point = positioncontrol.as_point(value)
+    return None if point is None else math.hypot(point["x"], point["y"])
+
+
+def wait_crate_still(host, handle, fallback):
+    """Wait until the crate's speed has stayed near zero for CRATE_STILL_SECONDS; the speed is rb.velocity when it can be read, otherwise the step between two positions."""
+    started = time.time()
+    still_since = None
+    previous = world.host_position(host, handle) or fallback
+    while time.time() - started < CRATE_STILL_TIMEOUT_SECONDS:
+        time.sleep(TRACE_INTERVAL_SECONDS)
+        current = world.host_position(host, handle) or previous
+        speed = vector_length(read_at(host, handle, "rb.velocity"))
+        if speed is None:
+            speed = base.distance(current, previous) / TRACE_INTERVAL_SECONDS
+        previous = current
+        if speed <= CRATE_STILL_SPEED:
+            still_since = still_since if still_since is not None else time.time()
+            if time.time() - still_since >= CRATE_STILL_SECONDS:
+                return {"still": True, "seconds": round(time.time() - started, 2), "lastSpeed": round(speed, 4)}
+        else:
+            still_since = None
+    return {"still": False, "seconds": round(time.time() - started, 2), "lastSpeed": None if speed is None else round(speed, 4)}
+
+
+def seat_view(seat):
+    return {"ok": seat["ok"], "issues": seat["issues"], "linkReadDisagrees": seat["linkReadDisagrees"], "holderDrifts": seat["holderDrifts"], "rbDrifts": seat["rbDrifts"], "linkDrifts": seat["linkDrifts"]}
+
+
+def spawn_settled(host, client):
+    """The setup that keeps the crate off the client: the crate is spawned at the band distance from the client's anchor, waits until it is still, and only then is the client
+    seated and held at the anchor and verified by the holder's view and rb.position. A second, larger offset is tried, still inside the band, when the first seat does not verify."""
+    anchor = hold_client_at_anchor(client)
+    paths = positioncontrol.discover_diagnostic_paths(client)
+    attempts = []
+    for offset in SETTLED_OFFSETS:
+        spot = {"x": anchor["x"] + offset, "y": anchor["y"]}
+        target = spawn_object(host, client, CRATE_ID, MIN_HEALTH, spot=spot)
+        motion = wait_crate_still(host, target["handle"], target["position"])
+        seat = positioncontrol.seat_swinging_body(client, anchor, paths=paths)
+        attempts.append({"offset": offset, "crate": target["position"], "crateMotion": motion, "seat": seat_view(seat)})
+        if seat["ok"]:
+            return target, attempts, anchor
+        try:
+            host.set(target["handle"], "health", 0)
+        except Exception:
+            pass
+    raise SetupFailure("client-seat-not-verified-after-settle", "the client seat did not verify after the crate was still at any offset %s: %s" % (list(SETTLED_OFFSETS), attempts))
+
+
+def trace_client_and_crate(host, client, context, seconds=TRACE_SECONDS, interval=TRACE_INTERVAL_SECONDS):
+    """What moves the held client: its position three ways, its rb velocity, the crate's position and velocity on the host, the host body, and the distance between client and crate."""
+    handle = context["hostHandle"]
+    paths = context.get("clientPaths") or []
+    started = time.time()
+    rows = []
+    while time.time() - started < seconds:
+        snapshot = positioncontrol.parked_snapshot(client, paths)
+        crate = world.host_position(host, handle)
+        player = positioncontrol.as_point(snapshot.get("linkRead"))
+        rows.append({"t": round(time.time() - started, 3), "holder": snapshot.get("holder"), "linkRead": snapshot.get("linkRead"), "rb": snapshot["paths"].get("rb.position"),
+                     "limb0": snapshot["paths"].get("limbs[0].transform.position"), "limb1": snapshot["paths"].get("limbs[1].transform.position"), "clientVelocity": snapshot["paths"].get("rb.velocity"),
+                     "crate": crate, "crateVelocity": read_at(host, handle, "rb.velocity"), "crateOnClient": client_crate_position(client, crate) if crate else None,
+                     "clientToCrate": None if player is None or crate is None else round(base.distance(player, crate), 3), "hostBody": base.player_position(host)})
+        time.sleep(interval)
+    return rows
 
 
 def ensure_band(host, client, handle, fallback, side=-1):
@@ -341,6 +424,10 @@ def before_swing(client, context, index, aim):
     if not band["ok"]:
         context["bandFailure"] = {"swing": index, "distances": band["distances"]}
         return None
+    if band.get("seat") is None and context.get("settledSeat"):
+        band["seat"] = context["settledSeat"]
+    if index == 1 and context.get("diagnostic") and context.get("hostPark"):
+        context["target"]["diagnostic"] = {"rows": trace_client_and_crate(host, client, context), "intervalSeconds": TRACE_INTERVAL_SECONDS, "colliders": "not readable over the link; the clientToCrate distance is the proxy"}
     if index == 1 and context.get("hostPark"):
         check = run_preflight(host, client, context, band)
         if not check["ok"]:
@@ -360,14 +447,23 @@ def prepare(host, client):
     if STATE["valid"] == 0 and STATE["setup_failed"] >= STOP_AFTER_SETUP_FAILURES:
         raise unittest.SkipTest("stopped: the first %d attempts all failed setup; reasons %s" % (STATE["setup_failed"], dict(STATE["reasons"])))
     base.empty_the_hand(client)
+    STATE["prepared"] += 1
+    diagnostic = STATE["prepared"] == DIAGNOSTIC_RUN
+    settled = None
     try:
-        target = spawn_crate(host, client)
+        if diagnostic:
+            target = spawn_crate(host, client)
+        else:
+            target, attempts, settled = spawn_settled(host, client)
     except SetupFailure as failure:
         STATE["setup_failed"] += 1
         record_failure(failure.category, str(failure))
         raise
     context = {"position": target["position"], "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"],
-               "target": target, "measurements": []}
+               "target": target, "measurements": [], "diagnostic": diagnostic, "settledSeat": settled}
+    target["setup"] = "diagnostic: crate beside the anchor, client re-seated by the band" if diagnostic else "settled: crate at the band distance, still, then the client seated and verified"
+    if not diagnostic:
+        target["settledAttempts"] = attempts
     position_setup(host, client, context)
     target["startPositions"] = context["startPositions"]
     return context

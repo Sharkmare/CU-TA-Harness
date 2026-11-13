@@ -369,6 +369,139 @@ class BeforeSwingTests(unittest.TestCase):
         self.assertEqual(self.context["bandFailure"], {"swing": 3, "distances": [3.6, 3.5, 3.5, 3.6, 3.7]})
 
 
+REAL_WAIT_CRATE_STILL = crates.wait_crate_still
+
+
+class SettledSetupTests(unittest.TestCase):
+    def setUp(self):
+        crates.reset_launch_state()
+        self.addCleanup(crates.reset_launch_state)
+        self.host = mock.Mock()
+        self.client = mock.Mock()
+        self.anchor = {"x": 10.0, "y": 50.0}
+        self.seat_results = []
+        self.spawned = []
+
+        def spawn_object(host, client, object_id, min_health, spot=None):
+            self.spawned.append(spot)
+            return {"handle": "id:%d" % len(self.spawned), "position": dict(spot), "clientHandle": "id:-1"}
+
+        def seat(game, target, tolerance=0.05, paths=(), sleep=None):
+            result = self.seat_results.pop(0) if self.seat_results else self.good_seat()
+            self.seated_at = target
+            return result
+
+        for patch in (mock.patch.object(crates, "hold_client_at_anchor", lambda client: self.anchor), mock.patch.object(crates, "spawn_object", spawn_object),
+                      mock.patch.object(crates.positioncontrol, "seat_swinging_body", seat), mock.patch.object(crates.positioncontrol, "discover_diagnostic_paths", lambda game: ["rb.position"]),
+                      mock.patch.object(crates, "wait_crate_still", lambda host, handle, fallback: {"still": True, "seconds": 0.6, "lastSpeed": 0.0})):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def good_seat(self):
+        return {"ok": True, "issues": [], "linkReadDisagrees": False, "holderDrifts": [0.0], "rbDrifts": [0.0], "linkDrifts": [0.0]}
+
+    def bad_seat(self):
+        return {"ok": False, "issues": ["rb.position is 0.300 from the target (tolerance 0.050)"], "linkReadDisagrees": True, "holderDrifts": [0.1], "rbDrifts": [0.3], "linkDrifts": [0.2]}
+
+    def test_the_crate_is_spawned_at_the_band_distance_and_the_client_is_seated_at_the_anchor_after_it_is_still(self):
+        target, attempts, seat = crates.spawn_settled(self.host, self.client)
+        self.assertEqual(self.spawned, [{"x": 10.0 + crates.BAND_TARGET, "y": 50.0}])
+        self.assertEqual(seat, self.anchor)
+        self.assertEqual(self.seated_at, self.anchor)
+        self.assertEqual(len(attempts), 1)
+        self.assertTrue(crates.BAND_LOW <= crates.SETTLED_OFFSETS[0] <= crates.BAND_HIGH)
+
+    def test_the_client_is_seated_only_after_the_crate_is_still(self):
+        order = []
+        with mock.patch.object(crates, "wait_crate_still", lambda host, handle, fallback: order.append("still") or {"still": True}), \
+                mock.patch.object(crates.positioncontrol, "seat_swinging_body", lambda *a, **k: order.append("seat") or self.good_seat()):
+            crates.spawn_settled(self.host, self.client)
+        self.assertEqual(order, ["still", "seat"])
+
+    def test_a_seat_that_does_not_verify_is_retried_at_a_larger_offset_still_inside_the_band_and_the_first_crate_is_removed(self):
+        self.seat_results = [self.bad_seat(), self.good_seat()]
+        target, attempts, seat = crates.spawn_settled(self.host, self.client)
+        for spawned, offset in zip(self.spawned, crates.SETTLED_OFFSETS):
+            self.assertAlmostEqual(spawned["x"] - 10.0, offset)
+        self.assertGreater(crates.SETTLED_OFFSETS[1], crates.SETTLED_OFFSETS[0])
+        self.assertLessEqual(crates.SETTLED_OFFSETS[1], crates.BAND_HIGH)
+        self.assertEqual([item["seat"]["ok"] for item in attempts], [False, True])
+        self.host.set.assert_called_once_with("id:1", "health", 0)
+
+    def test_when_no_offset_verifies_the_run_is_a_setup_failure_naming_every_attempt(self):
+        self.seat_results = [self.bad_seat(), self.bad_seat()]
+        with self.assertRaises(crates.SetupFailure) as caught:
+            crates.spawn_settled(self.host, self.client)
+        self.assertEqual(caught.exception.category, "client-seat-not-verified-after-settle")
+        self.assertIn("rb.position is 0.300", str(caught.exception))
+
+    def test_the_seat_rule_for_the_client_is_not_relaxed(self):
+        called = []
+        with mock.patch.object(crates.positioncontrol, "seat_swinging_body", lambda game, target, tolerance=0.05, paths=(), sleep=None: called.append(tolerance) or self.good_seat()):
+            crates.spawn_settled(self.host, self.client)
+        self.assertEqual(called, [crates.positioncontrol.HOLD_TOLERANCE])
+
+    def test_the_first_run_is_the_diagnostic_one_with_the_old_setup_and_later_runs_use_the_settled_setup(self):
+        old, new = mock.Mock(return_value={"position": {"x": 1.0, "y": 2.0}, "handle": "id:1", "clientHandle": "id:-1"}), mock.Mock(return_value=({"position": {"x": 1.0, "y": 2.0}, "handle": "id:2", "clientHandle": "id:-2"}, [{"offset": 2.85}], self.anchor))
+        with mock.patch.object(crates, "spawn_crate", old), mock.patch.object(crates, "spawn_settled", new), mock.patch.object(crates, "position_setup", lambda host, client, context: context.update({"startPositions": {}})), \
+                mock.patch.object(crates.base, "empty_the_hand", lambda client: None):
+            first = crates.prepare(self.host, self.client)
+            second = crates.prepare(self.host, self.client)
+        self.assertTrue(first["diagnostic"])
+        self.assertFalse(second["diagnostic"])
+        self.assertEqual(second["settledSeat"], self.anchor)
+        self.assertEqual(second["target"]["settledAttempts"], [{"offset": 2.85}])
+        old.assert_called_once()
+        new.assert_called_once()
+
+    def test_the_verified_seat_is_the_target_of_the_preflight_when_the_band_needs_no_reseat(self):
+        context = {"host": self.host, "hostHandle": "id:7", "position": {"x": 12.85, "y": 50.0}, "settledSeat": self.anchor, "hostPark": {"x": -2.0, "y": 50.0}, "diagnostic": False, "clientHandle": "id:-7"}
+        seen = {}
+        with mock.patch.object(crates, "ensure_band", lambda *a, **k: {"ok": True, "distances": [2.85], "seat": None}), \
+                mock.patch.object(crates, "run_preflight", lambda host, client, ctx, band: seen.setdefault("seat", band["seat"]) and {"ok": True}), \
+                mock.patch.object(crates, "read_geometry", lambda *a: {}), mock.patch.object(crates, "record_parked_host", lambda *a: None), mock.patch.object(crates, "crate_physics", lambda g, h: {}):
+            crates.before_swing(self.client, context, 1, {"x": 12.85, "y": 50.0})
+        self.assertEqual(seen["seat"], self.anchor)
+
+    def test_the_diagnostic_run_records_a_trace_from_the_seat_to_the_first_swing(self):
+        context = {"host": self.host, "hostHandle": "id:7", "position": {"x": 12.85, "y": 50.0}, "hostPark": {"x": -2.0, "y": 50.0}, "diagnostic": True, "target": {}, "clientPaths": ["rb.position"], "clientHandle": "id:-7"}
+        with mock.patch.object(crates, "ensure_band", lambda *a, **k: {"ok": True, "distances": [2.85], "seat": {"x": 10.0, "y": 50.0}}), \
+                mock.patch.object(crates, "trace_client_and_crate", mock.Mock(return_value=[{"t": 0.0}])) as trace, \
+                mock.patch.object(crates, "run_preflight", lambda *a: {"ok": True}), mock.patch.object(crates, "read_geometry", lambda *a: {}), \
+                mock.patch.object(crates, "record_parked_host", lambda *a: None), mock.patch.object(crates, "crate_physics", lambda g, h: {}):
+            crates.before_swing(self.client, context, 1, {"x": 12.85, "y": 50.0})
+        trace.assert_called_once()
+        self.assertEqual(context["target"]["diagnostic"]["rows"], [{"t": 0.0}])
+
+    def test_the_trace_rows_carry_the_client_three_ways_the_crate_and_the_host(self):
+        context = {"host": self.host, "hostHandle": "id:7", "clientPaths": ["rb.position", "limbs[1].transform.position", "rb.velocity"]}
+        snapshot = {"linkRead": {"x": 10.1, "y": 50.0}, "holder": {"x": 10.0, "y": 50.0}, "paths": {"rb.position": {"x": 10.2, "y": 50.0}, "limbs[1].transform.position": {"x": 10.0, "y": 51.0}, "rb.velocity": {"x": 0.5, "y": 0.0}}}
+        clock = [0.0]
+        with mock.patch.object(crates.positioncontrol, "parked_snapshot", lambda game, paths: snapshot), mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 12.85, "y": 50.0}), \
+                mock.patch.object(crates, "read_at", lambda game, handle, path: {"x": 0.0, "y": -0.1}), mock.patch.object(crates, "client_crate_position", lambda client, near: {"x": 12.8, "y": 50.0}), \
+                mock.patch.object(crates.base, "player_position", lambda game: {"x": -2.0, "y": 50.0}), mock.patch.object(crates.time, "time", lambda: clock[0]), \
+                mock.patch.object(crates.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+            rows = crates.trace_client_and_crate(self.host, self.client, context, seconds=0.3, interval=0.1)
+        self.assertEqual(len(rows), 3)
+        row = rows[0]
+        self.assertEqual((row["holder"], row["linkRead"], row["rb"]), ({"x": 10.0, "y": 50.0}, {"x": 10.1, "y": 50.0}, {"x": 10.2, "y": 50.0}))
+        self.assertEqual((row["clientVelocity"], row["crate"], row["crateVelocity"], row["hostBody"]), ({"x": 0.5, "y": 0.0}, {"x": 12.85, "y": 50.0}, {"x": 0.0, "y": -0.1}, {"x": -2.0, "y": 50.0}))
+        self.assertEqual(row["clientToCrate"], 2.75)
+
+    def test_a_crate_that_stays_still_is_reported_still_and_one_that_keeps_moving_is_not(self):
+        clock = [0.0]
+        speeds = iter([0.5, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01])
+        with mock.patch.object(crates.time, "time", lambda: clock[0]), mock.patch.object(crates.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)), \
+                mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 1.0, "y": 2.0}), mock.patch.object(crates, "read_at", lambda game, handle, path: {"x": next(speeds), "y": 0.0}):
+            still = REAL_WAIT_CRATE_STILL(self.host, "id:1", {"x": 1.0, "y": 2.0})
+        self.assertTrue(still["still"])
+        clock[0] = 0.0
+        with mock.patch.object(crates.time, "time", lambda: clock[0]), mock.patch.object(crates.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)), \
+                mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 1.0, "y": 2.0}), mock.patch.object(crates, "read_at", lambda game, handle, path: {"x": 0.5, "y": 0.0}):
+            moving = REAL_WAIT_CRATE_STILL(self.host, "id:1", {"x": 1.0, "y": 2.0})
+        self.assertFalse(moving["still"])
+
+
 class RunControlTests(unittest.TestCase):
     def setUp(self):
         crates.reset_launch_state()
@@ -381,7 +514,7 @@ class RunControlTests(unittest.TestCase):
         return {"measurements": [{"hostDelta": 0.0, "clientDelta": 0.0}], "target": {"name": "medcrate"}}
 
     def prepare_with(self, outcome):
-        with mock.patch.object(crates.base, "empty_the_hand", lambda client: None), mock.patch.object(crates, "spawn_crate", outcome), mock.patch.object(crates, "position_setup", lambda host, client, context: context.update({"startPositions": {}})):
+        with mock.patch.object(crates.base, "empty_the_hand", lambda client: None), mock.patch.object(crates, "spawn_crate", outcome), mock.patch.object(crates, "spawn_settled", lambda host, client: (outcome(host, client), [], None)), mock.patch.object(crates, "position_setup", lambda host, client, context: context.update({"startPositions": {}})):
             return crates.prepare("host", "client")
 
     def test_a_band_failure_is_an_invalid_setup_failure_and_not_a_missed_swing(self):
