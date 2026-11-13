@@ -21,7 +21,8 @@ uncaught = []
 for old, new, label in MUTATIONS:
     full = os.path.join(ROOT, TARGET)
     with open(full, "rb") as handle:
-        original = handle.read().decode()
+        original_bytes = handle.read()
+    original = original_bytes.decode().replace("\r\n", "\n")
     if original.count(old) != 1:
         print("%-60s ANCHOR NOT FOUND (%d)" % (label, original.count(old)))
         uncaught.append(label)
@@ -35,7 +36,7 @@ for old, new, label in MUTATIONS:
         caught = True
     finally:
         with open(full, "wb") as handle:
-            handle.write(original.encode())
+            handle.write(original_bytes)
     print("%-60s %s" % (label, "caught" if caught else "NOT CAUGHT"))
     if not caught:
         uncaught.append(label)

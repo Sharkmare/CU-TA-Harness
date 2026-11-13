@@ -9,7 +9,8 @@ import tempfile
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(TOOLS)
 MUTANTS_PATH = os.path.join(TOOLS, "mutants.json")
-COPIED_FOLDERS = ("plugin", "plugin-tests", "client", "tools")
+COPIED_FOLDERS = ("plugin", "plugin-tests", "client", "tools", "docs")
+COPIED_FILES = ("README.md",)
 IGNORED = ("bin", "obj", "__pycache__", "*.dll", ".test_state.json")
 CLIENT_REPORTS_FOLDER = "reports"
 MUTANT_TIMEOUT_SECONDS = 90
@@ -70,6 +71,8 @@ def ignored_names(directory, names):
 def copy_tree(root):
     for folder in COPIED_FOLDERS:
         shutil.copytree(os.path.join(REPO, folder), os.path.join(root, folder), ignore=ignored_names)
+    for name in COPIED_FILES:
+        shutil.copy(os.path.join(REPO, name), os.path.join(root, name))
 
 
 def first_failure(suite, output):

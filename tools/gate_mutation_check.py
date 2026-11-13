@@ -27,13 +27,14 @@ MUTATIONS = [
 failures = []
 for path, old, new, label in MUTATIONS:
     full = os.path.join(ROOT, path)
-    original = open(full, "rb").read().decode()
+    original_bytes = open(full, "rb").read()
+    original = original_bytes.decode().replace("\r\n", "\n")
     assert original.count(old) == 1, (label, original.count(old))
     open(full, "wb").write(original.replace(old, new).encode())
     try:
         result = subprocess.run([sys.executable, "-m", "unittest", "unit.test_swinggate"], cwd=ROOT, capture_output=True, text=True)
     finally:
-        open(full, "wb").write(original.encode())
+        open(full, "wb").write(original_bytes)
     caught = result.returncode != 0
     print("%-45s %s" % (label, "caught" if caught else "NOT CAUGHT"))
     if not caught:
