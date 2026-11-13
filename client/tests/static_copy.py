@@ -27,11 +27,11 @@ STOP_AFTER_SETUP_FAILURES = 3
 APPROACH_POLL_SECONDS = 0.1
 APPROACH_TIMEOUT_SECONDS = 3.0
 RETURN_SETTLE_SECONDS = 1.0
-STATE = {"valid": 0, "setup_failed": 0, "static_at_far": 0, "static_at_swing": 0, "adopted": 0, "offers": None}
+STATE = {"valid": 0, "setup_failed": 0, "static_at_far": 0, "static_at_swing": 0, "adopted": 0, "offers": None, "not_counted": 0}
 
 
 def reset_launch_state():
-    STATE.update({"valid": 0, "setup_failed": 0, "static_at_far": 0, "static_at_swing": 0, "adopted": 0, "offers": None})
+    STATE.update({"valid": 0, "setup_failed": 0, "static_at_far": 0, "static_at_swing": 0, "adopted": 0, "offers": None, "not_counted": 0})
 
 
 def pocket_is_open(host, x, y):
@@ -237,12 +237,21 @@ def check(context):
     entries = context.get("measurements") or []
     if not entries:
         return ["INVALID: no swing recorded"]
+    gate = (context.get("target") or {}).get("limbSettle") or {}
+    if gate.get("ok") is not True:
+        landed = len([entry for entry in entries if entry["hostDelta"] > 0 and entry["clientDelta"] > 0])
+        STATE["not_counted"] += 1
+        message = "NOT COUNTED: the swings were fired before limb 1 came within %.1f of the crate (limb gate rows %s); %d of %d swings landed anyway" % (
+            LIMB_REACH, [row["limb1ToCrate"] for row in gate.get("rows", [])][-4:], landed, len(entries))
+        crates.record_failure("limb-gate-not-passed", message)
+        return [message]
     STATE["valid"] += 1
     issues = []
     for entry in entries:
         if entry["hostDelta"] <= 0 or entry["clientDelta"] <= 0:
             copy = ((entry.get("physics") or {}).get("client") or {}).get("physicsActive")
-            issues.append("swing %d: host %.2f, client %.2f (client copy physicsActive %s)" % (entry["swing"], entry["hostDelta"], entry["clientDelta"], copy))
+            limb = (entry.get("geometry") or {}).get("limb1Distance")
+            issues.append("swing %d: host %.2f, client %.2f (client copy physicsActive %s, limb 1 %s from the crate)" % (entry["swing"], entry["hostDelta"], entry["clientDelta"], copy, limb))
     return issues
 
 

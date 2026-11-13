@@ -386,12 +386,32 @@ class CheckTests(unittest.TestCase):
     def entry(self, index, host, client, physics=False):
         return {"swing": index, "hostDelta": host, "clientDelta": client, "physics": {"client": {"physicsActive": physics}}}
 
+    def context(self, entries, gate_ok=True):
+        return {"measurements": entries, "target": {"limbSettle": {"ok": gate_ok, "rows": [{"limb1ToCrate": 9.0}, {"limb1ToCrate": 3.4}, {"limb1ToCrate": 3.5}]}}}
+
     def test_swings_that_damage_both_sides_pass_and_the_run_is_measured(self):
-        self.assertEqual(static.check({"measurements": [self.entry(index, 19.3, 19.3) for index in range(1, 6)]}), [])
+        self.assertEqual(static.check(self.context([self.entry(index, 19.3, 19.3) for index in range(1, 6)])), [])
         self.assertEqual(static.STATE["valid"], 1)
 
+    def test_swings_fired_before_the_limb_gate_passed_are_not_counted_even_when_they_landed(self):
+        issues = static.check(self.context([self.entry(index, 19.3, 19.3) for index in range(1, 6)], gate_ok=False))
+        self.assertTrue(issues[0].startswith("NOT COUNTED"), issues)
+        self.assertIn("5 of 5 swings landed anyway", issues[0])
+        self.assertEqual((static.STATE["valid"], static.STATE["not_counted"]), (0, 1))
+        self.assertEqual(dict(crates.STATE["reasons"]), {"limb-gate-not-passed": 1})
+
+    def test_a_run_without_any_limb_gate_record_is_not_counted(self):
+        issues = static.check({"measurements": [self.entry(1, 19.3, 19.3)]})
+        self.assertTrue(issues[0].startswith("NOT COUNTED"))
+        self.assertEqual(static.STATE["valid"], 0)
+
+    def test_a_missed_swing_names_the_limb_distance(self):
+        entry = dict(self.entry(1, 0.0, 0.0), geometry={"limb1Distance": 9.4})
+        issues = static.check(self.context([entry]))
+        self.assertIn("limb 1 9.4 from the crate", issues[0])
+
     def test_a_swing_with_no_damage_on_a_static_copy_is_reported_with_the_copy_state_and_still_counts_as_measured(self):
-        issues = static.check({"measurements": [self.entry(1, 0.0, 0.0, physics=False), self.entry(2, 19.3, 19.3, physics=True)]})
+        issues = static.check(self.context([self.entry(1, 0.0, 0.0, physics=False), self.entry(2, 19.3, 19.3, physics=True)]))
         self.assertEqual(len(issues), 1)
         self.assertIn("swing 1", issues[0])
         self.assertIn("physicsActive False", issues[0])
