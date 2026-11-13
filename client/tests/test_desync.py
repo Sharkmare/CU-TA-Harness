@@ -29,7 +29,7 @@ BUILD = desync.parse_build(os.environ.get(desync.BUILD_ENVIRONMENT_VARIABLE))
 EXPECTED_HASH = expected_hash(BUILD)
 BUILDS_WITHOUT_PROBE = (desync.OFFICIAL_BUILD, desync.SPECTATOR_FIX_BUILD)
 BUILD_HAS_PROBE = BUILD not in BUILDS_WITHOUT_PROBE
-RECORD_ONLY_BUILDS = (desync.OFFICIAL_BUILD, desync.FULLBUILD_CONTROL_BUILD, desync.SPECTATOR_FIX_BUILD, desync.PR24_CONTROL_BUILD, desync.PR24_CONTROL_VERBOSE_BUILD)
+RECORD_ONLY_BUILDS = (desync.OFFICIAL_BUILD, desync.FULLBUILD_CONTROL_BUILD, desync.SPECTATOR_FIX_BUILD, desync.PR24_CONTROL_BUILD, desync.PR24_CONTROL_VERBOSE_BUILD, desync.PR24_CORPSE_BUILD)
 RECORD_ONLY_LAUNCH_CHECKS = BUILD in RECORD_ONLY_BUILDS
 PROFILES = desync.profiles_from_environment()
 REPEAT = desync.repeat_from_environment()
@@ -165,6 +165,7 @@ def require_find_the_bug(host, client):
 
 class DesyncMixin:
     client_character = None
+    host_character = None
 
     @classmethod
     def setUpClass(cls):
@@ -174,8 +175,9 @@ class DesyncMixin:
             raise unittest.SkipTest("no DLL found for build %s (set CU_FLAVOUR_ZIP or CU_UPSTREAM_STAGE)" % BUILD)
         try:
             cls.host, cls.client = GAMES.start(list(cls.host_plugins), [], together=desync.together_choice(BUILD), client_extra=cls.client_extra, host_extra=cls.host_extra, delay_ms=0.0, probe=cls.probe,
-                                         after_client_link=choose_character(cls.client_character))
-            if not ready_up([cls.host, cls.client], before_ready={cls.client: choose_character(cls.client_character)} if cls.client_character is not None else None):
+                                         after_host_link=choose_character(cls.host_character), after_client_link=choose_character(cls.client_character))
+            choosers = {game: choose_character(character) for game, character in ((cls.host, cls.host_character), (cls.client, cls.client_character)) if character is not None}
+            if not ready_up([cls.host, cls.client], before_ready=choosers or None):
                 raise AssertionError("the lobby ready gate did not accept both players")
             cls.host.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
             cls.client.wait_state("in-world", timeout=WORLD_WAIT_SECONDS)
@@ -220,13 +222,14 @@ PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
                           "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                           "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": []}
+                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"]}
 GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                         "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": []}
-GROUP_CLIENT_CHARACTER = {"hook-dune": 2}
+                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"]}
+GROUP_CLIENT_CHARACTER = {"hook-dune": 2, "corpse-repro": 2}
+GROUP_HOST_CHARACTER = {"corpse-repro": 1}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
-PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune")
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune", "corpse-repro")
 EVIDENCE_GROUPS = ("hook-evidence", "hook-dune")
 
 
@@ -237,7 +240,7 @@ def build_classes():
         if ONLY_GROUP and group != ONLY_GROUP:
             continue
         members = {"client_extra": GROUP_CLIENT_ARGUMENTS[group], "host_extra": GROUP_HOST_ARGUMENTS[group], "probe": group in PROBE_GROUPS and BUILD_HAS_PROBE,
-                   "client_character": GROUP_CLIENT_CHARACTER.get(group), "host_plugins": GROUP_HOST_PLUGINS.get(group, []),
+                   "client_character": GROUP_CLIENT_CHARACTER.get(group), "host_character": GROUP_HOST_CHARACTER.get(group), "host_plugins": GROUP_HOST_PLUGINS.get(group, []),
                    "require_find_the_bug": group in EVIDENCE_GROUPS and BUILD_HAS_PROBE}
         for run in desync.expand_runs([scenario for scenario in SCENARIOS if scenario.group == group], PROFILES, REPEAT):
             members[run.name] = scenario_method(run)

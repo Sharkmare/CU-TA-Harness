@@ -115,7 +115,8 @@
         "unit.test_pr24log",
         "unit.test_recovery",
         "unit.test_positioncontrol",
-        "unit.test_position_wiring"
+        "unit.test_position_wiring",
+        "unit.test_corpse_chain"
       ],
       "needs_game": false
     },

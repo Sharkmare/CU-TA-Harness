@@ -218,7 +218,7 @@ class WiringTests(unittest.TestCase):
         self.assertEqual(names[1], "test_dune1_punch_banded_by_client_r1")
 
     def test_the_dune_group_starts_the_client_as_dune_with_the_pvp_rule_and_the_probe(self):
-        self.assertEqual(test_desync.GROUP_CLIENT_CHARACTER, {"hook-dune": 2})
+        self.assertEqual(test_desync.GROUP_CLIENT_CHARACTER["hook-dune"], 2)
         for arguments in (test_desync.GROUP_HOST_ARGUMENTS, test_desync.GROUP_CLIENT_ARGUMENTS):
             self.assertIn("--mp-setrule PVP 1", " ".join(arguments["hook-dune"]))
             self.assertIn("--mp-verbose", arguments["hook-dune"])
@@ -229,7 +229,7 @@ class WiringTests(unittest.TestCase):
         classes = {name: item for name, item in vars(test_desync).items() if name.startswith("Desync_") and isinstance(item, type)}
         dune = [item for name, item in classes.items() if name.endswith("hook_dune")]
         self.assertEqual([item.client_character for item in dune], [2])
-        self.assertTrue(all(item.client_character is None for name, item in classes.items() if not name.endswith("hook_dune")))
+        self.assertTrue(all(item.client_character is None for name, item in classes.items() if not name.endswith(("hook_dune", "corpse_repro"))))
 
     def test_the_character_is_set_through_the_client_link_before_the_world(self):
         game = mock.Mock()

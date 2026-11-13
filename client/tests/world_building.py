@@ -349,3 +349,4 @@ from . import static_copy  # noqa: E402,F401
 from . import console_leak  # noqa: E402,F401
 
 from . import spectator_cam  # noqa: E402,F401
+from . import corpse_chain  # noqa: E402,F401

@@ -30,6 +30,8 @@ PR24_CONTROL_STAGE_CHOICE = "pr24-control-stage"
 PR24_FIXED_STAGE_CHOICE = "pr24-fixed-stage"
 PR24_VERBOSE_STAGE_CHOICE = "pr24-fixed-verbose-stage"
 PR24_CONTROL_VERBOSE_STAGE_CHOICE = "pr24-control-verbose-stage"
+PR24_CORPSE_STAGE_CHOICE = "pr24-corpse-verbose-stage"
+PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CORPSE_STAGE"
 PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_VERBOSE_STAGE"
 PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_VERBOSE_STAGE"
 PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_STAGE"
@@ -273,6 +275,10 @@ def pr24_control_verbose_stage_directory():
     return fullbuild_stage_directory(PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control_verbose")
 
 
+def pr24_corpse_stage_directory():
+    return fullbuild_stage_directory(PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_verbose")
+
+
 def spectator_fix_stage_directory():
     return fullbuild_stage_directory(SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_spectator_fix")
 
@@ -280,7 +286,8 @@ def spectator_fix_stage_directory():
 def stage_directory_by_build():
     return {"official-5.5.0": official_stage_directory, "fullbuild-control": fullbuild_control_stage_directory, "fullbuild-fixed": fullbuild_fixed_stage_directory,
             "spectator-fix": spectator_fix_stage_directory, "pr24-control": pr24_control_stage_directory, "pr24-fixed": pr24_fixed_stage_directory,
-            "pr24-fixed-verbose": pr24_verbose_stage_directory, "pr24-control-verbose": pr24_control_verbose_stage_directory}
+            "pr24-fixed-verbose": pr24_verbose_stage_directory, "pr24-control-verbose": pr24_control_verbose_stage_directory,
+            "pr24-corpse-verbose": pr24_corpse_stage_directory}
 
 
 def install_stage_together(copy, directory):
@@ -353,6 +360,8 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, spectator_fix_stage_directory())
     elif together == PR24_CONTROL_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_control_stage_directory())
+    elif together == PR24_CORPSE_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, pr24_corpse_stage_directory())
     elif together == PR24_CONTROL_VERBOSE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_control_verbose_stage_directory())
     elif together == PR24_VERBOSE_STAGE_CHOICE:
