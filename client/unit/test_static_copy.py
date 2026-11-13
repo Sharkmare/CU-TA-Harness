@@ -63,6 +63,8 @@ class PrepareHarness(unittest.TestCase):
         self.host = mock.Mock()
         self.client = mock.Mock()
         self.host.get.return_value = 500
+        self.host.call.return_value = []
+        self.client.call.return_value = []
         self.target = {"handle": "id:5", "clientHandle": "id:-5", "position": {"x": 60.0, "y": 100.5}, "health": 1000.0}
         self.client_state = {"bodyType": "Static", "physicsActive": False}
         self.spawn_error = None
@@ -152,6 +154,35 @@ class StaticOfferTests(PrepareHarness):
         self.assertEqual(context["target"]["clientFarState"]["physicsActive"], False)
         self.assertEqual(static.STATE["adopted"], 1)
         self.assertEqual(static.STATE["static_at_far"], 0)
+
+    def start_patches(self, client_active):
+        for patch in self.patches(client_active):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_a_standing_building_with_thousands_of_health_is_usable_as_a_static_target(self):
+        offers = self.run_offer(False)
+        big = dict(offers[0], described=dict(offers[0]["described"], health=5000.0))
+        self.assertTrue(static.static_offer_usable(big))
+        tiny = dict(offers[0], described=dict(offers[0]["described"], health=10.0))
+        self.assertFalse(static.static_offer_usable(tiny))
+
+    def test_a_far_copy_that_is_never_static_falls_back_to_a_static_building_near_the_seat(self):
+        self.start_patches(False)
+        self.client_state = {"bodyType": "Dynamic", "physicsActive": True}
+        self.client_states = []
+        with mock.patch.object(static.crates, "crate_physics", lambda game, handle: {"handle": handle, "bodyType": "Dynamic", "physicsActive": True} if handle != "id:-11" else {"handle": handle, "bodyType": "Static", "physicsActive": False}):
+            context = static.prepare(self.host, self.client)
+        self.assertTrue(context["target"]["adopted"])
+        self.assertEqual(context["hostHandle"], "id:11")
+        self.assertEqual(static.STATE["adopted"], 1)
+
+    def test_a_far_crate_that_ended_up_close_falls_back_to_a_static_building_near_the_seat(self):
+        self.start_patches(False)
+        self.forced_position = {"x": 20.0, "y": 100.5}
+        context = static.prepare(self.host, self.client)
+        self.assertTrue(context["target"]["adopted"])
+        self.host.set.assert_called_once_with("id:5", "health", 0)
 
     def test_an_adopted_building_is_never_destroyed_by_the_cleanup(self):
         context = {"host": self.host, "hostHandle": "id:11", "target": {"adopted": True}, "measurements": [], "anchor": None}

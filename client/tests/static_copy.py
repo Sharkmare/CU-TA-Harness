@@ -15,6 +15,7 @@ MIN_FAR_DISTANCE = 40.0
 FAR_ATTEMPTS = 4
 OFFER_RADIUS = 60.0
 LIMB_REACH = 4.0
+STATIC_HEALTH_HIGH = 20000.0
 LIMB_SETTLE_TIMEOUT_SECONDS = 6.0
 LIMB_POLL_SECONDS = 0.15
 OFFER_LIMIT = 15
@@ -75,7 +76,8 @@ def world_offer(host, client, anchor):
 
 
 def static_offer_usable(offer):
-    low, high = world.HEALTH_RANGE
+    """A standing building is not a spawned crate, so its health may be far above the crate range: only a floor applies, so that one swing's damage shows."""
+    low, high = world.HEALTH_RANGE[0], STATIC_HEALTH_HIGH
     described = offer["described"]
     return (described is not None and offer["client"] is not None and offer["client"]["physicsActive"] is False and not described["animal"] and not described["cantHit"]
             and not described["indestructible"] and "corpse" not in described["name"].lower() and low <= described["health"] <= high)
@@ -93,6 +95,20 @@ def adopt_static_building(offer, anchor, states):
                   settleTrace=[], skippedPicks=[], timesUsedBefore=0)
     return {"position": described["position"], "name": None, "host": None, "hostHandle": described["handle"], "clientHandle": offer["clientHandle"], "target": target, "measurements": [],
             "anchor": anchor}
+
+
+def try_adopt(host, client, anchor, states, why):
+    """The far spawn did not give a Static copy: list what the world offers near the client and adopt a usable static building as the swing target when there is one."""
+    offers = world_offer(host, client, anchor)
+    usable_offers = [offer for offer in offers if static_offer_usable(offer)]
+    STATE["offers"] = offer_summary(offers)
+    print("\nSTATIC OFFER (%s): %d buildings within %.0f of the client, %d usable static ones: %s" % (why, len(offers), OFFER_RADIUS, len(usable_offers), STATE["offers"]))
+    if not usable_offers:
+        return None
+    context = adopt_static_building(usable_offers[0], anchor, states)
+    context["host"] = host
+    STATE["adopted"] += 1
+    return context
 
 
 def fail_setup(category, message):
@@ -114,20 +130,10 @@ def prepare(host, client):
     far_distance = 0.0
     for attempt in range(1, FAR_ATTEMPTS + 1):
         pocket = find_far_pocket(host, anchor, half_width, farther_than=far_distance)
-        if pocket is None and not states:
-            offers = world_offer(host, client, anchor)
-            usable_offers = [offer for offer in offers if static_offer_usable(offer)]
-            STATE["offers"] = offer_summary(offers)
-            print("\nSTATIC OFFER: no far pocket; %d buildings within %.0f of the client, %d usable static ones: %s" % (len(offers), OFFER_RADIUS, len(usable_offers), STATE["offers"]))
-            if usable_offers:
-                context = adopt_static_building(usable_offers[0], anchor, states)
-                context["host"] = host
-                STATE["adopted"] += 1
-                return context
         if pocket is None:
-            if STATE["offers"] is None:
-                STATE["offers"] = offer_summary(world_offer(host, client, anchor))
-                print("STATIC OFFER: no usable far pocket after %d attempts; buildings within %.0f of the client: %s" % (len(states), OFFER_RADIUS, STATE["offers"]))
+            context = try_adopt(host, client, anchor, states, "no far pocket after %d attempts" % len(states))
+            if context is not None:
+                return context
             fail_setup("no-far-pocket", "no open pocket %s to %s tiles from the client at (%.1f, %.1f) in a world half width of %d, farther than %.0f; copy states so far %s; buildings the world offers within %.0f (none usable as a static target) %s" % (
                 FAR_COLUMNS[0], FAR_COLUMNS[-1], anchor["x"], anchor["y"], half_width, far_distance, states, OFFER_RADIUS, STATE["offers"]))
         try:
@@ -143,11 +149,17 @@ def prepare(host, client):
                        "hostBodyType": host_far["bodyType"], "hostPhysicsActive": host_far["physicsActive"]})
         if far_distance < MIN_FAR_DISTANCE:
             crates_destroy(host, target["handle"])
+            context = try_adopt(host, client, anchor, states, "the spawned crate ended %.1f from the client" % far_distance)
+            if context is not None:
+                return context
             fail_setup("crate-not-far", "the spawned crate is only %.1f from the client, below %.0f" % (far_distance, MIN_FAR_DISTANCE))
         if client_flags["physicsActive"] is False:
             break
         crates_destroy(host, target["handle"])
     if client_flags["physicsActive"] is not False:
+        context = try_adopt(host, client, anchor, states, "the far copy was never Static")
+        if context is not None:
+            return context
         fail_setup("client-copy-not-static-at-far", "the client copy is not Static at any tried distance, so no static-copy result is counted; copy state per distance %s" % states)
     STATE["static_at_far"] += 1
     target = dict(target, farDistance=round(far_distance, 1), hostFarState=host_far, clientFarState=client_flags, anchor=anchor, farAttempts=states)
