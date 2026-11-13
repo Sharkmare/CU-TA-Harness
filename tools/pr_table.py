@@ -10,6 +10,12 @@ sys.path.insert(0, os.path.join(REPOSITORY_ROOT, "client"))
 from casualtieslink.reports import prtable
 
 
+def emit(text):
+    """Write the text as ASCII bytes with LF line endings, so the output pastes the same on every platform."""
+    sys.stdout.buffer.write(text.encode("ascii"))
+    sys.stdout.buffer.flush()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profile", help="profile file, for example client/profiles/corpse-fix.json")
@@ -18,13 +24,13 @@ def main(argv=None):
     arguments = parser.parse_args(argv)
     result = prtable.build_result(prtable.load_profile(arguments.profile), arguments.root)
     if arguments.format == "fenced":
-        sys.stdout.write(prtable.render_fenced(result))
+        emit(prtable.render_fenced(result))
     if arguments.format in ("text", "both"):
-        sys.stdout.write(prtable.render_text(result))
+        emit(prtable.render_text(result))
     if arguments.format == "both":
-        sys.stdout.write("\n")
+        emit("\n")
     if arguments.format in ("markdown", "both"):
-        sys.stdout.write(prtable.render_markdown(result))
+        emit(prtable.render_markdown(result))
     return 0
 
 

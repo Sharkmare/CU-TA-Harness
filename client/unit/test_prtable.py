@@ -365,12 +365,13 @@ class RegistryTests(unittest.TestCase):
             profile_path = os.path.join(folder, "profile.json")
             with open(profile_path, "w", encoding="utf-8") as handle:
                 json.dump(corpse_profile(), handle)
-            fenced = subprocess.run([sys.executable, "-I", tool, profile_path, "--format", "fenced", "--root", FIXTURES], capture_output=True, text=True)
-            both = subprocess.run([sys.executable, "-I", tool, profile_path, "--format", "both", "--root", FIXTURES], capture_output=True, text=True)
+            fenced = subprocess.run([sys.executable, "-I", tool, profile_path, "--format", "fenced", "--root", FIXTURES], capture_output=True)
+            both = subprocess.run([sys.executable, "-I", tool, profile_path, "--format", "both", "--root", FIXTURES], capture_output=True)
         self.assertEqual(fenced.returncode, 0, fenced.stderr)
-        self.assertTrue(fenced.stdout.startswith("```text\n") and fenced.stdout.endswith("```\n"))
-        self.assertIn("### Main tests", both.stdout)
-        self.assertIn("MAIN\n", both.stdout)
+        self.assertTrue(fenced.stdout.startswith(b"```text\n") and fenced.stdout.endswith(b"```\n"))
+        self.assertIn(b"### Main tests", both.stdout)
+        self.assertIn(b"MAIN\n", both.stdout)
+        self.assertNotIn(b"\r", fenced.stdout + both.stdout)
 
 
 class CorpseTableTests(unittest.TestCase):
