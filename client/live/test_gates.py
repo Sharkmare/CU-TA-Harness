@@ -3,7 +3,7 @@ import time
 import unittest
 
 from casualtieslink import observe
-from casualtieslink.instances import ScenarioGames
+from casualtieslink.games.instances import ScenarioGames
 
 from live import rig
 from live.test_pair import PAIR_ENABLED, PLAYER_BODY_PREFIX, SKIP_REASON, read_bodies, wait_for_bodies

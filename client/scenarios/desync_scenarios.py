@@ -3,8 +3,8 @@ import os
 import unittest
 import time
 
-from casualtieslink import positioncontrol
-from casualtieslink.desync import Scenario, SeriesScenario
+from casualtieslink.scenarioengine import positioncontrol
+from casualtieslink.scenarioengine.desync import Scenario, SeriesScenario
 
 SETTLE_SECONDS = 3.0
 APPEAR_TIMEOUT_SECONDS = 20.0
@@ -732,7 +732,7 @@ def preflight_problems(fragments, attempts, builds=()):
 
 
 def stage_dll_preflight(fragments, attempts, builds):
-    from casualtieslink import instances
+    from casualtieslink.games import instances
     directories = instances.stage_directory_by_build()
     problems = []
     for build in builds:

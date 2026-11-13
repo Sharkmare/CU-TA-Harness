@@ -522,7 +522,7 @@ class CheckAndWiringTests(unittest.TestCase):
         self.assertEqual(chain.preflight(["spawned_crate"], 1), [])
 
     def test_a_planned_launch_is_one_launch_of_one_run(self):
-        from casualtieslink import launchplan
+        from casualtieslink.scenarioengine import launchplan
         for fragment in ["corpse_chain_by_client"] + [name for name, *_ in chain.CONTROLS]:
             counts = scenarios.counts_by_group([fragment, "launch_log_checks"])
             launches = launchplan.plan_launches(["pr24-3d060fe-corpse-fix"], sorted(counts), launchplan.parse_profiles(["100:0"]), 1, [fragment, "launch_log_checks"])

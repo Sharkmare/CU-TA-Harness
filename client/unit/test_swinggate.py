@@ -2,7 +2,7 @@ import copy
 import unittest
 from unittest import mock
 
-from casualtieslink import swinggate
+from casualtieslink.scenarioengine import swinggate
 from scenarios import world_building as world
 
 SEAT = {"x": 0.0, "y": 0.0}

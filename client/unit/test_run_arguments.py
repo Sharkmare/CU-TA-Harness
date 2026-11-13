@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 import run_tests
-from casualtieslink import desync
+from casualtieslink.scenarioengine import desync
 
 
 class RunArgumentTests(unittest.TestCase):

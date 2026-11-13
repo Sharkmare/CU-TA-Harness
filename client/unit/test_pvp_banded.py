@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from casualtieslink import desync, launchplan
+from casualtieslink.scenarioengine import desync, launchplan
 from scenarios import desync_scenarios as scenarios
 from scenarios import hook_scenarios, pvp_banded, regression_scenarios, spawned_crates as crates
 

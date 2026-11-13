@@ -5,8 +5,8 @@ import os
 import time
 import unittest
 
-from casualtieslink import positioncontrol, swinggate
-from casualtieslink.desync import Scenario
+from casualtieslink.scenarioengine import positioncontrol, swinggate
+from casualtieslink.scenarioengine.desync import Scenario
 
 from scenarios import desync_scenarios as base
 from scenarios import world_building as world

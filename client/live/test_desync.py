@@ -2,8 +2,8 @@ import os
 import time
 import unittest
 
-from casualtieslink import desync, launchplan
-from casualtieslink.instances import ScenarioGames, flavour_zip, stage_directory_by_build
+from casualtieslink.scenarioengine import desync, launchplan
+from casualtieslink.games.instances import ScenarioGames, flavour_zip, stage_directory_by_build
 from casualtieslink.launcher import mp_arguments
 
 from live import rig

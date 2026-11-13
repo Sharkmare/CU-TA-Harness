@@ -7,7 +7,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "client"))
 
-from casualtieslink import miningsummary, pr24log
+from casualtieslink.reports import miningsummary, pr24log
 
 FIRST_LINES = 6
 WINDOW_BEFORE_SECONDS = 3.0

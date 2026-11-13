@@ -5,8 +5,8 @@ import statistics
 import time
 import unittest
 
-from casualtieslink import udpproxy
-from casualtieslink.udpproxy import LOOPBACK, DelayProxy
+from casualtieslink.games import udpproxy
+from casualtieslink.games.udpproxy import LOOPBACK, DelayProxy
 
 RECEIVE_TIMEOUT_SECONDS = 3.0
 TOLERANCE_SECONDS = 0.04

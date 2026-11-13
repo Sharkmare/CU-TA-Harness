@@ -6,7 +6,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HARNESS = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(HARNESS, "client"))
 
-from casualtieslink import instances, pagedselect
+from casualtieslink.games import instances
+from casualtieslink.charselect import pagedselect
 
 STATE_ROOT = os.path.join(HARNESS, ".state")
 DEFAULT_SESSION_DIRECTORY = os.path.join(STATE_ROOT, "paged_select")

@@ -8,7 +8,7 @@ about the product, reported apart from the invalid runs.
 import math
 import time
 
-from casualtieslink import positioncontrol
+from casualtieslink.scenarioengine import positioncontrol
 
 LIMB_REST_TOLERANCE = 0.2
 AIM_SETTLE_SECONDS = 0.5

@@ -5,7 +5,7 @@ import zipfile
 from types import SimpleNamespace
 from unittest import mock
 
-from casualtieslink import instances
+from casualtieslink.games import instances
 
 
 def touch(path, text="x"):
@@ -160,7 +160,7 @@ class ConfigureInstanceTests(InstanceFixture):
         self.assertIn(instances.SESSION_ADDRESS, instances.host_arguments())
 
     def test_the_stage_choice_follows_the_build_name(self):
-        from casualtieslink import desync
+        from casualtieslink.scenarioengine import desync
         self.assertEqual(desync.together_choice("pr24-3d060fe-plain"), "pr24-3d060fe-plain-stage")
         self.assertEqual(desync.parse_build("pr24-3d060fe-plain"), "pr24-3d060fe-plain")
 

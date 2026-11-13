@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from casualtieslink import desync, instances, launchplan
+from casualtieslink.scenarioengine import desync, launchplan
+from casualtieslink.games import instances
 from scenarios import desync_scenarios as scenarios
 from scenarios import hook_scenarios, regression_scenarios, spawned_crates, v2_suite
 from live import test_desync

@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from casualtieslink import desync, instances
+from casualtieslink.scenarioengine import desync
+from casualtieslink.games import instances
 from scenarios import desync_scenarios as scenarios
 from scenarios import spectator_cam as cam
 from live import test_desync

@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 
-from casualtieslink import miningsummary
+from casualtieslink.reports import miningsummary
 
 
 def report(verdict="persisted", repetition=1, swings=4, accepted=4, host_steps=3, client_steps=2, positions=None):

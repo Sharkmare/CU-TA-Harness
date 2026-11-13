@@ -2,8 +2,8 @@ import threading
 import time
 import unittest
 
-from casualtieslink import positioncontrol, swinggate
-from casualtieslink.desync import Scenario
+from casualtieslink.scenarioengine import positioncontrol, swinggate
+from casualtieslink.scenarioengine.desync import Scenario
 
 from scenarios import corpse_banded as banded
 from scenarios import desync_scenarios as base

@@ -7,7 +7,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HARNESS = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(HARNESS, "client"))
 
-from casualtieslink import lock, recovery
+from casualtieslink import lock
+from casualtieslink.games import recovery
 
 STATE_ROOT = os.path.join(HARNESS, ".state")
 

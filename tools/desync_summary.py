@@ -5,7 +5,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "client"))
 
-from casualtieslink import launchsummary
+from casualtieslink.reports import launchsummary
 
 DEFAULT_DIRECTORY = os.path.join(os.path.dirname(HERE), ".state", "desync_reports")
 

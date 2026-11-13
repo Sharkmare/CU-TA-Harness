@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from casualtieslink import testcopy
+from casualtieslink.games import testcopy
 
 BOOT = "gfx-enable-gfx-jobs=1\nsingle-instance=\nbuild-guid=abc\n"
 

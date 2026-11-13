@@ -1,6 +1,8 @@
 import unittest
 
-from casualtieslink import Game, desync, instances
+from casualtieslink import Game
+from casualtieslink.scenarioengine import desync
+from casualtieslink.games import instances
 from scenarios import regression_scenarios as regress
 from unittest import mock
 import os

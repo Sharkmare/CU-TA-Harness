@@ -6,7 +6,7 @@ import threading
 import time
 import zipfile
 
-from . import launchplan
+from casualtieslink.scenarioengine import launchplan
 
 SAMPLE_OFFSETS_SECONDS = (0.0, 2.0, 10.0)
 FLAVOUR_BUILDS = ("stock-5.5.0", "stock-5.4.0", "fork")

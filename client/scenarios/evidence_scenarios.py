@@ -3,7 +3,7 @@ import itertools
 import re
 import time
 
-from casualtieslink.desync import Scenario
+from casualtieslink.scenarioengine.desync import Scenario
 
 from scenarios import desync_scenarios as base
 from scenarios import hook_scenarios as hooks

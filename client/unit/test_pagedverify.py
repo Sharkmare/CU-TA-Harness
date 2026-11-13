@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from casualtieslink import oswindow, pagedselect, pagedverify
+from casualtieslink.charselect import oswindow, pagedselect, pagedverify
 
 PREVIOUS = {"x": 50.0, "y": 700.0}
 NEXT = {"x": 1230.0, "y": 700.0}

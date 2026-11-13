@@ -2,7 +2,7 @@ import json
 import re
 import time
 
-from casualtieslink import desync
+from casualtieslink.scenarioengine import desync
 
 CUSTOM_CHARACTER = 3
 EXPERIMENT_CHARACTER = 0

@@ -8,7 +8,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HARNESS = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(HARNESS, "client"))
 
-from casualtieslink import instances, oswindow, pagedselect, pagedverify
+from casualtieslink.games import instances
+from casualtieslink.charselect import oswindow, pagedselect, pagedverify
 from casualtieslink.commands import Game
 from casualtieslink.launcher import running_game_pids
 

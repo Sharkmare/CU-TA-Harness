@@ -1,7 +1,8 @@
 import math
 import unittest
 
-from casualtieslink import Game, desync
+from casualtieslink import Game
+from casualtieslink.scenarioengine import desync
 from scenarios import desync_scenarios as scenarios
 
 from .fake_link import FakeFailure, FakeLink

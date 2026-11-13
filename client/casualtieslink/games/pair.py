@@ -3,9 +3,9 @@ import shutil
 import subprocess
 import time
 
-from . import testcopy
-from .launcher import GameProcess, running_game_pids, mp_arguments
-from .parsing import LinkError
+from casualtieslink.games import testcopy
+from casualtieslink.launcher import GameProcess, running_game_pids, mp_arguments
+from casualtieslink.parsing import LinkError
 
 PRODUCT_PROFILE_RELATIVE = os.path.join("AppData", "LocalLow", "Orsoniks", "CasualtiesUnknown")
 PREFS_REGISTRY_KEY = r"HKCU\Software\Orsoniks\CasualtiesUnknown"

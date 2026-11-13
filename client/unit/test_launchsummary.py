@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 
-from casualtieslink import launchsummary
+from casualtieslink.reports import launchsummary
 
 
 def report(verdict, delay, jitter, repetition, rows=None, hits=4, answers=None, observed=None, launch="L1"):

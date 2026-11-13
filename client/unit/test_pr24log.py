@@ -1,6 +1,6 @@
 import unittest
 
-from casualtieslink import pr24log
+from casualtieslink.reports import pr24log
 
 HOOK_BODY = "hook#0(Body_HostD tag=Player at=1.0,2.0 dist=1.5 building=False body=True took=True breakLoop=False block=False)"
 HOOK_GROUND = "hook#1(Ground tag=Untagged at=1.0,1.0 dist=2.0 building=False body=False took=False breakLoop=False block=False)"

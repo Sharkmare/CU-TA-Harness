@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 import run_tests
-from casualtieslink import recovery
+from casualtieslink.games import recovery
 
 
 class SnapshotTests(unittest.TestCase):

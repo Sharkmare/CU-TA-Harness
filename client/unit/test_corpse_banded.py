@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest import mock
 
-from casualtieslink import desync, launchplan
+from casualtieslink.scenarioengine import desync, launchplan
 from scenarios import corpse_banded as corpse
 from scenarios import desync_scenarios as scenarios
 from scenarios import spawned_crates as crates
@@ -272,7 +272,7 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(corpse.preflight(["spawned_crate"], 1), [])
 
     def test_the_stage_builds_for_both_launches_exist_in_the_stage_table(self):
-        from casualtieslink import instances
+        from casualtieslink.games import instances
         for build in ("pr24-3d060fe-corpse-fix2", "pr24-3d060fe-plain"):
             self.assertIn(build, instances.stage_directory_by_build())
             self.assertIn(build, desync.KNOWN_BUILDS)

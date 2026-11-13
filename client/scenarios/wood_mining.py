@@ -15,8 +15,8 @@ client sent after the invoke plus the delay the proxy gave it.
 import re
 import time
 
-from casualtieslink import desync, positioncontrol, swinggate
-from casualtieslink.desync import SeriesScenario
+from casualtieslink.scenarioengine import desync, positioncontrol, swinggate
+from casualtieslink.scenarioengine.desync import SeriesScenario
 from scenarios import desync_scenarios as base
 
 WOOD_BLOCK_ID = 11

@@ -3,7 +3,7 @@ import re
 import time
 import unittest
 
-from casualtieslink.desync import Scenario
+from casualtieslink.scenarioengine.desync import Scenario
 
 from scenarios import desync_scenarios as base
 from scenarios import evidence_scenarios as evidence

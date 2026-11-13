@@ -1,7 +1,7 @@
 import unittest
 
-from casualtieslink import launchplan
-from casualtieslink.launchplan import NetworkProfile
+from casualtieslink.scenarioengine import launchplan
+from casualtieslink.scenarioengine.launchplan import NetworkProfile
 
 COUNTS = {"default": {"plain": 10, "network": 0}, "hand-mining": {"plain": 0, "network": 2}, "mixed-characters": {"plain": 1, "network": 0}}
 

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 import zipfile
 
-from casualtieslink import desync
+from casualtieslink.scenarioengine import desync
 
 
 class FakeWorld:

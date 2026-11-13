@@ -5,10 +5,10 @@ import shutil
 import subprocess
 import zipfile
 
-from . import friendszip, testcopy
-from .launcher import GameProcess, mp_arguments
-from .pair import PREFS_REGISTRY_KEY, ProfileGuard
-from .udpproxy import DelayProxy
+from casualtieslink.games import friendszip, testcopy
+from casualtieslink.launcher import GameProcess, mp_arguments
+from casualtieslink.games.pair import PREFS_REGISTRY_KEY, ProfileGuard
+from casualtieslink.games.udpproxy import DelayProxy
 
 MODS_ROOT_ENVIRONMENT_VARIABLE = "CU_MODS_ROOT"
 STOCK_DIR_ENVIRONMENT_VARIABLE = "CU_STOCK_TOGETHER_DIR"

@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "client")
-TARGET = "casualtieslink/udpproxy.py"
+TARGET = "casualtieslink/games/udpproxy.py"
 MUTATIONS = [
     ("            when = base + position * gap\n", "            when = base + (len(state.held) - 1 - position) * gap\n", "held packets released in reverse order"),
     ("        base = max(state.end, state.last_due)\n", "        base = state.end\n", "a flush can overtake packets queued before the stall"),

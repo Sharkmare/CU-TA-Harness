@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from casualtieslink import desync, instances
+from casualtieslink.scenarioengine import desync
+from casualtieslink.games import instances
 from scenarios import hook_scenarios as hooks
 
 from .fake_link import FakeFailure, FakeLink

@@ -4,7 +4,7 @@ import time
 import unittest
 
 from casualtieslink.launcher import game_dir, mp_arguments
-from casualtieslink.pair import GamePair, client_flags, host_flags
+from casualtieslink.games.pair import GamePair, client_flags, host_flags
 
 from live import rig
 

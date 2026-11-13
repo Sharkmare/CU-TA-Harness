@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from casualtieslink import pagedselect
+from casualtieslink.charselect import pagedselect
 
 
 class TestPackTests(unittest.TestCase):
@@ -41,7 +41,7 @@ class TestPackTests(unittest.TestCase):
             pagedselect.write_test_pack(self.plugins, 0, self.template)
 
     def test_the_real_template_exists_in_the_mods_tree(self):
-        from casualtieslink import instances
+        from casualtieslink.games import instances
         self.assertTrue(os.path.isfile(os.path.join(instances.mods_root(), pagedselect.TEMPLATE_RELATIVE)))
 
 

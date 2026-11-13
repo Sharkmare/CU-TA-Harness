@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from casualtieslink import pair
-from casualtieslink.pair import GamePair, ProfileGuard
+from casualtieslink.games import pair
+from casualtieslink.games.pair import GamePair, ProfileGuard
 
 
 class ProfileGuardTests(unittest.TestCase):

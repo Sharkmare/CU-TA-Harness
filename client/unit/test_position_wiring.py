@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from casualtieslink import desync, positioncontrol
+from casualtieslink.scenarioengine import desync, positioncontrol
 from scenarios import desync_scenarios as scenarios
 from scenarios import pvp_banded
 from scenarios import spawned_crates as crates

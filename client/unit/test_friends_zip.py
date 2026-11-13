@@ -4,7 +4,7 @@ import unittest
 import zipfile
 from unittest import mock
 
-from casualtieslink import friendszip, instances
+from casualtieslink.games import friendszip, instances
 from scenarios import friends_zip as checks
 
 PLUGINS = "BepInEx/plugins/"

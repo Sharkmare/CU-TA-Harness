@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from casualtieslink import positioncontrol as control
+from casualtieslink.scenarioengine import positioncontrol as control
 
 
 class FakeBodyGame:

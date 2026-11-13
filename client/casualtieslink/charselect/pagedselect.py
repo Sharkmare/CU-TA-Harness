@@ -4,10 +4,10 @@ import os
 import shutil
 import time
 
-from . import friendszip, instances, testcopy
-from .launcher import GameProcess, running_game_pids
-from .lock import GameLock
-from .pair import ProfileGuard
+from casualtieslink.games import friendszip, instances, testcopy
+from casualtieslink.launcher import GameProcess, running_game_pids
+from casualtieslink.lock import GameLock
+from casualtieslink.games.pair import ProfileGuard
 
 TEST_PACK_FOLDER = "CasualtiesCharacters-Testpack"
 TEST_PACK_MANIFEST = {"id": "testpack", "name": "Test pack", "version": "1.0.0", "minLoader": "0.2.0"}

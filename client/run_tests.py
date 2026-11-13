@@ -13,9 +13,10 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, REPO_ROOT)
 
 import selection
-from casualtieslink import desync, launchplan, Game, GameAlreadyRunning, GameProcess, mp_arguments
+from casualtieslink.scenarioengine import desync, launchplan
+from casualtieslink import Game, GameAlreadyRunning, GameProcess, mp_arguments
 from casualtieslink.lock import GameLock
-from casualtieslink.pair import ProfileGuard
+from casualtieslink.games.pair import ProfileGuard
 from casualtieslink.transport import default_port
 from live import rig
 
@@ -275,7 +276,7 @@ def run_launch_plan(arguments):
             code = subprocess.run(command, timeout=budget + LAUNCH_STARTUP_SECONDS).returncode
         except subprocess.TimeoutExpired:
             code = -1
-            from casualtieslink import recovery
+            from casualtieslink.games import recovery
             print("TIMEOUT after %.0fs: killed games %s; the profile was NOT restored and the lock may be stale. Copy any logs out of the %%TEMP%% scenario copies, then run: python tools/recover_after_abort.py" % (budget + LAUNCH_STARTUP_SECONDS, recovery.stop_stray_games()))
         failed = failed or code != 0
         print("%s: exit %s in %.0fs" % (launch.identifier, code, time.time() - started), flush=True)

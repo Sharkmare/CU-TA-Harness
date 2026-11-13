@@ -2,7 +2,7 @@ import math
 import statistics
 import time
 
-from casualtieslink.desync import Scenario, SeriesScenario
+from casualtieslink.scenarioengine.desync import Scenario, SeriesScenario
 
 from scenarios import desync_scenarios as base
 

@@ -5,7 +5,7 @@ import threading
 import unittest
 from unittest import mock
 
-from casualtieslink import desync, launchplan
+from casualtieslink.scenarioengine import desync, launchplan
 
 
 def sample(t, host, client):

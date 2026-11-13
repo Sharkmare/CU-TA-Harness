@@ -18,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPOSITORY_ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPOSITORY_ROOT, "client"))
 
-from casualtieslink import instances
+from casualtieslink.games import instances
 from casualtieslink.launcher import GameProcess, mp_arguments
 from casualtieslink.lock import GameLock
 from scenarios.desync_scenarios import ready_up

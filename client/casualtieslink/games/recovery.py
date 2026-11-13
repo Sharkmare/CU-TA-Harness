@@ -3,8 +3,8 @@ import os
 import re
 import subprocess
 
-from . import pair, testcopy
-from .launcher import running_game_pids
+from casualtieslink.games import pair, testcopy
+from casualtieslink.launcher import running_game_pids
 
 SNAPSHOT_PATTERN = re.compile(r"^profile-(\d{8}-\d{6})$")
 SCENARIO_COPY_NAMES = ("CU-scenario-host", "CU-scenario-client", "CU-paged-select")

@@ -1,14 +1,14 @@
 import os
 import shutil
 
-from .launcher import game_dir
+from casualtieslink.launcher import game_dir
 
 COPY_ENVIRONMENT_VARIABLE = "CU_TEST_COPY_DIR"
 FALLBACK_COPY_SUBDIR = "CU-test-client"
 MARKER_NAME = ".cu-test-copy"
 BOOT_CONFIG_RELATIVE = os.path.join("CasualtiesUnknown_Data", "boot.config")
 SINGLE_INSTANCE_KEY = "single-instance"
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 SKIPPED_NAMES = {"LogOutput.log", "TogetherLogs", "cache"}
 
 

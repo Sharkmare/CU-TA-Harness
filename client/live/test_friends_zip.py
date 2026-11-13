@@ -3,8 +3,9 @@ import os
 import time
 import unittest
 
-from casualtieslink.instances import FRIENDS_ZIP_CHOICE, SESSION_ADDRESS, ScenarioGames
-from casualtieslink import desync, friendszip
+from casualtieslink.games.instances import FRIENDS_ZIP_CHOICE, SESSION_ADDRESS, ScenarioGames
+from casualtieslink.scenarioengine import desync
+from casualtieslink.games import friendszip
 
 from scenarios import evidence_scenarios, friends_zip as checks, pvp_banded, spawned_crates
 from scenarios.desync_scenarios import ready_up, try_ready
