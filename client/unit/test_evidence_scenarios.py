@@ -1,7 +1,7 @@
 import unittest
 
 from casualtieslink import Game
-from tests import evidence_scenarios as evidence
+from scenarios import evidence_scenarios as evidence
 
 from .fake_link import FakeFailure, FakeLink
 
@@ -113,14 +113,14 @@ class GateTests(unittest.TestCase):
             self.assertIsNone(evidence.find_the_bug_enabled(Game(link.port)))
 
     def test_the_evidence_group_is_verbose_probe_configured_and_gated(self):
-        from tests import test_desync
+        from live import test_desync
         self.assertIn("--mp-verbose", test_desync.GROUP_HOST_ARGUMENTS["hook-evidence"])
         self.assertIn("--mp-verbose", test_desync.GROUP_CLIENT_ARGUMENTS["hook-evidence"])
         self.assertIn("hook-evidence", test_desync.PROBE_GROUPS)
         self.assertIn("hook-evidence", test_desync.EVIDENCE_GROUPS)
 
     def test_the_gate_refuses_when_the_probe_is_off_and_lists_the_config(self):
-        from tests import test_desync
+        from live import test_desync
         class Games:
             host_copy = client_copy = "nowhere"
         original = test_desync.GAMES
@@ -141,7 +141,7 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(evidence.evidence_check({"measurements": [swing(1, 0.0, 0.0)]}), [])
 
     def test_the_scenario_is_selectable_by_one_fragment(self):
-        from tests import desync_scenarios as scenarios
+        from scenarios import desync_scenarios as scenarios
         self.assertEqual(scenarios.matching_scenario_names(["evidence_building"]), ["evidence_building_hit_by_client"])
         self.assertEqual(sorted(scenarios.counts_by_group(["evidence_building"])), ["hook-evidence"])
 

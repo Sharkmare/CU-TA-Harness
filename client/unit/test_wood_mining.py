@@ -1,6 +1,6 @@
 import unittest
 
-from tests import wood_mining as wood
+from scenarios import wood_mining as wood
 
 GOOD_IDENTITIES = {"host": 1, "client": 2, "clientOnHost": 2, "clientWanted": 2}
 UNIT = 24.68

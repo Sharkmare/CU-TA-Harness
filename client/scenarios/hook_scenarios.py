@@ -4,7 +4,7 @@ import time
 
 from casualtieslink.desync import Scenario, SeriesScenario
 
-from . import desync_scenarios as base
+from scenarios import desync_scenarios as base
 
 HOOK_GROUP = "hook-check"
 HOST_BODY_NAME = "Body_HostD"

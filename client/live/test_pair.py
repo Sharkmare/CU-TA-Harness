@@ -6,7 +6,7 @@ import unittest
 from casualtieslink.launcher import game_dir, mp_arguments
 from casualtieslink.pair import GamePair, client_flags, host_flags
 
-from . import rig
+from live import rig
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
 STOCK_DLL = os.environ.get("CU_STOCK_TOGETHER_DLL", "")

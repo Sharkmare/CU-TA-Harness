@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(REPOSITORY_ROOT, "client"))
 from casualtieslink import instances
 from casualtieslink.launcher import GameProcess, mp_arguments
 from casualtieslink.lock import GameLock
-from tests.desync_scenarios import ready_up
+from scenarios.desync_scenarios import ready_up
 
 DEFAULT_STAGE_CHOICE = "pr24-3d060fe-plain-stage"
 LOBBY_TYPE = "private"

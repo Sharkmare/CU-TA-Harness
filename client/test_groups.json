@@ -3,7 +3,7 @@
     {
       "id": "inert",
       "modules": [
-        "tests.test_inert"
+        "live.test_inert"
       ],
       "needs_game": false,
       "owns_game": true,
@@ -13,8 +13,8 @@
     {
       "id": "pair",
       "modules": [
-        "tests.test_pair",
-        "tests.test_pair_visuals"
+        "live.test_pair",
+        "live.test_pair_visuals"
       ],
       "needs_game": false,
       "owns_game": true,
@@ -23,7 +23,7 @@
     {
       "id": "gates",
       "modules": [
-        "tests.test_gates"
+        "live.test_gates"
       ],
       "needs_game": false,
       "owns_game": true,
@@ -32,7 +32,7 @@
     {
       "id": "friends-zip",
       "modules": [
-        "tests.test_friends_zip"
+        "live.test_friends_zip"
       ],
       "needs_game": false,
       "owns_game": true,
@@ -41,7 +41,7 @@
     {
       "id": "desync",
       "modules": [
-        "tests.test_desync"
+        "live.test_desync"
       ],
       "needs_game": false,
       "owns_game": true,
@@ -50,7 +50,7 @@
     {
       "id": "link",
       "modules": [
-        "tests.test_link"
+        "live.test_link"
       ],
       "needs_game": true,
       "watch_plugin": true,
@@ -59,7 +59,7 @@
     {
       "id": "run",
       "modules": [
-        "tests.test_run"
+        "live.test_run"
       ],
       "needs_game": true,
       "watch_plugin": true,
@@ -68,7 +68,7 @@
     {
       "id": "world",
       "modules": [
-        "tests.test_world"
+        "live.test_world"
       ],
       "needs_game": true,
       "watch_plugin": true,

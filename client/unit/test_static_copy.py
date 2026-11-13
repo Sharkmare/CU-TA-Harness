@@ -1,9 +1,9 @@
 import unittest
 from unittest import mock
 
-from tests import desync_scenarios as scenarios
-from tests import spawned_crates as crates
-from tests import static_copy as static
+from scenarios import desync_scenarios as scenarios
+from scenarios import spawned_crates as crates
+from scenarios import static_copy as static
 
 
 class Clock:

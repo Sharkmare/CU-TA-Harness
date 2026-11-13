@@ -1,7 +1,7 @@
 import copy
 
-from . import desync_scenarios as base
-from . import hook_scenarios as hooks
+from scenarios import desync_scenarios as base
+from scenarios import hook_scenarios as hooks
 
 GROUP = "hook-evidence"
 MINING_NAME = "v2check_dig_cracks"

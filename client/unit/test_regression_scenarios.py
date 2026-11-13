@@ -1,7 +1,7 @@
 import unittest
 
 from casualtieslink import Game, desync, instances
-from tests import regression_scenarios as regress
+from scenarios import regression_scenarios as regress
 from unittest import mock
 import os
 import tempfile
@@ -102,7 +102,7 @@ class PvpTests(unittest.TestCase):
         self.assertEqual(regress.pvp_check(context), [])
 
     def test_the_rule_is_read_and_an_unreadable_rule_is_reported_not_raised(self):
-        from tests import hook_scenarios as hooks
+        from scenarios import hook_scenarios as hooks
         with mock.patch.object(hooks, "pvp_prepare", return_value={"host": None}):
             def broken(arguments):
                 raise FakeFailure("no type named 'Together.Multiplayer'")
@@ -113,7 +113,7 @@ class PvpTests(unittest.TestCase):
 
 class MeasureTests(unittest.TestCase):
     def test_a_first_swing_that_does_nothing_stops_the_run_after_one_swing(self):
-        from tests import hook_scenarios as hooks
+        from scenarios import hook_scenarios as hooks
         calls = []
 
         def fake_measure(host, client, read_host, read_client, target_of, count=5, extra=None):
@@ -126,7 +126,7 @@ class MeasureTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
 
     def test_a_first_swing_that_lands_continues_with_the_rest_numbered_on(self):
-        from tests import hook_scenarios as hooks
+        from scenarios import hook_scenarios as hooks
         calls = []
 
         def fake_measure(host, client, read_host, read_client, target_of, count=5, extra=None):
@@ -147,14 +147,14 @@ class BuildAndGroupTests(unittest.TestCase):
         self.assertEqual(sorted(directories), sorted(desync.STAGE_CHOICES))
 
     def test_the_preflight_refuses_a_planned_stage_build_whose_dll_is_missing(self):
-        from tests import desync_scenarios as scenarios
+        from scenarios import desync_scenarios as scenarios
         with tempfile.TemporaryDirectory() as empty, mock.patch.dict(os.environ, {instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE: empty}):
             problems = scenarios.preflight_problems(["spawned_crate"], 12, ["pr24-3d060fe-plain"])
         self.assertEqual(len(problems), 1)
         self.assertIn("pr24-3d060fe-plain", problems[0])
 
     def test_the_preflight_accepts_a_stage_build_with_a_dll(self):
-        from tests import desync_scenarios as scenarios
+        from scenarios import desync_scenarios as scenarios
         with tempfile.TemporaryDirectory() as stage:
             for folder, name in (("Together", "CasualtiesMP.dll"), ("CUCoreLib", "CUCoreLib.dll")):
                 os.makedirs(os.path.join(stage, "plugins", folder))
@@ -164,7 +164,7 @@ class BuildAndGroupTests(unittest.TestCase):
                 self.assertEqual(scenarios.preflight_problems(["spawned_crate"], 12, ["pr24-3d060fe-plain"]), [])
 
     def test_the_regression_group_turns_the_pvp_rule_on_for_both_games(self):
-        from tests import test_desync
+        from live import test_desync
         for arguments in (test_desync.GROUP_HOST_ARGUMENTS, test_desync.GROUP_CLIENT_ARGUMENTS):
             joined = " ".join(arguments["hook-regression"])
             self.assertIn("--mp-setrule PVP 1", joined)
@@ -178,7 +178,7 @@ class BuildAndGroupTests(unittest.TestCase):
         self.assertTrue(any("should not have the repaired hook" in issue for issue in wrong["issues"]))
 
     def test_the_scenarios_are_selectable_with_one_fragment(self):
-        from tests import desync_scenarios as scenarios
+        from scenarios import desync_scenarios as scenarios
         self.assertEqual(scenarios.matching_scenario_names(["regress_"]), ["regress_building_hit_by_client", "regress_pvp_melee_by_client"])
         self.assertEqual(sorted(scenarios.counts_by_group(["regress_"])), ["hook-regression"])
 
@@ -194,7 +194,7 @@ class RepeatTests(unittest.TestCase):
         self.assertIsNone(regress.pick_target([near], self.anchor, exclude={regress.target_key(near["position"])}))
 
     def test_the_first_punch_is_retried_up_to_the_attempt_limit_and_misses_are_kept(self):
-        from tests import hook_scenarios as hooks
+        from scenarios import hook_scenarios as hooks
         outcomes = [[entry(1, 0.0, 0.0)], [entry(1, 0.0, 0.0)], [entry(1, 18.0, 18.0)], [entry(1, 18.0, 18.0) for _ in range(4)]]
         calls = []
 
@@ -210,7 +210,7 @@ class RepeatTests(unittest.TestCase):
         self.assertEqual([item["swing"] for item in result], [1, 2, 3, 4, 5])
 
     def test_three_misses_in_a_row_leave_the_run_invalid(self):
-        from tests import hook_scenarios as hooks
+        from scenarios import hook_scenarios as hooks
         with mock.patch.object(hooks, "measure_swings", lambda *a, **k: [entry(1, 0.0, 0.0)]):
             missed = []
             result = regress.measure_until_invalid(None, lambda: 0, lambda: 0, lambda: {}, attempts=3, missed=missed)
@@ -218,7 +218,7 @@ class RepeatTests(unittest.TestCase):
         self.assertTrue(regress.landing_issues(result))
 
     def test_without_attempts_a_miss_ends_the_run_at_once(self):
-        from tests import hook_scenarios as hooks
+        from scenarios import hook_scenarios as hooks
         calls = []
 
         def fake_measure(*arguments, **keywords):
@@ -240,7 +240,7 @@ class RepeatTests(unittest.TestCase):
         self.assertIn("attempts before the first landed punch that changed nothing", text)
 
     def test_the_heal_before_a_punch_run_is_attempted_and_its_failure_is_not_fatal(self):
-        from tests import hook_scenarios as hooks
+        from scenarios import hook_scenarios as hooks
         calls = []
 
         class Host:

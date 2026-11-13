@@ -3,9 +3,9 @@ import time
 
 from casualtieslink.desync import Scenario
 
-from . import desync_scenarios as base
-from . import hook_scenarios as hooks
-from . import static_copy as static
+from scenarios import desync_scenarios as base
+from scenarios import hook_scenarios as hooks
+from scenarios import static_copy as static
 
 GROUP = "spectator"
 NAME = "spectatorcam_follow_by_client"

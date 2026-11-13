@@ -5,8 +5,8 @@ import unittest
 from unittest import mock
 
 from casualtieslink import desync, instances
-from tests import desync_scenarios as scenarios
-from tests import test_desync
+from scenarios import desync_scenarios as scenarios
+from live import test_desync
 
 BUILDS = (("pr24-3d060fe-corpse-fix", "pr24-3d060fe-corpse-fix-stage", instances.PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix"),
           ("pr24-3d060fe-plain", "pr24-3d060fe-plain-stage", instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_plain"),

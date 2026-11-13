@@ -348,7 +348,7 @@ class RolesAndVerdictTests(unittest.TestCase):
 
 class RegistryTests(unittest.TestCase):
     def test_every_scenario_a_shipped_profile_names_exists_in_the_scenario_registry(self):
-        from tests import desync_scenarios
+        from scenarios import desync_scenarios
         known = set(desync_scenarios.matching_scenario_names([]))
         for name in ("corpse-fix.json", "hit-fix.json"):
             profile = prtable.load_profile(os.path.join(PROFILES, name))

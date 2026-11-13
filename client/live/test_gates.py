@@ -5,8 +5,8 @@ import unittest
 from casualtieslink import observe
 from casualtieslink.instances import ScenarioGames
 
-from . import rig
-from .test_pair import PAIR_ENABLED, PLAYER_BODY_PREFIX, SKIP_REASON, read_bodies, wait_for_bodies
+from live import rig
+from live.test_pair import PAIR_ENABLED, PLAYER_BODY_PREFIX, SKIP_REASON, read_bodies, wait_for_bodies
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
 HOST_BODY = "Body_HostD"

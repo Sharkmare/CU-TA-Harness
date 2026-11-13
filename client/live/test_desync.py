@@ -6,11 +6,11 @@ from casualtieslink import desync, launchplan
 from casualtieslink.instances import ScenarioGames, flavour_zip, stage_directory_by_build
 from casualtieslink.launcher import mp_arguments
 
-from . import rig
-from . import evidence_scenarios
-from . import spawned_crates
-from .desync_scenarios import CLIENT_BODY_NAME, CORPSE_FLAGS, SCENARIOS, SERIES_SCENARIOS, body_handle_by_name, ready_up, reset_between_scenarios
-from .test_pair import PAIR_ENABLED, SKIP_REASON, choose_character, wait_for_bodies
+from live import rig
+from scenarios import evidence_scenarios
+from scenarios import spawned_crates
+from scenarios.desync_scenarios import CLIENT_BODY_NAME, CORPSE_FLAGS, SCENARIOS, SERIES_SCENARIOS, body_handle_by_name, ready_up, reset_between_scenarios
+from live.test_pair import PAIR_ENABLED, SKIP_REASON, choose_character, wait_for_bodies
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
 REPORT_DIRECTORY = os.path.join(STATE_ROOT, "desync_reports")

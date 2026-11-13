@@ -5,8 +5,8 @@ import time
 
 from casualtieslink.desync import Scenario
 
-from . import desync_scenarios as base
-from . import hook_scenarios as hooks
+from scenarios import desync_scenarios as base
+from scenarios import hook_scenarios as hooks
 
 EVIDENCE_GROUP = "hook-evidence"
 BUILDING_RESOURCES = ("leadbush", "geyser", "stoneplant", "hydreed")

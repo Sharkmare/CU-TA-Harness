@@ -17,7 +17,7 @@ import time
 
 from casualtieslink import desync, positioncontrol, swinggate
 from casualtieslink.desync import SeriesScenario
-from tests import desync_scenarios as base
+from scenarios import desync_scenarios as base
 
 WOOD_BLOCK_ID = 11
 WOOD_HEALTH = 150.0

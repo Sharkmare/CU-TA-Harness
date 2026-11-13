@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 
 from casualtieslink import Game
-from tests import world_building as world
+from scenarios import world_building as world
 
 from .fake_link import FakeFailure, FakeLink
 
@@ -408,7 +408,7 @@ class GroupTests(unittest.TestCase):
         self.assertEqual((static["runs"], static["invalid"], static["firedSwings"], static["landedSwings"]), (2, 1, 5, 5))
 
     def test_the_scenario_is_in_the_evidence_group_and_selectable_alone(self):
-        from tests import desync_scenarios as scenarios
+        from scenarios import desync_scenarios as scenarios
         self.assertEqual(scenarios.matching_scenario_names(["worldhit_building"]), ["worldhit_building_by_client"])
         self.assertEqual(sorted(scenarios.counts_by_group(["worldhit_building"])), ["hook-evidence"])
 

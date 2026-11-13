@@ -17,7 +17,7 @@ from casualtieslink import desync, launchplan, Game, GameAlreadyRunning, GamePro
 from casualtieslink.lock import GameLock
 from casualtieslink.pair import ProfileGuard
 from casualtieslink.transport import default_port
-from tests import rig
+from live import rig
 
 CONFIG_PATH = os.path.join(HERE, "test_groups.json")
 STATE_PATH = os.path.join(HERE, selection.STATE_FILE_NAME)
@@ -247,7 +247,7 @@ def scenario_budget(match_fragments, runs):
 
 
 def run_launch_plan(arguments):
-    from tests.desync_scenarios import counts_by_group
+    from scenarios.desync_scenarios import counts_by_group
     builds = [desync.parse_build(build) for build in arguments.builds]
     profiles = launchplan.parse_profiles(arguments.net)
     counts = counts_by_group(arguments.match)
@@ -256,7 +256,7 @@ def run_launch_plan(arguments):
     for line in launchplan.describe_launches(launches, counts):
         print(line)
     print("%d launches; one per scenario run would be %d" % (len(launches), launchplan.launches_without_grouping(launches, counts)))
-    from tests.desync_scenarios import preflight_problems
+    from scenarios.desync_scenarios import preflight_problems
     problems = preflight_problems(arguments.match, arguments.repeat, builds)
     for problem in problems:
         print("PREFLIGHT: " + problem)

@@ -4,8 +4,9 @@ import unittest
 from unittest import mock
 
 from casualtieslink import desync, instances, launchplan
-from tests import desync_scenarios as scenarios
-from tests import hook_scenarios, regression_scenarios, spawned_crates, test_desync, v2_suite
+from scenarios import desync_scenarios as scenarios
+from scenarios import hook_scenarios, regression_scenarios, spawned_crates, v2_suite
+from live import test_desync
 
 
 class SuiteTests(unittest.TestCase):

@@ -4,7 +4,7 @@ import unittest
 from casualtieslink import LinkError
 from casualtieslink.parsing import find_command
 
-from . import rig
+from live import rig
 
 
 class LinkProtocolTests(unittest.TestCase):

@@ -8,7 +8,7 @@ from unittest import mock
 import run_tests
 
 CONFIG = os.path.join(os.path.dirname(os.path.abspath(run_tests.__file__)), "test_groups.json")
-TESTS_DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(run_tests.__file__)), "tests")
+LIVE_DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(run_tests.__file__)), "live")
 INSTALLED_GROUPS = ("inert", "link", "run", "world")
 ORIGINAL_RUN_ENTRY = run_tests.run_entry
 
@@ -100,7 +100,7 @@ class RefusalTests(MainHarness):
                              run_command=lambda unit: True, run_entry=ORIGINAL_RUN_ENTRY)
         self.assertEqual(code, 0)
         self.assertTrue(ran)
-        self.assertFalse(any(module in ("tests.test_link", "tests.test_run", "tests.test_world", "tests.test_inert") for module in ran))
+        self.assertFalse(any(module in ("live.test_link", "live.test_run", "live.test_world", "live.test_inert") for module in ran))
 
     def test_listing_never_refuses_and_never_starts_anything(self):
         self.assertEqual(self.run_main(["--list", "--all"]), 0)
@@ -235,13 +235,13 @@ class ConfigTests(unittest.TestCase):
                 for module in group["modules"]:
                     flagged_modules.add(module if isinstance(module, str) else module.get("id"))
         problems = []
-        for name in sorted(os.listdir(TESTS_DIRECTORY)):
+        for name in sorted(os.listdir(LIVE_DIRECTORY)):
             if not name.startswith("test_") or not name.endswith(".py"):
                 continue
-            with open(os.path.join(TESTS_DIRECTORY, name), encoding="utf-8") as handle:
+            with open(os.path.join(LIVE_DIRECTORY, name), encoding="utf-8") as handle:
                 source = handle.read()
             for match in re.finditer(r"GameProcess\(([^)]*)\)", source):
-                if "directory=" not in match.group(0) and "tests." + name[:-3] not in flagged_modules:
+                if "directory=" not in match.group(0) and "live." + name[:-3] not in flagged_modules:
                     problems.append("%s starts GameProcess(%s) without a copy and is not in a group flagged uses_installed_game" % (name, match.group(1)[:50]))
             if "needs_game" in source:
                 continue

@@ -3,10 +3,10 @@ import unittest
 from unittest import mock
 
 from casualtieslink import desync, launchplan
-from tests import corpse_banded as corpse
-from tests import desync_scenarios as scenarios
-from tests import spawned_crates as crates
-from tests import test_desync
+from scenarios import corpse_banded as corpse
+from scenarios import desync_scenarios as scenarios
+from scenarios import spawned_crates as crates
+from live import test_desync
 
 
 def flags(cant_hit, physics=False, body="Static"):

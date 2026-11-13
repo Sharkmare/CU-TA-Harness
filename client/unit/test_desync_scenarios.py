@@ -2,7 +2,7 @@ import math
 import unittest
 
 from casualtieslink import Game, desync
-from tests import desync_scenarios as scenarios
+from scenarios import desync_scenarios as scenarios
 
 from .fake_link import FakeFailure, FakeLink
 
@@ -163,12 +163,12 @@ class RealPathHelperTests(unittest.TestCase):
         self.assertEqual(seen[0]["types"], ["Vector2Int"])
 
     def test_every_scenario_group_has_launch_arguments(self):
-        from tests import test_desync
+        from live import test_desync
         for scenario in scenarios.SCENARIOS:
             self.assertIn(scenario.group, test_desync.GROUP_CLIENT_ARGUMENTS)
 
     def test_the_corpse_group_makes_the_client_a_dune(self):
-        from tests import test_desync
+        from live import test_desync
         self.assertEqual(test_desync.GROUP_CLIENT_ARGUMENTS["mixed-characters"], ["--mp-setchar", "2"])
 
     def test_scenarios_with_a_fuse_sample_after_it_burns(self):
@@ -232,7 +232,7 @@ class MixedHandMiningTests(unittest.TestCase):
         self.assertTrue(found[0].network_sensitive)
 
     def test_the_group_starts_a_dune_client_with_verbose_logging_and_the_probe_config(self):
-        from tests import test_desync
+        from live import test_desync
         self.assertEqual(test_desync.GROUP_CLIENT_ARGUMENTS["mixed-hand-mining"], ["--mp-setchar", "2", "--mp-verbose"])
         self.assertEqual(test_desync.GROUP_HOST_ARGUMENTS["mixed-hand-mining"], ["--mp-verbose"])
         self.assertIn("mixed-hand-mining", test_desync.PROBE_GROUPS)

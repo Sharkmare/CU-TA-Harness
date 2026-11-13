@@ -5,9 +5,9 @@ import unittest
 
 from casualtieslink.desync import Scenario
 
-from . import desync_scenarios as base
-from . import evidence_scenarios as evidence
-from . import hook_scenarios as hooks
+from scenarios import desync_scenarios as base
+from scenarios import evidence_scenarios as evidence
+from scenarios import hook_scenarios as hooks
 
 GROUP = "hook-evidence"
 HEALTH_RANGE = (100.0, 2500.0)
@@ -343,17 +343,17 @@ SCENARIOS = [
 
 base.SCENARIOS.extend(SCENARIOS)
 
-from . import spawned_crates  # noqa: E402,F401
+from scenarios import spawned_crates  # noqa: E402,F401
 
-from . import v2_suite  # noqa: E402,F401
+from scenarios import v2_suite  # noqa: E402,F401
 
-from . import pvp_banded  # noqa: E402,F401
+from scenarios import pvp_banded  # noqa: E402,F401
 
-from . import corpse_banded  # noqa: E402,F401
+from scenarios import corpse_banded  # noqa: E402,F401
 
-from . import static_copy  # noqa: E402,F401
+from scenarios import static_copy  # noqa: E402,F401
 
-from . import console_leak  # noqa: E402,F401
+from scenarios import console_leak  # noqa: E402,F401
 
-from . import spectator_cam  # noqa: E402,F401
-from . import corpse_chain  # noqa: E402,F401
+from scenarios import spectator_cam  # noqa: E402,F401
+from scenarios import corpse_chain  # noqa: E402,F401

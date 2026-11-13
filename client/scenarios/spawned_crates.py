@@ -8,8 +8,8 @@ import unittest
 from casualtieslink import positioncontrol, swinggate
 from casualtieslink.desync import Scenario
 
-from . import desync_scenarios as base
-from . import world_building as world
+from scenarios import desync_scenarios as base
+from scenarios import world_building as world
 
 GROUP = "hook-evidence"
 CRATE_ID = "medcrate"

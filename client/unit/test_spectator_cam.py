@@ -4,9 +4,9 @@ import unittest
 from unittest import mock
 
 from casualtieslink import desync, instances
-from tests import desync_scenarios as scenarios
-from tests import spectator_cam as cam
-from tests import test_desync
+from scenarios import desync_scenarios as scenarios
+from scenarios import spectator_cam as cam
+from live import test_desync
 
 DEAD_BODY = {"x": 0.0, "y": 0.0}
 

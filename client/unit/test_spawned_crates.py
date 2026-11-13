@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 import run_tests
-from tests import spawned_crates as crates
+from scenarios import spawned_crates as crates
 
 ANCHOR = {"x": 10.0, "y": 5.0}
 
@@ -647,7 +647,7 @@ class RunControlTests(unittest.TestCase):
         self.assertIs(seen["hook"], crates.before_swing)
 
     def test_the_scenario_is_selectable_alone_in_the_evidence_group(self):
-        from tests import desync_scenarios as scenarios
+        from scenarios import desync_scenarios as scenarios
         self.assertEqual(scenarios.matching_scenario_names(["spawned_crate"]), ["spawned_crate_hit_by_client"])
         self.assertEqual(sorted(scenarios.counts_by_group(["spawned_crate"])), ["hook-evidence"])
 

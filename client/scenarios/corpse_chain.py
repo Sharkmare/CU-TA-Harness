@@ -5,11 +5,11 @@ import unittest
 from casualtieslink import positioncontrol, swinggate
 from casualtieslink.desync import Scenario
 
-from . import corpse_banded as banded
-from . import desync_scenarios as base
-from . import hook_scenarios as hooks
-from . import spawned_crates as crates
-from . import world_building as world
+from scenarios import corpse_banded as banded
+from scenarios import desync_scenarios as base
+from scenarios import hook_scenarios as hooks
+from scenarios import spawned_crates as crates
+from scenarios import world_building as world
 
 GROUP = "corpse-repro"
 NAME = "corpse_chain_by_client"

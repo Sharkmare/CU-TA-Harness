@@ -4,10 +4,10 @@ import unittest
 from casualtieslink import positioncontrol, swinggate
 from casualtieslink.desync import Scenario
 
-from . import desync_scenarios as base
-from . import hook_scenarios as hooks
-from . import spawned_crates as crates
-from . import world_building as world
+from scenarios import desync_scenarios as base
+from scenarios import hook_scenarios as hooks
+from scenarios import spawned_crates as crates
+from scenarios import world_building as world
 
 GROUP = "hook-evidence"
 NAME = "staticcrate_hit_by_client"

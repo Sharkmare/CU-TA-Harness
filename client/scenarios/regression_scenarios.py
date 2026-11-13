@@ -2,8 +2,8 @@ import time
 
 from casualtieslink.desync import Scenario
 
-from . import desync_scenarios as base
-from . import hook_scenarios as hooks
+from scenarios import desync_scenarios as base
+from scenarios import hook_scenarios as hooks
 
 REGRESSION_GROUP = "hook-regression"
 BUILDING_HEALTH_RANGE = (100.0, 400.0)

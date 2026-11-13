@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from . import rig
+from live import rig
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 IMPACT_FORCE = 500.0

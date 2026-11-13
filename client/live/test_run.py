@@ -2,7 +2,7 @@ import unittest
 
 from casualtieslink.commands import CHARACTERS
 
-from . import rig
+from live import rig
 
 
 class StartRunTests(unittest.TestCase):

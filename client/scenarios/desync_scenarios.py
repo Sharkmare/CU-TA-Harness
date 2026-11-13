@@ -791,8 +791,8 @@ def ready_up(games, timeout=READY_TIMEOUT_SECONDS, step=1.0, before_ready=None):
     return not pending
 
 
-from . import hook_scenarios  # noqa: E402,F401
-from . import wood_mining  # noqa: E402,F401
-from . import regression_scenarios  # noqa: E402,F401
-from . import evidence_scenarios  # noqa: E402,F401
-from . import world_building  # noqa: E402,F401
+from scenarios import hook_scenarios  # noqa: E402,F401
+from scenarios import wood_mining  # noqa: E402,F401
+from scenarios import regression_scenarios  # noqa: E402,F401
+from scenarios import evidence_scenarios  # noqa: E402,F401
+from scenarios import world_building  # noqa: E402,F401

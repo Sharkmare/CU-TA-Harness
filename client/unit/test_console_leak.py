@@ -2,8 +2,8 @@ import json
 import unittest
 from unittest import mock
 
-from tests import console_leak as leak
-from tests import desync_scenarios as scenarios
+from scenarios import console_leak as leak
+from scenarios import desync_scenarios as scenarios
 
 USER_NAME = "secretperson"
 SAVE_LINE = "[<color=red>SERVER</color>] MP: SAVING TO FILE: C:/Users/%s/AppData/LocalLow/Orsoniks/CasualtiesUnknown/mp_save/abc.sv" % USER_NAME
@@ -208,7 +208,7 @@ class WiringTests(unittest.TestCase):
         self.assertEqual(sorted(scenarios.counts_by_group(["consoleleak"])), ["console-leak"])
 
     def test_the_group_starts_both_games_with_no_extra_flags(self):
-        from tests import test_desync
+        from live import test_desync
         self.assertEqual((test_desync.GROUP_HOST_ARGUMENTS["console-leak"], test_desync.GROUP_CLIENT_ARGUMENTS["console-leak"]), ([], []))
         self.assertNotIn("console-leak", test_desync.GROUP_CLIENT_CHARACTER)
 

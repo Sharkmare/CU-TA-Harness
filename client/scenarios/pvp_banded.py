@@ -4,11 +4,11 @@ import unittest
 from casualtieslink import positioncontrol, swinggate
 from casualtieslink.desync import Scenario
 
-from . import desync_scenarios as base
-from . import evidence_scenarios as evidence
-from . import hook_scenarios as hooks
-from . import regression_scenarios as regression
-from . import spawned_crates as crates
+from scenarios import desync_scenarios as base
+from scenarios import evidence_scenarios as evidence
+from scenarios import hook_scenarios as hooks
+from scenarios import regression_scenarios as regression
+from scenarios import spawned_crates as crates
 
 GROUP = "hook-evidence"
 NAME = "pvp_banded_by_client"

@@ -5,7 +5,7 @@ import zipfile
 from unittest import mock
 
 from casualtieslink import friendszip, instances
-from tests import friends_zip as checks
+from scenarios import friends_zip as checks
 
 PLUGINS = "BepInEx/plugins/"
 ZIP_ENTRIES = {
@@ -287,7 +287,7 @@ class LogTests(unittest.TestCase):
 
 class WiringTests(unittest.TestCase):
     def test_the_live_module_is_importable_and_skips_without_the_pair_flag(self):
-        from tests import test_friends_zip
+        from live import test_friends_zip
         self.assertTrue(hasattr(test_friends_zip, "FriendsZipLobbyCheck"))
 
     def test_the_default_zip_path_follows_the_environment_variable(self):

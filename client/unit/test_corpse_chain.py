@@ -1,9 +1,9 @@
 import unittest
 from unittest import mock
 
-from tests import corpse_chain as chain
-from tests import desync_scenarios as scenarios
-from tests import spawned_crates as crates
+from scenarios import corpse_chain as chain
+from scenarios import desync_scenarios as scenarios
+from scenarios import spawned_crates as crates
 
 CORPSE = {"x": 12.5, "y": 5.0}
 CONTROL_NAME = chain.CONTROLS[0][0]
@@ -488,7 +488,7 @@ class CheckAndWiringTests(unittest.TestCase):
         self.assertEqual(sorted(scenarios.counts_by_group(["corpse_chain_by_client"])), [chain.GROUP])
 
     def test_each_control_is_alone_in_its_own_group_and_selectable_by_its_own_name(self):
-        from tests import test_desync
+        from live import test_desync
         for name, group, host_character, client_character in chain.CONTROLS:
             self.assertEqual(scenarios.matching_scenario_names([name]), [name])
             self.assertEqual(sorted(scenarios.counts_by_group([name])), [group])
@@ -510,7 +510,7 @@ class CheckAndWiringTests(unittest.TestCase):
         self.assertIn("expected Milky (1)", str(caught.exception))
 
     def test_the_group_starts_a_milky_host_and_a_dune_client_with_the_probe_on(self):
-        from tests import test_desync
+        from live import test_desync
         self.assertEqual(test_desync.GROUP_HOST_CHARACTER[chain.GROUP], chain.HOST_CHARACTER)
         self.assertEqual(test_desync.GROUP_CLIENT_CHARACTER[chain.GROUP], chain.CLIENT_CHARACTER)
         self.assertIn(chain.GROUP, test_desync.PROBE_GROUPS)

@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 from casualtieslink import swinggate
-from tests import world_building as world
+from scenarios import world_building as world
 
 SEAT = {"x": 0.0, "y": 0.0}
 TARGET = {"x": 2.85, "y": 0.0}

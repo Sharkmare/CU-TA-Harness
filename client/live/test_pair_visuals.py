@@ -1,8 +1,8 @@
 import time
 import unittest
 
-from . import rig
-from .test_pair import (CLIENT_BODY, HOST_BODY, PAIR_ENABLED, PLAYER_BODY_PREFIX, SKIP_REASON, PairCase, read_bodies)
+from live import rig
+from live.test_pair import CLIENT_BODY, HOST_BODY, PAIR_ENABLED, PLAYER_BODY_PREFIX, SKIP_REASON, PairCase, read_bodies
 
 DUNE_SKILLS = {"STR": 17, "RES": 18, "INT": 0, "STRGainMult": 1.0, "RESGainMult": 1.0, "INTGainMult": 0.5}
 EXPERIMENT_SKILLS = {"STR": 9, "RES": 8, "INT": 7, "STRGainMult": 1.0, "RESGainMult": 1.0, "INTGainMult": 1.0}

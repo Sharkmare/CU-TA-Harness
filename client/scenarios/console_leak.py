@@ -3,9 +3,9 @@ import time
 
 from casualtieslink.desync import Scenario
 
-from . import desync_scenarios as base
-from . import evidence_scenarios as evidence
-from . import hook_scenarios as hooks
+from scenarios import desync_scenarios as base
+from scenarios import evidence_scenarios as evidence
+from scenarios import hook_scenarios as hooks
 
 GROUP = "console-leak"
 NAME = "consoleleak_save_line_by_client"

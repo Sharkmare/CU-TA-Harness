@@ -2,8 +2,8 @@ import unittest
 from unittest import mock
 
 from casualtieslink import desync, launchplan
-from tests import desync_scenarios as scenarios
-from tests import hook_scenarios, pvp_banded, regression_scenarios, spawned_crates as crates
+from scenarios import desync_scenarios as scenarios
+from scenarios import hook_scenarios, pvp_banded, regression_scenarios, spawned_crates as crates
 
 
 class Clock:

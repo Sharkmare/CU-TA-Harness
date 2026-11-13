@@ -6,9 +6,9 @@ import unittest
 from casualtieslink.instances import FRIENDS_ZIP_CHOICE, SESSION_ADDRESS, ScenarioGames
 from casualtieslink import desync, friendszip
 
-from . import evidence_scenarios, friends_zip as checks, pvp_banded, spawned_crates
-from .desync_scenarios import ready_up, try_ready
-from .test_pair import PAIR_ENABLED, SKIP_REASON, wait_for_bodies
+from scenarios import evidence_scenarios, friends_zip as checks, pvp_banded, spawned_crates
+from scenarios.desync_scenarios import ready_up, try_ready
+from live.test_pair import PAIR_ENABLED, SKIP_REASON, wait_for_bodies
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
 REPORT_DIRECTORY = os.path.join(STATE_ROOT, "friends_zip_reports")

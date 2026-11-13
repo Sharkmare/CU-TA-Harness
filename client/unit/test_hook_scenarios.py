@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 from casualtieslink import desync, instances
-from tests import hook_scenarios as hooks
+from scenarios import hook_scenarios as hooks
 
 from .fake_link import FakeFailure, FakeLink
 from casualtieslink import Game
@@ -189,7 +189,7 @@ class NoScatterInstallTests(unittest.TestCase):
 
 class GroupTests(unittest.TestCase):
     def test_the_hook_group_loads_the_scatter_plugin_on_the_host_only_and_runs_verbose(self):
-        from tests import test_desync
+        from live import test_desync
         self.assertEqual(test_desync.GROUP_HOST_PLUGINS["hook-check"], ["noscatter"])
         self.assertIn("hook-check", test_desync.PROBE_GROUPS)
         self.assertIn("--mp-verbose", test_desync.GROUP_HOST_ARGUMENTS["hook-check"])

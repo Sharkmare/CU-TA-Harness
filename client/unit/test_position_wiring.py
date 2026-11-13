@@ -2,9 +2,9 @@ import unittest
 from unittest import mock
 
 from casualtieslink import desync, positioncontrol
-from tests import desync_scenarios as scenarios
-from tests import pvp_banded
-from tests import spawned_crates as crates
+from scenarios import desync_scenarios as scenarios
+from scenarios import pvp_banded
+from scenarios import spawned_crates as crates
 
 from unit.test_positioncontrol import FakeBodyGame, no_sleep
 from unit.test_pvp_banded import PassingGate
