@@ -443,7 +443,9 @@ class SettledSetupTests(unittest.TestCase):
 
     def test_the_first_run_is_the_diagnostic_one_with_the_old_setup_and_later_runs_use_the_settled_setup(self):
         old, new = mock.Mock(return_value={"position": {"x": 1.0, "y": 2.0}, "handle": "id:1", "clientHandle": "id:-1"}), mock.Mock(return_value=({"position": {"x": 1.0, "y": 2.0}, "handle": "id:2", "clientHandle": "id:-2"}, [{"offset": 2.85}], self.anchor))
-        with mock.patch.object(crates, "DIAGNOSTIC_RUN", 1), mock.patch.object(crates, "spawn_crate", old), mock.patch.object(crates, "spawn_settled", new), mock.patch.object(crates, "position_setup", lambda host, client, context: context.update({"startPositions": {}})), \
+        gate = mock.Mock()
+        gate.settle.return_value = {"ok": True}
+        with mock.patch.object(crates, "make_gate", lambda *a: gate), mock.patch.object(crates, "DIAGNOSTIC_RUN", 1), mock.patch.object(crates, "spawn_crate", old), mock.patch.object(crates, "spawn_settled", new), mock.patch.object(crates, "position_setup", lambda host, client, context: context.update({"startPositions": {}})), \
                 mock.patch.object(crates.base, "empty_the_hand", lambda client: None):
             first = crates.prepare(self.host, self.client)
             second = crates.prepare(self.host, self.client)
@@ -545,7 +547,9 @@ class RunControlTests(unittest.TestCase):
         return {"measurements": [{"hostDelta": 0.0, "clientDelta": 0.0}], "target": {"name": "medcrate"}}
 
     def prepare_with(self, outcome):
-        with mock.patch.object(crates.base, "empty_the_hand", lambda client: None), mock.patch.object(crates, "spawn_crate", outcome), mock.patch.object(crates, "spawn_settled", lambda host, client: (outcome(host, client), [], None)), mock.patch.object(crates, "position_setup", lambda host, client, context: context.update({"startPositions": {}})):
+        gate = mock.Mock()
+        gate.settle.return_value = {"ok": True}
+        with mock.patch.object(crates, "make_gate", lambda *a: gate), mock.patch.object(crates.base, "empty_the_hand", lambda client: None), mock.patch.object(crates, "spawn_crate", outcome), mock.patch.object(crates, "spawn_settled", lambda host, client: (outcome(host, client), [], None)), mock.patch.object(crates, "position_setup", lambda host, client, context: context.update({"startPositions": {}})):
             return crates.prepare("host", "client")
 
     def test_a_band_failure_is_an_invalid_setup_failure_and_not_a_missed_swing(self):

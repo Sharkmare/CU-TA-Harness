@@ -260,6 +260,13 @@ def act(client, context, before_swing=None):
             extra = before_swing(client, context, index, aim)
             if extra is None:
                 break
+        verdict = None
+        gate = context.get("gate")
+        if gate is not None:
+            verdict = gate.check(client)
+            if not verdict["passed"]:
+                context["gateFailure"] = dict(verdict, swing=index)
+                break
         marks = {which: len(evidence.read_log(which).splitlines()) for which in ("host", "client")}
         before = (health_by_handle(host, context["hostHandle"]), health_by_handle(client, context["clientHandle"]))
         probe = collider_at(client, aim)
@@ -276,7 +283,7 @@ def act(client, context, before_swing=None):
                         "clientDistance": round(base.distance(base.player_position(client), aim), 2),
                         "hostLines": evidence.evidence_lines(lines["host"]), "clientLines": evidence.evidence_lines(lines["client"]),
                         "hostExceptions": evidence.exception_lines(lines["host"]), "clientExceptions": evidence.exception_lines(lines["client"]),
-                        "hostHookCalls": evidence.hook_call_lines(lines["host"]), "clientHookCalls": evidence.hook_call_lines(lines["client"]), **extra})
+                        "hostHookCalls": evidence.hook_call_lines(lines["host"]), "clientHookCalls": evidence.hook_call_lines(lines["client"]), "gate": verdict, **extra})
         if not fired:
             break
         if before[0] <= 0:

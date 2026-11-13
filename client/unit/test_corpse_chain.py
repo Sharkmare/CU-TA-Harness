@@ -252,6 +252,7 @@ class StepSampler(chain.Sampler):
 class ActTests(unittest.TestCase):
     def setUp(self):
         self.sampler = None
+        self.start_gate_result = None
         chain.reset_launch_state()
         crates.reset_launch_state()
         self.addCleanup(chain.reset_launch_state)
@@ -305,7 +306,8 @@ class ActTests(unittest.TestCase):
                 mock.patch.object(chain.hooks, "fire_one_swing", self.fire),
                 mock.patch.object(chain, "read_health", lambda game, handle: 250.0 if game is self.host else self.client_hp), mock.patch.object(chain, "read_flag", lambda game, handle: game is self.host),
                 mock.patch.object(chain.banded, "destroy"), mock.patch.object(chain.positioncontrol, "release_quietly"),
-                mock.patch.object(chain.positioncontrol, "parked_snapshot", self.parked_snapshot), mock.patch.object(chain, "make_sampler", self.make_sampler)]
+                mock.patch.object(chain.positioncontrol, "parked_snapshot", self.parked_snapshot), mock.patch.object(chain, "make_sampler", self.make_sampler),
+                mock.patch.object(chain, "start_swing_gate", lambda host, client, context, target: self.start_gate_result)]
 
     def run_act(self, context, facing=True):
         patches = self.patches(facing)
@@ -388,6 +390,15 @@ class ActTests(unittest.TestCase):
         self.run_act(context)
         self.assertTrue(context["target"]["prediction"]["verdict"].startswith("confounded"))
         self.assertTrue(any("no readable parked host position" in problem for problem in context["target"]["holdProblems"]))
+
+    def test_a_start_gate_that_fails_fires_no_swing_and_the_run_is_invalid_with_the_gate_named(self):
+        self.start_gate_result = {"swing": 1, "failures": [{"gate": "limb", "detail": "limb1 is 9.00 from its rest pose (tolerance 0.50)"}], "values": {}}
+        context = self.context()
+        self.run_act(context)
+        self.assertEqual(self.fired, [])
+        issues = chain.check(context)
+        self.assertTrue(issues[0].startswith("INVALID: swing 1 not fired, gate limb failed"), issues)
+        self.assertEqual(context["measurements"], [])
 
     def test_every_swing_aims_at_the_corpse(self):
         context = self.context()

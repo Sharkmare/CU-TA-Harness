@@ -1,7 +1,7 @@
 import time
 import unittest
 
-from casualtieslink import positioncontrol
+from casualtieslink import positioncontrol, swinggate
 from casualtieslink.desync import Scenario
 
 from . import desync_scenarios as base
@@ -129,6 +129,21 @@ def preflight(host, client, spot, band):
     return positioncontrol.preflight_views(host, client, spot, band.get("seat") or base.player_position(client), positioncontrol.ROLE_SWINGING, PATHS["victim"], PATHS["client"])
 
 
+def victim_reader(host, client, context):
+    """The punched body as the gate sees it: present with health, its position on the host, and its physics state on each machine."""
+    def read():
+        handle = context["hostVictim"]
+        position = victim_position(host, handle)
+        total = hooks.limb_total(host, handle)
+        return {"present": position is not None, "health": total, "position": position, "hostCopy": crates.crate_physics(host, handle), "clientCopy": crates.crate_physics(client, context["clientVictim"])}
+
+    return read
+
+
+def make_gate(host, client, context, seat):
+    return swinggate.Gate({"seat": seat, "band": (BAND_LOW, BAND_HIGH)}, victim_reader(host, client, context), client_paths=PATHS["client"])
+
+
 def release_holds(host, client):
     positioncontrol.release_quietly(client)
     positioncontrol.release_quietly(host)
@@ -149,6 +164,7 @@ def act(client, context, accept_range=None):
 def run_punches(host, client, context, entries, accept_range):
     PATHS["victim"] = positioncontrol.discover_diagnostic_paths(host)
     PATHS["client"] = positioncontrol.discover_diagnostic_paths(client)
+    gate = None
     spot = None
     previous_after = None
     side = None
@@ -177,6 +193,19 @@ def run_punches(host, client, context, entries, accept_range):
             if not context["positionControl"]["ok"]:
                 context["positionFailure"] = context["positionControl"]
                 break
+            gate = make_gate(host, client, context, band.get("seat") or base.player_position(client))
+            settle = gate.settle(client)
+            context["limbSettle"] = settle
+            if not settle["ok"]:
+                context["positionFailure"] = {"ok": False, "issues": ["the limbs did not settle within %.0f s after the seat" % swinggate.SETTLE_TIMEOUT_SECONDS]}
+                break
+        verdict = None
+        if gate is not None:
+            gate.spec["seat"] = band.get("seat") or gate.spec["seat"]
+            verdict = gate.check(client)
+            if not verdict["passed"]:
+                context["gateFailure"] = dict(verdict, swing=index)
+                break
         victim = victim_position(host, context["hostVictim"])
         victim_on_client = victim_position(client, context["clientVictim"])
         player = base.player_position(client)
@@ -197,7 +226,7 @@ def run_punches(host, client, context, entries, accept_range):
         lines = {which: evidence.new_lines(marks[which], evidence.read_log(which)) for which in ("host", "client")}
         previous_after = victim_position(host, context["hostVictim"])
         entries.append({"swing": index, "fired": fired, "host": [before[0], after[0]], "client": [before[1], after[1]], "extra": [before[2], after[2]],
-                        "hostDelta": round(before[0] - after[0], 3), "clientDelta": round(before[1] - after[1], 3), "band": band, "geometry": geometry,
+                        "hostDelta": round(before[0] - after[0], 3), "clientDelta": round(before[1] - after[1], 3), "band": band, "geometry": geometry, "gate": verdict,
                         "hostHookCalls": evidence.hook_call_lines(lines["host"]), "clientHookCalls": evidence.hook_call_lines(lines["client"]),
                         "hostLines": evidence.evidence_lines(lines["host"]), "clientLines": evidence.evidence_lines(lines["client"]),
                         "hostExceptions": evidence.exception_lines(lines["host"]), "clientExceptions": evidence.exception_lines(lines["client"])})
@@ -223,9 +252,19 @@ def check(context):
         message = "INVALID: the client could not be brought into the %.1f to %.1f band before punch %d (distances tried %s)" % (BAND_LOW, BAND_HIGH, failure["swing"], failure["distances"])
         crates.record_failure(FAILURE_CATEGORY, message)
         return [message]
+    verdict, reason = swinggate.run_verdict(context.get("measurements"), context.get("gateFailure"))
+    if verdict == "invalid":
+        message = "INVALID: " + reason
+        crates.record_failure("swing-gate", message)
+        return [message]
+    issues = regression.pvp_check(context)
+    if verdict == "fail" or issues:
+        message = "FAIL: " + (reason or "the punch checks failed")
+        crates.record_failure("pvp-punch-missed", message)
+        return [message] + [issue for issue in issues if issue != message]
     if len(context.get("measurements") or []) >= PUNCHES_PER_RUN:
         STATE["valid"] += 1
-    return regression.pvp_check(context)
+    return issues
 
 
 SCENARIOS = [

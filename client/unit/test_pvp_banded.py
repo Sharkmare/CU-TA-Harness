@@ -62,6 +62,7 @@ class ActHarness(unittest.TestCase):
         return {"ok": True, "drifts": [0.0]}
 
     def run_act(self, **options):
+        self.gate = PassingGate()
         self.client.set.side_effect = self.teleport
         self.client.get.side_effect = lambda handle, path, depth=0: dict(self.victim)
         self.host.get.side_effect = self.host_get
@@ -72,12 +73,28 @@ class ActHarness(unittest.TestCase):
                    mock.patch.object(crates.world, "host_position", lambda game, handle: dict(self.victim)),
                    mock.patch.object(pvp_banded.evidence, "read_log", lambda which: ""), mock.patch.object(crates, "seat_client", teleport_seat),
                    mock.patch.object(pvp_banded, "seat_victim", self.seat_victim), mock.patch.object(pvp_banded, "record_start", lambda host, client, context: None),
-                   mock.patch.object(pvp_banded, "preflight", lambda host, client, spot, band: {"ok": True, "issues": []})]
+                   mock.patch.object(pvp_banded, "preflight", lambda host, client, spot, band: {"ok": True, "issues": []}),
+                   mock.patch.object(pvp_banded, "make_gate", lambda host, client, context, seat: self.gate)]
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
         pvp_banded.act(self.client, context, **options)
         return context
+
+
+class PassingGate:
+    """A gate whose every check passes, for the tests that are about the punch loop and not about the gate."""
+
+    def __init__(self):
+        self.spec = {"seat": None}
+        self.checks = 0
+
+    def settle(self, client, **options):
+        return {"ok": True, "rest": {}, "rows": []}
+
+    def check(self, client):
+        self.checks += 1
+        return {"passed": True, "failures": [], "values": {}}
 
 
 def base_distance(first, second):
@@ -310,9 +327,16 @@ class ValidRunTests(unittest.TestCase):
     def entries(self, count):
         return [{"swing": index, "hostDelta": 18.0, "clientDelta": 18.0, "extra": [0.0, 1.0]} for index in range(1, count + 1)]
 
-    def test_a_run_with_all_five_punches_counts_as_valid_even_when_none_landed(self):
-        pvp_banded.check({"measurements": [{"swing": index, "hostDelta": 0.0, "clientDelta": 0.1, "extra": [0.0, 0.0]} for index in range(1, 6)]})
-        self.assertEqual(pvp_banded.STATE["valid"], 1)
+    def test_a_run_where_a_punch_did_not_land_is_a_fail_and_never_counts_as_valid(self):
+        issues = pvp_banded.check({"measurements": [{"swing": index, "hostDelta": 0.0, "clientDelta": 0.1, "extra": [0.0, 0.0]} for index in range(1, 6)]})
+        self.assertTrue(issues[0].startswith("FAIL: swing 1 did not land"), issues)
+        self.assertEqual(pvp_banded.STATE["valid"], 0)
+
+    def test_a_punch_that_failed_its_gate_makes_the_run_invalid(self):
+        failure = {"swing": 2, "failures": [{"gate": "facing", "detail": "isRight False, target on the right"}], "values": {}}
+        issues = pvp_banded.check({"measurements": self.entries(1), "gateFailure": failure})
+        self.assertTrue(issues[0].startswith("INVALID: swing 2 not fired, gate facing failed"), issues)
+        self.assertEqual(pvp_banded.STATE["valid"], 0)
 
     def test_a_band_failure_run_and_a_restore_failure_run_do_not_count(self):
         pvp_banded.check({"bandFailure": {"swing": 2, "distances": [3.9]}, "measurements": self.entries(1)})

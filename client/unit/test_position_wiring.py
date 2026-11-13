@@ -7,6 +7,7 @@ from tests import pvp_banded
 from tests import spawned_crates as crates
 
 from unit.test_positioncontrol import FakeBodyGame, no_sleep
+from unit.test_pvp_banded import PassingGate
 
 HOST_PARK_DISTANCE = positioncontrol.PARK_DISTANCE
 
@@ -212,7 +213,7 @@ class PvpWiringTests(unittest.TestCase):
                 mock.patch.object(pvp_banded.base, "player_position", lambda game: {"x": 17.15, "y": 5.0}), \
                 mock.patch.object(pvp_banded.crates, "optional_read", lambda *a: None), mock.patch.object(pvp_banded.hooks, "limb_total", lambda game, handle: 100.0), \
                 mock.patch.object(pvp_banded.hooks, "fire_one_swing", lambda game, aim: released.append(host.held is None) or False), mock.patch.object(pvp_banded.time, "sleep", no_sleep), \
-                mock.patch.object(pvp_banded.evidence, "read_log", lambda which: ""):
+                mock.patch.object(pvp_banded.evidence, "read_log", lambda which: ""), mock.patch.object(pvp_banded, "make_gate", lambda *a: PassingGate()):
             host.call(positioncontrol.HOLD_COMMAND, local=True, x=20.0, y=5.0, tolerance=0.05)
             pvp_banded.act(client, context)
         self.assertEqual(released, [True])

@@ -2,7 +2,7 @@ import threading
 import time
 import unittest
 
-from casualtieslink import positioncontrol
+from casualtieslink import positioncontrol, swinggate
 from casualtieslink.desync import Scenario
 
 from . import corpse_banded as banded
@@ -122,6 +122,23 @@ def release_mouse_quietly(client):
         client.call("mouse", clear=True)
     except Exception:
         pass
+
+
+def start_swing_gate(host, client, context, target):
+    """The gate before the first swing: seat by holder and rb.position, limbs settled and in reach, facing, cooldown, corpse present, distance and the parked host out of the swing box. The swings that follow are
+    sampled and judged by the sampler (facing, parked distance), not gated one by one, because a gate read per swing would slow the chain below a player's rate."""
+    parked = target["positionControl"]["parkedHost"]
+    gate = swinggate.Gate({"seat": target["positionControl"]["clientTarget"], "band": (SEAT_DISTANCE - 0.6, MAX_SWING_DISTANCE)}, crates.target_reader(host, client, context),
+                          client_paths=context.get("clientPaths") or positioncontrol.discover_diagnostic_paths(client), parked_game=host, parked_paths=parked["paths"])
+    settle = gate.settle(client)
+    target["limbSettle"] = settle
+    if not settle["ok"]:
+        return {"swing": 1, "failures": [{"gate": "limb", "detail": "limbs did not settle within %.0f s" % swinggate.SETTLE_TIMEOUT_SECONDS}], "values": {}}
+    verdict = gate.check(client)
+    target["startGate"] = verdict
+    if not verdict["passed"]:
+        return dict(verdict, swing=1)
+    return None
 
 
 def prepare_for(host_character, client_character):
@@ -252,6 +269,10 @@ def act(client, context):
             context["positionFailure"] = {"ok": False, "issues": ["the client is %.2f from the corpse, beyond %.1f" % (distance, MAX_SWING_DISTANCE)]}
             return
         corpse_is_right = side_of(target["positionControl"]["clientTarget"], corpse) > 0
+        start_gate = start_swing_gate(host, client, context, target)
+        if start_gate is not None:
+            context["gateFailure"] = start_gate
+            return
         snapshots = target["holds"] = {"beforeFirstSwing": hold_snapshot(host, client)}
         sampler = make_sampler(client, context, target["positionControl"]["parkedHost"]["paths"])
         sampler.start()
@@ -360,6 +381,12 @@ def evaluate(entries, samples, host_flags, client_flags):
 
 
 def check(context):
+    gate_failure = context.get("gateFailure")
+    if gate_failure:
+        STATE["setup_failed"] += 1
+        message = "INVALID: swing 1 not fired, %s: %s" % (swinggate.gate_reason(gate_failure), gate_failure["failures"][0]["detail"])
+        crates.record_failure("swing-gate", message)
+        return [message]
     for key, label in (("positionFailure", "the position preflight failed"), ("facingBeforeFailure", "the client does not face the corpse before the first swing")):
         failure = context.get(key)
         if failure:

@@ -1,6 +1,7 @@
 import time
 import unittest
 
+from casualtieslink import positioncontrol, swinggate
 from casualtieslink.desync import Scenario
 
 from . import desync_scenarios as base
@@ -14,10 +15,7 @@ FAR_COLUMNS = (45.0, -45.0, 50.0, -50.0, 55.0, -55.0, 60.0, -60.0)
 MIN_FAR_DISTANCE = 40.0
 FAR_ATTEMPTS = 4
 OFFER_RADIUS = 60.0
-LIMB_REACH = 4.0
 STATIC_HEALTH_HIGH = 20000.0
-LIMB_SETTLE_TIMEOUT_SECONDS = 6.0
-LIMB_POLL_SECONDS = 0.15
 OFFER_LIMIT = 15
 OFFER_MATCH_DISTANCE = 0.5
 POCKET_ROWS = 4
@@ -192,26 +190,6 @@ def approach(host, client, context):
     return timeline
 
 
-def wait_for_limbs(host, client, context):
-    """After the one-step move the client's arm limb can lag the body by 9 units (every missed swing of the last static runs had limb 1 about 8 to 10 below the body, every landed one had it 2.4 to 3.6 from the crate), so the swings wait until limb 1 is within LIMB_REACH of the crate on two readings in a row."""
-    handle = context["hostHandle"]
-    started = time.time()
-    rows = []
-    near = 0
-    while time.time() - started < LIMB_SETTLE_TIMEOUT_SECONDS:
-        crate = world.host_position(host, handle) or context["position"]
-        limb = crates.point_of(crates.optional_read(client, "limbs[1].transform.position"))
-        distance = None if limb is None else round(base.distance(limb, crate), 3)
-        rows.append({"seconds": round(time.time() - started, 2), "limb1ToCrate": distance})
-        near = near + 1 if distance is not None and distance <= LIMB_REACH else 0
-        if near >= 2:
-            context["target"]["limbSettle"] = {"ok": True, "rows": rows}
-            return True
-        time.sleep(LIMB_POLL_SECONDS)
-    context["target"]["limbSettle"] = {"ok": False, "rows": rows}
-    return False
-
-
 def return_to_anchor(client, context):
     anchor = context.get("anchor")
     if anchor is None:
@@ -223,11 +201,33 @@ def return_to_anchor(client, context):
         pass
 
 
+def seat_and_gate(client, context):
+    """After the one-step move: hold the client where it stands, verify the seat by the holder and rb.position, then let the limbs settle. The swings are gated from here on."""
+    host = context["host"]
+    seat = base.player_position(client)
+    paths = positioncontrol.discover_diagnostic_paths(client)
+    context["clientPaths"] = paths
+    context["settledSeat"] = seat
+    verified = positioncontrol.seat_swinging_body(client, seat, paths=paths)
+    context["target"]["seatVerification"] = {"ok": verified["ok"], "issues": verified["issues"], "linkReadDisagrees": verified["linkReadDisagrees"]}
+    if not verified["ok"]:
+        context["positionFailure"] = {"ok": False, "issues": ["the client seat did not verify after the move: %s" % "; ".join(verified["issues"][:2])]}
+        return False
+    gate = crates.make_gate(host, client, context, seat)
+    settle = gate.settle(client)
+    context["target"]["limbSettle"] = settle
+    if not settle["ok"]:
+        context["positionFailure"] = {"ok": False, "issues": ["the limbs did not settle within %.0f s after the move" % swinggate.SETTLE_TIMEOUT_SECONDS]}
+        return False
+    context["gate"] = gate
+    return True
+
+
 def act(client, context):
     try:
         approach(context["host"], client, context)
-        wait_for_limbs(context["host"], client, context)
-        world.act(client, context, before_swing=crates.before_swing)
+        if seat_and_gate(client, context):
+            world.act(client, context, before_swing=crates.before_swing)
         first = (context["measurements"] or [{}])[0]
         copy_at_swing = ((first.get("physics") or {}).get("client") or {}).get("physicsActive")
         context["target"]["clientStaticAtFirstSwing"] = copy_at_swing is False
@@ -240,31 +240,31 @@ def act(client, context):
 
 
 def check(context):
+    position_failure = context.get("positionFailure")
+    if position_failure:
+        STATE["setup_failed"] += 1
+        message = "INVALID: the position preflight failed before the first swing: %s" % "; ".join(position_failure["issues"])
+        crates.record_failure(crates.POSITION_FAILURE_CATEGORY, message)
+        return [message]
     failure = context.get("bandFailure")
     if failure:
         message = "INVALID: the client could not be brought into the %.1f to %.1f band before swing %d (distances tried %s)" % (crates.BAND_LOW, crates.BAND_HIGH, failure["swing"], failure["distances"])
         STATE["setup_failed"] += 1
         crates.record_failure("distance-band-unreachable", message)
         return [message]
-    entries = context.get("measurements") or []
-    if not entries:
-        return ["INVALID: no swing recorded"]
-    gate = (context.get("target") or {}).get("limbSettle") or {}
-    if gate.get("ok") is not True:
-        landed = len([entry for entry in entries if entry["hostDelta"] > 0 and entry["clientDelta"] > 0])
+    verdict, reason = swinggate.run_verdict(context.get("measurements"), context.get("gateFailure"))
+    if verdict == "invalid":
+        STATE["setup_failed"] += 1
+        message = "INVALID: " + reason
+        crates.record_failure("swing-gate", message)
+        return [message]
+    if verdict == "fail":
         STATE["not_counted"] += 1
-        message = "NOT COUNTED: the swings were fired before limb 1 came within %.1f of the crate (limb gate rows %s); %d of %d swings landed anyway" % (
-            LIMB_REACH, [row["limb1ToCrate"] for row in gate.get("rows", [])][-4:], landed, len(entries))
-        crates.record_failure("limb-gate-not-passed", message)
+        message = "FAIL: " + reason
+        crates.record_failure("static-copy-swing-missed", message)
         return [message]
     STATE["valid"] += 1
-    issues = []
-    for entry in entries:
-        if entry["hostDelta"] <= 0 or entry["clientDelta"] <= 0:
-            copy = ((entry.get("physics") or {}).get("client") or {}).get("physicsActive")
-            limb = (entry.get("geometry") or {}).get("limb1Distance")
-            issues.append("swing %d: host %.2f, client %.2f (client copy physicsActive %s, limb 1 %s from the crate)" % (entry["swing"], entry["hostDelta"], entry["clientDelta"], copy, limb))
-    return issues
+    return []
 
 
 def preflight(fragments, attempts, builds=()):

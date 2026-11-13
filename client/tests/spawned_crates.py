@@ -5,7 +5,7 @@ import os
 import time
 import unittest
 
-from casualtieslink import positioncontrol
+from casualtieslink import positioncontrol, swinggate
 from casualtieslink.desync import Scenario
 
 from . import desync_scenarios as base
@@ -424,6 +424,24 @@ def record_parked_host(host, client, context, index):
     return snapshot
 
 
+def target_reader(host, client, context):
+    """The swing target as the gate sees it now: present on the host with health, its position, and the physics state of the copy on each machine."""
+    def read():
+        handle = context["hostHandle"]
+        position = world.host_position(host, handle)
+        health = world.optional_get(host, handle, "health")
+        return {"present": position is not None and health is not None, "health": None if health is None else float(health), "position": position,
+                "hostCopy": crate_physics(host, handle), "clientCopy": crate_physics(client, context["clientHandle"])}
+
+    return read
+
+
+def make_gate(host, client, context, seat):
+    spec = {"seat": seat, "band": (BAND_LOW, BAND_HIGH), "parkedMinDistance": MIN_PARKED_DISTANCE}
+    return swinggate.Gate(spec, target_reader(host, client, context), client_paths=context.get("clientPaths") or [], parked_game=host if context.get("hostPark") else None,
+                          parked_paths=context.get("hostPaths") or [])
+
+
 def before_swing(client, context, index, aim):
     host = context["host"]
     band = ensure_band(host, client, context["hostHandle"], context["position"], seat_y=standing_height(client, context))
@@ -432,6 +450,8 @@ def before_swing(client, context, index, aim):
         return None
     if band.get("seat") is None and context.get("settledSeat"):
         band["seat"] = context["settledSeat"]
+    if context.get("gate") is not None:
+        context["gate"].spec["seat"] = band.get("seat") or base.player_position(client)
     if index == 1 and context.get("diagnostic") and context.get("hostPark"):
         context["target"]["diagnostic"] = {"rows": trace_client_and_crate(host, client, context), "intervalSeconds": TRACE_INTERVAL_SECONDS, "colliders": "not readable over the link; the clientToCrate distance is the proxy"}
     if index == 1 and context.get("hostPark"):
@@ -471,6 +491,12 @@ def prepare(host, client):
     if not diagnostic:
         target["settledAttempts"] = attempts
     position_setup(host, client, context)
+    if not diagnostic:
+        context["gate"] = make_gate(host, client, context, settled)
+        settle = context["gate"].settle(client)
+        target["limbSettle"] = settle
+        if not settle["ok"]:
+            context["positionFailure"] = {"ok": False, "issues": ["the limbs did not settle within %.0f s after the seat" % swinggate.SETTLE_TIMEOUT_SECONDS]}
     target["startPositions"] = context["startPositions"]
     return context
 
@@ -500,17 +526,23 @@ def check(context):
         message = "INVALID: the client could not be brought into the %.1f to %.1f band before swing %d (distances tried %s)" % (BAND_LOW, BAND_HIGH, failure["swing"], failure["distances"])
         record_failure("distance-band-unreachable", message)
         return [message]
-    issues = world.check_first_swing(context)
-    if issues:
+    verdict, reason = swinggate.run_verdict(context.get("measurements"), context.get("gateFailure"))
+    if verdict == "invalid":
+        STATE["setup_failed"] += 1
+        message = "INVALID: " + reason
+        record_failure("swing-gate", message)
+        return [message]
+    if verdict == "fail":
         STATE["swing_failed"] += 1
-        record_failure("first-swing-no-damage", issues[0])
-    elif context.get("parkedProblems"):
+        message = "FAIL: " + reason
+        record_failure("first-swing-no-damage", message)
+        return [message]
+    if context.get("parkedProblems"):
         message = "CONFOUNDED: the parked host was not far enough from the swing: %s" % "; ".join(context["parkedProblems"][:3])
         record_failure("parked-host-too-close", message)
         return [message]
-    else:
-        STATE["valid"] += 1
-    return issues
+    STATE["valid"] += 1
+    return []
 
 
 def preflight(fragments, attempts, builds=()):

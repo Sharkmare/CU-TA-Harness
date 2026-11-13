@@ -186,7 +186,7 @@ class StaticOfferTests(PrepareHarness):
 
     def test_an_adopted_building_is_never_destroyed_by_the_cleanup(self):
         context = {"host": self.host, "hostHandle": "id:11", "target": {"adopted": True}, "measurements": [], "anchor": None}
-        with mock.patch.object(static, "wait_for_limbs", lambda *a: None), mock.patch.object(static, "approach", lambda *a: None), mock.patch.object(static.world, "act", lambda *a, **k: None), mock.patch.object(static, "return_to_anchor", lambda *a: None):
+        with mock.patch.object(static, "seat_and_gate", lambda *a: True), mock.patch.object(static, "approach", lambda *a: None), mock.patch.object(static.world, "act", lambda *a, **k: None), mock.patch.object(static, "return_to_anchor", lambda *a: None):
             static.act(self.client, context)
         self.host.set.assert_not_called()
 
@@ -200,41 +200,51 @@ class StaticOfferTests(PrepareHarness):
         self.assertIn("wallpanel", str(caught.exception))
 
 
-class LimbGateTests(unittest.TestCase):
-    def run_gate(self, limb_distances):
-        readings = iter(limb_distances)
-        clock = [0.0]
-        context = {"hostHandle": "id:1", "position": {"x": 0.0, "y": 0.0}, "target": {}}
-        with mock.patch.object(static.time, "time", lambda: clock[0]), mock.patch.object(static.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)),                 mock.patch.object(static.world, "host_position", lambda host, handle: {"x": 0.0, "y": 0.0}),                 mock.patch.object(static.crates, "optional_read", lambda game, path: None if (value := next(readings, 99.0)) is None else {"x": value, "y": 0.0}):
-            return static.wait_for_limbs(mock.Mock(), mock.Mock(), context), context["target"]["limbSettle"]
+class SeatAndGateTests(unittest.TestCase):
+    def setUp(self):
+        self.host = mock.Mock()
+        self.client = mock.Mock()
+        self.context = {"host": self.host, "hostHandle": "id:5", "clientHandle": "id:-5", "position": {"x": 60.0, "y": 100.5}, "target": {}}
+        self.seat = {"x": 57.1, "y": 100.5}
 
-    def test_the_swings_wait_until_limb_one_is_near_the_crate_on_two_readings_in_a_row(self):
-        ok, record = self.run_gate([9.8, 8.5, 3.4, 3.5])
-        self.assertTrue(ok)
-        self.assertEqual([row["limb1ToCrate"] for row in record["rows"]], [9.8, 8.5, 3.4, 3.5])
+    def patches(self, seat_ok=True, settle_ok=True):
+        gate = mock.Mock()
+        gate.settle.return_value = {"ok": settle_ok, "rest": {}, "rows": []}
+        self.gate = gate
+        return [mock.patch.object(static.base, "player_position", lambda game: self.seat), mock.patch.object(static.positioncontrol, "discover_diagnostic_paths", lambda game: ["rb.position"]),
+                mock.patch.object(static.positioncontrol, "seat_swinging_body", lambda game, target, tolerance=0.05, paths=(), sleep=None: {"ok": seat_ok, "issues": [] if seat_ok else ["rb.position is 0.300 from the target"], "linkReadDisagrees": False}),
+                mock.patch.object(static.crates, "make_gate", lambda *a: gate)]
 
-    def test_a_single_near_reading_between_far_ones_does_not_open_the_gate(self):
-        ok, record = self.run_gate([9.8, 3.4, 9.0, 3.4, 9.0])
-        self.assertTrue(record["ok"] is ok)
-        self.assertFalse(ok)
+    def run_seat(self, **options):
+        for patch in self.patches(**options):
+            patch.start()
+            self.addCleanup(patch.stop)
+        return static.seat_and_gate(self.client, self.context)
 
-    def test_a_limb_that_stays_away_is_recorded_as_not_settled_and_the_swings_still_run(self):
-        ok, record = self.run_gate([9.0] * 100)
-        self.assertFalse(ok)
-        self.assertFalse(record["ok"])
-        self.assertGreater(len(record["rows"]), 3)
+    def test_after_the_move_the_client_is_seated_verified_and_the_gate_is_installed_after_the_limbs_settled(self):
+        self.assertTrue(self.run_seat())
+        self.assertIs(self.context["gate"], self.gate)
+        self.assertEqual(self.context["settledSeat"], self.seat)
+        self.assertTrue(self.context["target"]["limbSettle"]["ok"])
+        self.gate.settle.assert_called_once()
 
-    def test_an_unreadable_limb_is_never_taken_for_near(self):
-        ok, record = self.run_gate([None] * 100)
-        self.assertFalse(ok)
-        self.assertEqual({row["limb1ToCrate"] for row in record["rows"]}, {None})
+    def test_a_seat_that_does_not_verify_gives_no_gate_and_an_invalid_position_failure(self):
+        self.assertFalse(self.run_seat(seat_ok=False))
+        self.assertNotIn("gate", self.context)
+        self.assertIn("the client seat did not verify after the move", self.context["positionFailure"]["issues"][0])
+        self.gate.settle.assert_not_called()
 
-    def test_the_gate_runs_between_the_approach_and_the_swings(self):
-        order = []
-        context = {"host": mock.Mock(), "hostHandle": "id:1", "target": {}, "measurements": [], "anchor": None}
-        with mock.patch.object(static, "approach", lambda *a: order.append("approach")), mock.patch.object(static, "wait_for_limbs", lambda *a: order.append("limbs")),                 mock.patch.object(static.world, "act", lambda *a, **k: order.append("swings")), mock.patch.object(static, "return_to_anchor", lambda *a: None),                 mock.patch.object(static, "crates_destroy", lambda *a: None):
-            static.act(mock.Mock(), context)
-        self.assertEqual(order, ["approach", "limbs", "swings"])
+    def test_limbs_that_do_not_settle_give_no_gate_and_the_run_is_invalid_before_any_swing(self):
+        self.assertFalse(self.run_seat(settle_ok=False))
+        self.assertNotIn("gate", self.context)
+        self.assertIn("limbs did not settle", self.context["positionFailure"]["issues"][0])
+
+    def test_the_swings_do_not_start_when_the_seat_or_the_limbs_failed(self):
+        context = {"host": self.host, "hostHandle": "id:5", "clientHandle": "id:-5", "position": {}, "target": {}, "measurements": [], "anchor": None}
+        with mock.patch.object(static, "approach", lambda *a: []), mock.patch.object(static, "seat_and_gate", lambda *a: False), mock.patch.object(static.world, "act") as swings, \
+                mock.patch.object(static, "return_to_anchor", lambda *a: None), mock.patch.object(static, "crates_destroy", lambda *a: None):
+            static.act(self.client, context)
+        swings.assert_not_called()
 
 
 class PrepareTests(PrepareHarness):
@@ -376,7 +386,7 @@ class ActTests(unittest.TestCase):
                 raise RuntimeError("link lost")
             ctx["measurements"] = [{"swing": 1, "hostDelta": 19.3, "clientDelta": 19.3, "physics": {"client": client_state}}]
 
-        with mock.patch.object(static, "wait_for_limbs", lambda *a: None), mock.patch.object(static, "approach", lambda h, c, ctx: []), mock.patch.object(static.world, "act", world_act), mock.patch.object(static.time, "sleep", lambda seconds: None):
+        with mock.patch.object(static, "seat_and_gate", lambda *a: True), mock.patch.object(static, "approach", lambda h, c, ctx: []), mock.patch.object(static.world, "act", world_act), mock.patch.object(static.time, "sleep", lambda seconds: None):
             if raises:
                 with self.assertRaises(RuntimeError):
                     static.act(client, context)
@@ -401,7 +411,7 @@ class ActTests(unittest.TestCase):
 
     def test_the_swing_hook_is_the_crate_band_hook(self):
         seen = {}
-        with mock.patch.object(static, "wait_for_limbs", lambda *a: None), mock.patch.object(static, "approach", lambda h, c, ctx: []), mock.patch.object(static.world, "act", lambda client, ctx, before_swing=None: seen.update(hook=before_swing)), \
+        with mock.patch.object(static, "seat_and_gate", lambda *a: True), mock.patch.object(static, "approach", lambda h, c, ctx: []), mock.patch.object(static.world, "act", lambda client, ctx, before_swing=None: seen.update(hook=before_swing)), \
                 mock.patch.object(static.time, "sleep", lambda seconds: None):
             static.act(mock.Mock(), {"host": mock.Mock(), "hostHandle": "id:5", "clientHandle": "id:-5", "position": {}, "target": {}, "measurements": [], "anchor": None})
         self.assertIs(seen["hook"], static.crates.before_swing)
@@ -417,36 +427,32 @@ class CheckTests(unittest.TestCase):
     def entry(self, index, host, client, physics=False):
         return {"swing": index, "hostDelta": host, "clientDelta": client, "physics": {"client": {"physicsActive": physics}}}
 
-    def context(self, entries, gate_ok=True):
-        return {"measurements": entries, "target": {"limbSettle": {"ok": gate_ok, "rows": [{"limb1ToCrate": 9.0}, {"limb1ToCrate": 3.4}, {"limb1ToCrate": 3.5}]}}}
+    def context(self, entries, gate_failure=None):
+        return {"measurements": entries, "target": {}, "gateFailure": gate_failure}
 
-    def test_swings_that_damage_both_sides_pass_and_the_run_is_measured(self):
+    def test_a_run_where_every_swing_landed_is_valid_and_counted(self):
         self.assertEqual(static.check(self.context([self.entry(index, 19.3, 19.3) for index in range(1, 6)])), [])
         self.assertEqual(static.STATE["valid"], 1)
 
-    def test_swings_fired_before_the_limb_gate_passed_are_not_counted_even_when_they_landed(self):
-        issues = static.check(self.context([self.entry(index, 19.3, 19.3) for index in range(1, 6)], gate_ok=False))
-        self.assertTrue(issues[0].startswith("NOT COUNTED"), issues)
-        self.assertIn("5 of 5 swings landed anyway", issues[0])
+    def test_one_missed_swing_with_every_gate_passed_fails_the_whole_run_and_is_not_counted_valid(self):
+        issues = static.check(self.context([self.entry(1, 19.3, 19.3), self.entry(2, 0.0, 0.0), self.entry(3, 19.3, 19.3)]))
+        self.assertTrue(issues[0].startswith("FAIL: swing 2 did not land with every gate passed"), issues)
         self.assertEqual((static.STATE["valid"], static.STATE["not_counted"]), (0, 1))
-        self.assertEqual(dict(crates.STATE["reasons"]), {"limb-gate-not-passed": 1})
+        self.assertEqual(dict(crates.STATE["reasons"]), {"static-copy-swing-missed": 1})
 
-    def test_a_run_without_any_limb_gate_record_is_not_counted(self):
-        issues = static.check({"measurements": [self.entry(1, 19.3, 19.3)]})
-        self.assertTrue(issues[0].startswith("NOT COUNTED"))
-        self.assertEqual(static.STATE["valid"], 0)
+    def test_a_swing_that_failed_its_gate_makes_the_run_invalid_and_not_a_fail(self):
+        failure = {"swing": 3, "failures": [{"gate": "limb", "detail": "limb1 is 9.00 from its rest pose (tolerance 0.50)"}], "values": {}}
+        issues = static.check(self.context([self.entry(1, 19.3, 19.3), self.entry(2, 19.3, 19.3)], gate_failure=failure))
+        self.assertTrue(issues[0].startswith("INVALID: swing 3 not fired, gate limb failed"), issues)
+        self.assertEqual((static.STATE["valid"], static.STATE["setup_failed"], static.STATE["not_counted"]), (0, 1, 0))
 
-    def test_a_missed_swing_names_the_limb_distance(self):
-        entry = dict(self.entry(1, 0.0, 0.0), geometry={"limb1Distance": 9.4})
-        issues = static.check(self.context([entry]))
-        self.assertIn("limb 1 9.4 from the crate", issues[0])
+    def test_a_run_with_no_swing_is_invalid(self):
+        self.assertEqual(static.check({"measurements": []}), ["INVALID: no swing recorded"])
 
-    def test_a_swing_with_no_damage_on_a_static_copy_is_reported_with_the_copy_state_and_still_counts_as_measured(self):
-        issues = static.check(self.context([self.entry(1, 0.0, 0.0, physics=False), self.entry(2, 19.3, 19.3, physics=True)]))
-        self.assertEqual(len(issues), 1)
-        self.assertIn("swing 1", issues[0])
-        self.assertIn("physicsActive False", issues[0])
-        self.assertEqual(static.STATE["valid"], 1)
+    def test_a_position_failure_before_the_swings_is_invalid(self):
+        issues = static.check({"positionFailure": {"ok": False, "issues": ["the limbs did not settle within 6 s after the move"]}, "measurements": []})
+        self.assertIn("limbs did not settle", issues[0])
+        self.assertTrue(issues[0].startswith("INVALID"))
 
     def test_a_band_failure_is_invalid_and_not_measured(self):
         issues = static.check({"bandFailure": {"swing": 1, "distances": [9.0]}, "measurements": []})
