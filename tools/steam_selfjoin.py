@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(REPOSITORY_ROOT, "client"))
 from casualtieslink import instances
 from casualtieslink.launcher import GameProcess, mp_arguments
 from casualtieslink.lock import GameLock
+from tests.desync_scenarios import ready_up
 
 DEFAULT_STAGE_CHOICE = "pr24-3d060fe-plain-stage"
 LOBBY_TYPE = "private"
@@ -123,6 +124,23 @@ def link_read(game, target, path):
         return {"unreadable": str(failure)[:160]}
 
 
+def body_count(game):
+    try:
+        return len(game.call("find", type="Body"))
+    except Exception as failure:
+        return "unreadable: %s" % str(failure)[:80]
+
+
+def smoke(games, seconds, interval=5.0):
+    """Both bodies visible on both games every few seconds for `seconds`; the link reads give the proof that the two copies see each other over the Steam transport."""
+    readings = []
+    started = time.time()
+    while time.time() - started < seconds:
+        readings.append({"t": round(time.time() - started, 1), "hostSees": body_count(games.host.game), "clientSees": body_count(games.client.game)})
+        time.sleep(interval)
+    return {"readings": readings, "bothSeeBothAlways": all(item["hostSees"] == 2 and item["clientSees"] == 2 for item in readings)}
+
+
 def run(label, stage_choice, dry_run, output_directory):
     stage_directory = STAGE_DIRECTORY_BY_CHOICE[stage_choice]()
     problems = stage_problems(stage_directory, decompile_with_ilspy)
@@ -159,12 +177,16 @@ def run(label, stage_choice, dry_run, output_directory):
         games.client.start(instances.START_TIMEOUT_SECONDS, allow_existing=True)
         record["joinCall"] = games.client.game.call("invoke", target=STEAM_TRANSPORT_TYPE, method="OnWantToJoinLobby", args=[lobby_id], types=["UInt64"])
         try:
+            record["readyUp"] = bool(ready_up([games.host.game, games.client.game], timeout=JOIN_WAIT_SECONDS))
+            games.host.game.wait_state("in-world", timeout=JOIN_WAIT_SECONDS)
             games.client.game.wait_state("in-world", timeout=JOIN_WAIT_SECONDS)
             joined = True
         except Exception as failure:
             joined = False
             record["joinWaitError"] = str(failure)[:200]
         record["clientInWorld"] = joined
+        if joined:
+            record["smoke"] = smoke(games, SMOKE_SECONDS)
         record["outcome"] = "CONNECTED" if joined else "HUNG: the client did not reach the world within %.0f s" % JOIN_WAIT_SECONDS
         return record
     finally:
