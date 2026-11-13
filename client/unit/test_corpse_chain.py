@@ -244,15 +244,17 @@ class ActTests(unittest.TestCase):
         self.assertEqual(calls[0].kwargs, {"wx": CORPSE["x"], "wy": CORPSE["y"]})
         self.assertEqual(calls[-1].kwargs, {"clear": True})
 
-    def test_a_client_that_turns_away_during_the_first_swing_stops_after_that_swing_and_the_run_is_invalid(self):
+    def test_a_client_that_turns_away_during_the_swings_is_re_aimed_and_the_result_is_confounded_not_invalid(self):
         context = self.context()
         self.run_act(context, facing=lambda: not self.fired)
-        self.assertEqual(len(self.fired), 1)
-        self.assertTrue(context["target"]["facingBefore"]["facingCorpse"])
-        self.assertFalse(context["target"]["facingAfterFirstSwing"]["facingCorpse"])
-        issues = chain.check(context)
-        self.assertTrue(issues[0].startswith("INVALID: the client does not face the corpse after the first swing"), issues)
-        self.assertIn("isRight False, corpse side 1", issues[0])
+        self.assertEqual(len(self.fired), chain.SWINGS)
+        target = context["target"]
+        self.assertTrue(target["facingBefore"]["facingCorpse"])
+        self.assertFalse(target["facingAfterFirstSwing"]["facingCorpse"])
+        self.assertEqual(target["reaimedAfterSwing"], list(range(1, chain.SWINGS + 1)))
+        self.assertTrue(target["prediction"]["verdict"].startswith("confounded"))
+        self.assertTrue(any("faced away" in problem for problem in target["holdProblems"]))
+        self.assertEqual(chain.check(context), [])
 
     def test_a_client_that_faces_the_corpse_records_the_facing_before_and_after_the_first_swing(self):
         context = self.context()

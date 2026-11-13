@@ -96,6 +96,9 @@ def hold_problems(snapshots, entries):
     unfired = [entry["swing"] for entry in entries if not entry.get("fired")]
     if unfired:
         problems.append("swings that did not fire: %s" % unfired)
+    facing_away = [entry["swing"] for entry in entries if entry.get("facingCorpse") is False]
+    if facing_away:
+        problems.append("the client faced away from the corpse after swings %s" % facing_away)
     return problems
 
 
@@ -183,11 +186,13 @@ def act(client, context):
             before = read_both(client, context)
             fired = hooks.fire_one_swing(client, corpse_point(host, context))
             entries.append(record_swing(index, started, fired, before, read_both(client, context), context, client))
+            facing = facing_record(client, corpse_point(host, context))
+            entries[-1]["facingCorpse"] = facing["facingCorpse"]
             if index == 1:
-                target["facingAfterFirstSwing"] = facing_record(client, corpse_point(host, context))
-                if not target["facingAfterFirstSwing"]["facingCorpse"]:
-                    context["facingFailure"] = target["facingAfterFirstSwing"]
-                    break
+                target["facingAfterFirstSwing"] = facing
+            if not facing["facingCorpse"]:
+                target["reaimedAfterSwing"] = target.get("reaimedAfterSwing", []) + [index]
+                point_mouse_at(client, corpse_point(host, context))
         snapshots["afterLastSwing"] = hold_snapshot(host, client)
         context["samples"] = sample_after(client, context, started, AFTER_LAST_SWING_SECONDS)
         target["samples"] = context["samples"]
@@ -238,7 +243,7 @@ def evaluate(entries, samples, host_flags, client_flags):
 
 
 def check(context):
-    for key, label in (("positionFailure", "the position preflight failed"), ("facingBeforeFailure", "the client does not face the corpse before the first swing"), ("facingFailure", "the client does not face the corpse after the first swing")):
+    for key, label in (("positionFailure", "the position preflight failed"), ("facingBeforeFailure", "the client does not face the corpse before the first swing")):
         failure = context.get(key)
         if failure:
             STATE["setup_failed"] += 1
