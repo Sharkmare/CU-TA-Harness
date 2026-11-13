@@ -1,6 +1,20 @@
 import os
+import tempfile
 
-LOCK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".game.lock")
+LOCK_ENVIRONMENT_VARIABLE = "CU_GAME_LOCK"
+LOCK_FILE_NAME = "CU-TA-Harness.game.lock"
+
+
+def default_lock_path(environment=None, temporary_directory=None):
+    """One lock for the whole machine. The game link ports are machine-wide, so a lock beside the checkout lets a second checkout or worktree drive the same ports at the same time."""
+    environment = os.environ if environment is None else environment
+    override = environment.get(LOCK_ENVIRONMENT_VARIABLE)
+    if override:
+        return os.path.abspath(override)
+    return os.path.join(temporary_directory or tempfile.gettempdir(), LOCK_FILE_NAME)
+
+
+LOCK_PATH = default_lock_path()
 
 
 class GameLockHeld(RuntimeError):

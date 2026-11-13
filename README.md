@@ -86,7 +86,7 @@ Modules: `parsing` (replies and arguments), `transport` (HTTP, one port per game
 
 `GameProcess.start()` refuses to start while a `CasualtiesUnknown.exe` is running, because starting a second copy of an online game loses the match. It copies `save.sv` aside before the tests and puts it back afterwards, or deletes the test save if there was none.
 
-`.game.lock` marks that someone is using the game. `GameLock` creates it exclusively and only removes a lock it made itself. Do not start the game while the file exists.
+`CU-TA-Harness.game.lock` in the system temporary directory marks that someone is using the game. It is one file for the whole machine, so a second checkout or worktree is refused too; the game link ports are machine-wide. Set `CU_GAME_LOCK` to use another path. `GameLock` creates the file exclusively and only removes a lock it made itself. Do not start the game while the file exists.
 
 ## Two games at once (host and client)
 
@@ -105,7 +105,7 @@ python run_tests.py --offline --list     # what would run, and which changed fil
 python run_tests.py --offline --failfast
 ```
 
-The game tests need a free machine, because the game is single instance and the runner takes `.game.lock`. The groups `inert`, `link`, `run` and `world` start the game from the installed folder, so a run without flags refuses to start them: when the change selection picks one of them the runner prints the flags below and exits with code 2 before it locks, snapshots or starts anything. `--list` and `--offline` never refuse. `--allow-installed-launch` is the explicit permission; with it the runner snapshots the profile folder and the PlayerPrefs registry key first (the `start_run` command sets `didbasiccourse`) and restores both after the games have closed, also when a test raises. The groups that start their own copies (`pair`, `gates`, `desync`) are not refused and still need `--pair` or `--builds`.
+The game tests need a free machine, because the game is single instance and the runner takes the machine-wide game lock. The groups `inert`, `link`, `run` and `world` start the game from the installed folder, so a run without flags refuses to start them: when the change selection picks one of them the runner prints the flags below and exits with code 2 before it locks, snapshots or starts anything. `--list` and `--offline` never refuse. `--allow-installed-launch` is the explicit permission; with it the runner snapshots the profile folder and the PlayerPrefs registry key first (the `start_run` command sets `didbasiccourse`) and restores both after the games have closed, also when a test raises. The groups that start their own copies (`pair`, `gates`, `desync`) are not refused and still need `--pair` or `--builds`.
 
 ```bash
 python run_tests.py                       # offline groups that changed; refuses, listing the flags, if a single-game group is selected

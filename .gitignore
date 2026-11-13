@@ -3,7 +3,7 @@ plugin/obj/
 __pycache__/
 *.pyc
 .state/
-.game.lock
+
 client/.test_state.json
 client/reports/
 plugin-tests/bin/
