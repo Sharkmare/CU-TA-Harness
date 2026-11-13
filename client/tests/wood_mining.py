@@ -12,6 +12,7 @@ health and the attack cooldown on the client, and the same on the host with the 
 and their times), and the swings carry their own invoke times. The packets the proxy forwarded are traced, so the host arrival time of every swing is estimated from the first packet the
 client sent after the invoke plus the delay the proxy gave it.
 """
+import re
 import time
 
 from casualtieslink import desync, positioncontrol, swinggate
@@ -242,7 +243,12 @@ def resyncguard_record(client_log_text):
     """The RESYNCGUARD lines of the client of the run: the cells kept through a host chunk resync, the summaries (local breaks, kept through resync, applied after the window)."""
     lines = [line.strip() for line in client_log_text.splitlines() if RESYNCGUARD_MARKER in line]
     counts = {name: len([line for line in lines if marker in line]) for name, marker in RESYNCGUARD_KINDS}
-    return {"lines": len(lines), "counts": counts, "first": [line[-220:] for line in lines[:SWINGBURST_LINE_LIMIT]]}
+    totals = {}
+    for line in lines:
+        if "RESYNCGUARD summary" in line:
+            for name, value in re.findall(r"([a-z-]+)=(\d+)", line):
+                totals[name] = totals.get(name, 0) + int(value)
+    return {"lines": len(lines), "counts": counts, "summaryTotals": totals, "first": [line[-220:] for line in lines[:SWINGBURST_LINE_LIMIT]]}
 
 
 def steamlike_lines(log_text):

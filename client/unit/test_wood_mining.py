@@ -209,6 +209,10 @@ class ResyncGuardRecordTests(unittest.TestCase):
     def test_a_log_without_the_lines_gives_zero_counts(self):
         self.assertEqual(wood.resyncguard_record("nothing\n")["counts"], {"kept": 0, "summary": 0})
 
+    def test_the_numbers_of_the_summary_lines_are_added_up(self):
+        text = self.LOG + "[Info] RESYNCGUARD summary local-breaks=2 kept-through-resync=1 applied-after-window=3\n"
+        self.assertEqual(wood.resyncguard_record(text)["summaryTotals"], {"local-breaks": 3, "kept-through-resync": 2, "applied-after-window": 3})
+
 
 class SteamlikeProblemTests(unittest.TestCase):
     GOOD = "STEAMLIKE delivery on (reliable messages sent as ReliableOrdered)\nx\nSTEAMLIKE local delivery on peer=1\n"

@@ -12,7 +12,8 @@ import sys
 HEADERS = ("variant", "client", "network", "valid", "REVERSION", "swings per run", "client swing interval s (min / median / max)", "host arrival spacing s (min, estimated)",
            "arrivals under 0.124 s", "host cooldown drops (host log) / predicted", "host swings applied vs client", "scraps per break (client / host)")
 RUN_HEADERS = ("run", "verdict", "swings", "client interval s (min / median / max)", "host arrival spacing s (min / median / max)", "arrivals under 0.124 s", "predicted host drops",
-               "host cooldown drops (host log)", "client broke s", "host broke s", "client block back at s (gone for)", "client swings applied", "host swings applied")
+               "host cooldown drops (host log)", "SWINGBURST dropped / credit", "RESYNCGUARD kept / applied after window", "client broke s", "host broke s", "exposure window s",
+               "client block back at s (gone for)", "block at end of tail (client / host)", "client swings applied", "host swings applied")
 MISSING = "-"
 
 
@@ -80,6 +81,29 @@ def summarize(label, runs, client_name, network):
             join_unique("%s / %s" % (item["client"], item["host"]) for item in made)]
 
 
+def end_blocks(run):
+    last = run["samples"][-1] if run.get("samples") else None
+    return MISSING if last is None else "%s / %s" % (last["client"][0], last["host"][0])
+
+
+def burst_cell(run):
+    counts = (run.get("swingBurst") or {}).get("counts") or {}
+    return "%s / %s" % (counts.get("dropped", MISSING), counts.get("acceptedByCredit", MISSING))
+
+
+def guard_cell(run):
+    totals = (run.get("resyncGuard") or {}).get("summaryTotals") or {}
+    counts = (run.get("resyncGuard") or {}).get("counts") or {}
+    kept = max(counts.get("kept", 0), totals.get("kept-through-resync", 0))
+    return "%d / %s" % (kept, totals.get("applied-after-window", MISSING))
+
+
+def window_cell(wood):
+    if wood.get("clientBrokeAt") is None or wood.get("hostBrokeAt") is None:
+        return MISSING
+    return "%.2f" % (wood["hostBrokeAt"] - wood["clientBrokeAt"])
+
+
 def run_rows(runs):
     rows = []
     for run in runs:
@@ -88,8 +112,9 @@ def run_rows(runs):
         reappeared = wood.get("clientReappeared") or []
         rows.append([run["_name"].split("__")[-1][:-5], wood["verdict"] + ("" if not wood["reasons"] else ": " + "; ".join(wood["reasons"])), wood["swingsFired"], triple(bunching["clientIntervals"]),
                      triple(bunching["hostArrivalSpacings"]), bunching["arrivalsUnderCooldown"], bunching["predictedHostDrops"], (run.get("hostLog") or {}).get("cooldownDrops", MISSING),
-                     wood.get("clientBrokeAt", MISSING), wood.get("hostBrokeAt", MISSING),
-                     MISSING if not reappeared else "%.2f (%.2f s)" % (reappeared[0]["t"], reappeared[0]["goneFor"]), wood["damage"]["clientSwingsApplied"], wood["damage"]["hostSwingsApplied"]])
+                     burst_cell(run), guard_cell(run), wood.get("clientBrokeAt", MISSING), wood.get("hostBrokeAt", MISSING), window_cell(wood),
+                     MISSING if not reappeared else "%.2f (%.2f s)" % (reappeared[0]["t"], reappeared[0]["goneFor"]), end_blocks(run), wood["damage"]["clientSwingsApplied"],
+                     wood["damage"]["hostSwingsApplied"]])
     return rows
 
 
