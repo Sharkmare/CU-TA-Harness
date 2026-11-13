@@ -1,7 +1,7 @@
 import time
 import unittest
 
-from live import rig
+from live import shared_game
 from live.test_pair import CLIENT_BODY, HOST_BODY, PAIR_ENABLED, PLAYER_BODY_PREFIX, SKIP_REASON, PairCase, read_bodies
 
 DUNE_SKILLS = {"STR": 17, "RES": 18, "INT": 0, "STRGainMult": 1.0, "RESGainMult": 1.0, "INTGainMult": 0.5}

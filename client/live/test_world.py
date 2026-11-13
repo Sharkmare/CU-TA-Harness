@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from live import rig
+from live import shared_game
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 IMPACT_FORCE = 500.0
@@ -16,8 +16,8 @@ WALK_FRAMES = 120
 class InWorldTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        rig.fresh_run(0)
-        cls.link = rig.game()
+        shared_game.fresh_run(0)
+        cls.link = shared_game.game()
         cls.link.step(SETTLE_FRAMES)
 
     def setUp(self):
@@ -36,7 +36,7 @@ class InWorldTests(unittest.TestCase):
         self.link.spawn("bandage")
         snapshot = self.link.player()
         slot = next(s["slot"] for s in snapshot["inventory"] if s["item"] and s["item"]["id"] == "bandage")
-        self.link.call("use_item_on_limb", slot=slot, limb=rig.limb_index(snapshot, "arm"))
+        self.link.call("use_item_on_limb", slot=slot, limb=shared_game.limb_index(snapshot, "arm"))
         self.link.step(2)
         minigame = self.link.get("static:MinigameBase", "main.currentMinigame", depth=0)
         self.assertIsNotNone(minigame, "no minigame started")
@@ -44,7 +44,7 @@ class InWorldTests(unittest.TestCase):
 
     def test_impact_damage_lowers_limb_health_and_emits_events_and_bleeds(self):
         snapshot = self.link.player()
-        index = rig.limb_index(snapshot, "arm")
+        index = shared_game.limb_index(snapshot, "arm")
         before = snapshot["limbs"][index]
         self.link.mark_events()
         self.link.call("damage", limb=index, force=IMPACT_FORCE)
@@ -65,7 +65,7 @@ class InWorldTests(unittest.TestCase):
 
     def test_console_heal_undoes_damage(self):
         snapshot = self.link.player()
-        index = rig.limb_index(snapshot, "arm")
+        index = shared_game.limb_index(snapshot, "arm")
         self.link.call("damage", limb=index, force=IMPACT_FORCE)
         damaged = self.link.player()["limbs"][index]["muscleHealth"]
         self.link.console("heal")
@@ -75,7 +75,7 @@ class InWorldTests(unittest.TestCase):
     def test_reflective_write_then_read_by_path(self):
         self.link.set("player", "hunger", 42.5)
         self.assertAlmostEqual(self.link.get("player", "hunger"), 42.5, delta=1.0)
-        index = rig.limb_index(self.link.player(), "arm")
+        index = shared_game.limb_index(self.link.player(), "arm")
         self.link.set("player", "limbs[%d].pain" % index, 7.0)
         self.assertAlmostEqual(self.link.get("player", "limbs[%d].pain" % index), 7.0, delta=1.0)
 
@@ -111,8 +111,8 @@ class MovementTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        rig.fresh_run(0)
-        cls.link = rig.game()
+        shared_game.fresh_run(0)
+        cls.link = shared_game.game()
         cls.link.step(SETTLE_AFTER_START_FRAMES)
 
     def test_injected_movement_key_moves_the_player(self):
@@ -138,12 +138,12 @@ class SaveLoadTests(unittest.TestCase):
     HUNGER_MARK = 37.0
 
     def test_save_and_load_round_trip_restores_a_changed_field(self):
-        rig.fresh_run(0)
-        link = rig.game()
+        shared_game.fresh_run(0)
+        link = shared_game.game()
         link.set("player", "hunger", self.HUNGER_MARK)
         saved = link.save()
         self.assertGreater(saved["bytes"], 100)
-        if rig.mutation_active("corrupt-save"):
+        if shared_game.mutation_active("corrupt-save"):
             with open(saved["path"], "wb") as handle:
                 handle.write(b"broken")
         link.quit_to_menu()

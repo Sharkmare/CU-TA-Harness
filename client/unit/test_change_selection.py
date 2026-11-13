@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-import selection
+import change_selection
 
 CONFIG = {
     "groups": [
@@ -49,16 +49,16 @@ class SelectionTests(unittest.TestCase):
             handle.write(text)
 
     def select(self, state, **options):
-        return selection.select_units(self.root, self.roots, CONFIG, state, **options)
+        return change_selection.select_units(self.root, self.roots, CONFIG, state, **options)
 
     def names(self, selected):
-        return sorted(selection.unit_id(u["unit"]) for entry in selected for u in entry["units"])
+        return sorted(change_selection.unit_id(u["unit"]) for entry in selected for u in entry["units"])
 
     def pass_everything(self):
         state = {}
         for entry in self.select({}):
             for unit_entry in entry["units"]:
-                selection.record_pass(state, unit_entry)
+                change_selection.record_pass(state, unit_entry)
         return state
 
     def test_everything_is_selected_with_no_state_and_says_why(self):
@@ -108,7 +108,7 @@ class SelectionTests(unittest.TestCase):
     def test_a_failed_unit_stays_selected_until_it_passes(self):
         state = self.pass_everything()
         unit_entry = self.select({}, only=["offline"])[0]["units"][0]
-        selection.record_failure(state, unit_entry)
+        change_selection.record_failure(state, unit_entry)
         self.assertEqual(self.names(self.select(state)), ["tests.test_three"])
 
     def test_line_ending_changes_alone_do_not_select_anything(self):
@@ -132,22 +132,22 @@ class SelectionTests(unittest.TestCase):
     def test_a_unit_with_nothing_to_watch_is_an_error(self):
         config = {"groups": [{"id": "g", "modules": ["tests.missing"]}]}
         with self.assertRaises(ValueError):
-            selection.select_units(self.root, self.roots, config, {})
+            change_selection.select_units(self.root, self.roots, config, {})
 
     def test_imported_modules_resolves_relative_levels(self):
         path = os.path.join(self.root, "pkg", "deep", "d.py")
-        self.assertIn("pkg.b", selection.imported_modules(path, "pkg.deep.d"))
+        self.assertIn("pkg.b", change_selection.imported_modules(path, "pkg.deep.d"))
 
     def test_old_state_files_are_ignored(self):
         state_path = os.path.join(self.base, "state.json")
         with open(state_path, "w") as handle:
             handle.write('{"link": "abc"}')
-        self.assertEqual(selection.load_state(state_path), {})
+        self.assertEqual(change_selection.load_state(state_path), {})
 
     def test_state_round_trips(self):
         state_path = os.path.join(self.base, "state.json")
-        selection.save_state(state_path, {"tests.test_one": {"pkg/a.py": "h"}})
-        self.assertEqual(selection.load_state(state_path), {"tests.test_one": {"pkg/a.py": "h"}})
+        change_selection.save_state(state_path, {"tests.test_one": {"pkg/a.py": "h"}})
+        self.assertEqual(change_selection.load_state(state_path), {"tests.test_one": {"pkg/a.py": "h"}})
 
 
 if __name__ == "__main__":

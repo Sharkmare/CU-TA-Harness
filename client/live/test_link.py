@@ -4,19 +4,19 @@ import unittest
 from casualtieslink import LinkError
 from casualtieslink.parsing import find_command
 
-from live import rig
+from live import shared_game
 
 
 class LinkProtocolTests(unittest.TestCase):
     def test_status_reports_version_and_protocol(self):
-        status = rig.game().status()
+        status = shared_game.game().status()
         self.assertEqual(status["plugin"], "CasualtiesLink")
         self.assertEqual(status["protocol"], 1)
         self.assertIn(status["state"], ("menu", "pre-run", "in-world", "loading"))
         self.assertGreater(status["frame"], 0)
 
     def test_describe_documents_every_command_with_arguments(self):
-        description = rig.game().describe()
+        description = shared_game.game().describe()
         names = [command["name"] for command in description["commands"]]
         for expected in ("status", "start_run", "console", "spawn", "player", "input", "get", "set", "screenshot", "save", "load"):
             self.assertIn(expected, names)
@@ -27,16 +27,16 @@ class LinkProtocolTests(unittest.TestCase):
 
     def test_unknown_command_is_a_404_with_a_hint(self):
         with self.assertRaises(LinkError) as caught:
-            rig.game().call("no_such_command")
+            shared_game.game().call("no_such_command")
         self.assertEqual(caught.exception.status, 404)
         self.assertIn("describe", str(caught.exception))
 
     def test_missing_required_argument_is_an_error(self):
         with self.assertRaises(LinkError):
-            rig.game().call("console")
+            shared_game.game().call("console")
 
     def _raw(self, method, path, headers):
-        port = rig.game().transport.port
+        port = shared_game.game().transport.port
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
         connection.putrequest(method, path, skip_host="Host" in headers)
         for name, value in headers.items():
@@ -60,7 +60,7 @@ class LinkProtocolTests(unittest.TestCase):
         self.assertIn(self._raw("POST", "/cmd/status", headers), (400, 403))
 
     def test_describe_type_lists_game_fields(self):
-        reply = rig.game().call("describe_type", type="Body")
+        reply = shared_game.game().call("describe_type", type="Body")
         self.assertIn("brainHealth", [member["name"] for member in reply["members"]])
 
 

@@ -6,7 +6,7 @@ from casualtieslink.scenarioengine import desync, launchplan
 from casualtieslink.games.instances import ScenarioGames, flavour_zip, stage_directory_by_build
 from casualtieslink.launcher import mp_arguments
 
-from live import rig
+from live import shared_game
 from scenarios import evidence_scenarios
 from scenarios import spawned_crates
 from scenarios.desync_scenarios import CLIENT_BODY_NAME, CORPSE_FLAGS, SCENARIOS, SERIES_SCENARIOS, body_handle_by_name, ready_up, reset_between_scenarios
@@ -94,7 +94,7 @@ def scenario_method(run):
         prepare_run(self, run.profile)
         logs_before = {which: GAMES.log_text(which) for which in ("host", "client")}
         try:
-            observation = desync.observe(scenario, self.host, self.client, perform_action=not rig.mutation_active(desync.SKIP_ACTION_MUTATION))
+            observation = desync.observe(scenario, self.host, self.client, perform_action=not shared_game.mutation_active(desync.SKIP_ACTION_MUTATION))
         finally:
             restore_network()
         report = desync.describe(observation, BUILD, EXPECTED_HASH, self.game_version, LAUNCH_ID, run.repetition, run.profile.as_dict(), GAMES.proxy.seed)
@@ -125,7 +125,7 @@ def series_method(run):
         trace_mark = GAMES.proxy.trace_mark()
         stall_mark = GAMES.proxy.stall_trace_mark()
         try:
-            observation = desync.observe_series(scenario, self.host, self.client, perform_action=not rig.mutation_active(desync.SKIP_ACTION_MUTATION))
+            observation = desync.observe_series(scenario, self.host, self.client, perform_action=not shared_game.mutation_active(desync.SKIP_ACTION_MUTATION))
         finally:
             restore_network()
         run_logs = {which: "\n".join(GAMES.log_text(which).splitlines()[log_marks[which]:]) for which in ("host", "client")}

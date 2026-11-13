@@ -12,16 +12,16 @@ SEARCH_ROOTS = [HERE, REPO_ROOT]
 sys.path.insert(0, HERE)
 sys.path.insert(0, REPO_ROOT)
 
-import selection
+import change_selection
 from casualtieslink.scenarioengine import desync, launchplan
 from casualtieslink import Game, GameAlreadyRunning, GameProcess, mp_arguments
 from casualtieslink.lock import GameLock
 from casualtieslink.games.pair import ProfileGuard
 from casualtieslink.transport import default_port
-from live import rig
+from live import shared_game
 
 CONFIG_PATH = os.path.join(HERE, "test_groups.json")
-STATE_PATH = os.path.join(HERE, selection.STATE_FILE_NAME)
+STATE_PATH = os.path.join(HERE, change_selection.STATE_FILE_NAME)
 SNAPSHOT_ROOT = os.path.join(REPO_ROOT, ".state")
 REFUSED_EXIT_CODE = 2
 DEFAULT_MP_FLAGS = ["disable"]
@@ -109,14 +109,14 @@ def run_entry(entry, state, totals, arguments, timings):
             add_result(totals, result)
             passed = result.wasSuccessful()
             ran_something = result.testsRun > len(result.skipped)
-        timings.append((time.time() - started, selection.unit_id(unit)))
+        timings.append((time.time() - started, change_selection.unit_id(unit)))
         if arguments.match:
             continue
         if passed and ran_something:
-            selection.record_pass(state, unit_entry)
+            change_selection.record_pass(state, unit_entry)
         elif not passed:
-            selection.record_failure(state, unit_entry)
-            failed.append(selection.unit_id(unit))
+            change_selection.record_failure(state, unit_entry)
+            failed.append(change_selection.unit_id(unit))
     return failed
 
 
@@ -133,7 +133,7 @@ def describe_selection(selected, config, offline):
         for unit_entry in entry["units"]:
             reasons = unit_entry["reasons"]
             shown = ", ".join(reasons[:3]) + (" and %d more" % (len(reasons) - 3) if len(reasons) > 3 else "")
-            print("  %-16s %s: %s" % (group["id"], selection.unit_id(unit_entry["unit"]), shown))
+            print("  %-16s %s: %s" % (group["id"], change_selection.unit_id(unit_entry["unit"]), shown))
 
 
 def installed_launch_groups(selected):
@@ -169,8 +169,8 @@ def main(argv=None):
         os.environ[desync.BUILD_ENVIRONMENT_VARIABLE] = desync.parse_build(arguments.together)
     with open(CONFIG_PATH, encoding="utf-8") as handle:
         config = json.load(handle)
-    state = selection.load_state(STATE_PATH)
-    selected = selection.select_units(HERE, SEARCH_ROOTS, config, state, arguments.all, arguments.only, arguments.offline)
+    state = change_selection.load_state(STATE_PATH)
+    selected = change_selection.select_units(HERE, SEARCH_ROOTS, config, state, arguments.all, arguments.only, arguments.offline)
     print("selection:")
     describe_selection(selected, config, arguments.offline)
     if arguments.list or not selected:
@@ -180,9 +180,9 @@ def main(argv=None):
         print(refusal_message(installed_groups))
         return REFUSED_EXIT_CODE
     if arguments.pair:
-        os.environ[rig.PAIR_ENABLED_ENVIRONMENT_VARIABLE] = "1"
+        os.environ[shared_game.PAIR_ENABLED_ENVIRONMENT_VARIABLE] = "1"
     if arguments.mutate:
-        os.environ[rig.MUTATION_ENVIRONMENT_VARIABLE] = arguments.mutate
+        os.environ[shared_game.MUTATION_ENVIRONMENT_VARIABLE] = arguments.mutate
 
     totals = new_totals()
     timings = []
@@ -209,7 +209,7 @@ def main(argv=None):
         if needs_game:
             port = arguments.port if arguments.port is not None else default_port()
             if arguments.attach:
-                rig.bind(Game(port))
+                shared_game.bind(Game(port))
             else:
                 lock = GameLock("run_tests.py shared session").acquire()
                 process = GameProcess(port, mp_arguments(flags_from(arguments.mp or DEFAULT_MP_FLAGS)))
@@ -218,7 +218,7 @@ def main(argv=None):
                 except GameAlreadyRunning as exc:
                     print("not started:", exc)
                     return 2
-                rig.bind(process.game)
+                shared_game.bind(process.game)
         for entry in shared:
             failed += run_entry(entry, state, totals, arguments, timings)
     finally:
@@ -229,7 +229,7 @@ def main(argv=None):
         if guard is not None:
             guard.restore()
         if not arguments.mutate and not arguments.match:
-            selection.save_state(STATE_PATH, state)
+            change_selection.save_state(STATE_PATH, state)
     elapsed = time.time() - program_started
     print("ran %(run)d tests and %(commands)d commands: %(failures)d failures, %(errors)d errors, %(skipped)d skipped, %(expected_failures)d expected failures in %(seconds).1fs; failed: %(failed)s" % dict(
         totals, seconds=elapsed, failed=failed or "none"))

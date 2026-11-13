@@ -99,14 +99,14 @@
   },
   {
     "suite": "python",
-    "file": "client/selection.py",
+    "file": "client/change_selection.py",
     "old": "        files.update(expand(root, PLUGIN_WATCH))\n",
     "new": "        pass\n",
     "label": "plugin changes ignored"
   },
   {
     "suite": "python",
-    "file": "client/selection.py",
+    "file": "client/change_selection.py",
     "old": ".replace(b\"\\r\\n\", b\"\\n\")",
     "new": "",
     "label": "line endings change hashes"

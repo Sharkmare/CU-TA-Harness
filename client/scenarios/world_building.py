@@ -345,7 +345,7 @@ base.SCENARIOS.extend(SCENARIOS)
 
 from scenarios import spawned_crates  # noqa: E402,F401
 
-from scenarios import v2_suite  # noqa: E402,F401
+from scenarios import hook_evidence_mining  # noqa: E402,F401
 
 from scenarios import pvp_banded  # noqa: E402,F401
 

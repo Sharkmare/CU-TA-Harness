@@ -78,7 +78,7 @@
       "id": "client-offline",
       "modules": [
         "unit.test_parsing",
-        "unit.test_selection",
+        "unit.test_change_selection",
         "unit.test_lock",
         "unit.test_testcopy",
         "unit.test_client_fake",
@@ -99,7 +99,7 @@
         "unit.test_evidence_scenarios",
         "unit.test_world_building",
         "unit.test_spawned_crates",
-        "unit.test_v2_suite",
+        "unit.test_hook_evidence_mining",
         "unit.test_pvp_banded",
         "unit.test_corpse_banded",
         "unit.test_fullbuild_stages",

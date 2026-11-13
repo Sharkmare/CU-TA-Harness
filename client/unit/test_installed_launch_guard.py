@@ -59,7 +59,7 @@ class MainHarness(unittest.TestCase):
                 self.recorder = recorder
 
         self.guard_class = RecordingGuard
-        self.patches = [mock.patch.object(run_tests.selection, "save_state", lambda path, state: None), mock.patch("sys.stdout", self.output)]
+        self.patches = [mock.patch.object(run_tests.change_selection, "save_state", lambda path, state: None), mock.patch("sys.stdout", self.output)]
         for patch in self.patches:
             patch.start()
             self.addCleanup(patch.stop)
@@ -151,7 +151,7 @@ class AllowedLaunchTests(MainHarness):
 
     def run_allowed(self, run_entry, only="link"):
         return self.run_main(["--allow-installed-launch", "--only", only], GameProcess=self.fake_process_class(), GameLock=self.fake_lock(), ProfileGuard=self.guard_class,
-                             run_entry=run_entry, rig=mock.Mock())
+                             run_entry=run_entry, shared_game=mock.Mock())
 
     def test_the_profile_is_snapshotted_before_the_game_starts_and_restored_after_it_closes(self):
         def run_entry(entry, state, totals, arguments, timings):
@@ -203,7 +203,7 @@ class AllowedLaunchTests(MainHarness):
             return []
 
         self.run_main(["--allow-installed-launch", "--only", "inert", "link", "run"], GameProcess=self.fake_process_class(), GameLock=self.fake_lock(), ProfileGuard=self.guard_class,
-                      run_entry=run_entry, rig=mock.Mock())
+                      run_entry=run_entry, shared_game=mock.Mock())
         self.assertEqual(self.recorder.events.count("snapshot"), 1)
         self.assertEqual(self.recorder.events.count("restore"), 1)
         events = self.recorder.events

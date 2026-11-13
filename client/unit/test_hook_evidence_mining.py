@@ -6,13 +6,13 @@ from unittest import mock
 from casualtieslink.scenarioengine import desync, launchplan
 from casualtieslink.games import instances
 from scenarios import desync_scenarios as scenarios
-from scenarios import hook_scenarios, regression_scenarios, spawned_crates, v2_suite
+from scenarios import hook_scenarios, regression_scenarios, spawned_crates, hook_evidence_mining
 from live import test_desync
 
 
 class SuiteTests(unittest.TestCase):
     def test_the_mining_check_runs_in_the_same_startup_group_as_the_crate_scenario(self):
-        self.assertEqual(v2_suite.MINING.group, spawned_crates.GROUP)
+        self.assertEqual(hook_evidence_mining.MINING.group, spawned_crates.GROUP)
         self.assertEqual(sorted(scenarios.counts_by_group(["spawned_crate", "v2check"])), ["hook-evidence"])
 
     def test_the_originals_keep_their_own_groups_and_names(self):
@@ -20,8 +20,8 @@ class SuiteTests(unittest.TestCase):
         self.assertEqual(hook_scenarios.HOOK_MINING.name, "hookcheck_dig_cracks")
 
     def test_the_copies_share_the_original_steps(self):
-        self.assertIs(v2_suite.MINING.prepare, hook_scenarios.HOOK_MINING.prepare)
-        self.assertIs(v2_suite.MINING.hit, hook_scenarios.HOOK_MINING.hit)
+        self.assertIs(hook_evidence_mining.MINING.prepare, hook_scenarios.HOOK_MINING.prepare)
+        self.assertIs(hook_evidence_mining.MINING.hit, hook_scenarios.HOOK_MINING.hit)
 
     def test_the_selection_fragments_pick_the_crate_and_the_mining_scenario(self):
         self.assertEqual(sorted(scenarios.matching_scenario_names(["spawned_crate", "v2check"])), ["spawned_crate_hit_by_client", "v2check_dig_cracks"])
@@ -29,7 +29,7 @@ class SuiteTests(unittest.TestCase):
     def test_the_crate_keeps_all_attempts_and_the_mining_follows_the_profile_repeat(self):
         profiles = launchplan.parse_profiles(["100:0@5"])
         crate = desync.expand_runs([scenario for scenario in scenarios.SCENARIOS if scenario.name == "spawned_crate_hit_by_client"], profiles, 8)
-        mining = desync.expand_runs([v2_suite.MINING], profiles, 8)
+        mining = desync.expand_runs([hook_evidence_mining.MINING], profiles, 8)
         self.assertEqual(len(crate), 8)
         self.assertEqual((len(mining), {run.profile.delay_ms for run in mining}), (5, {100.0}))
 

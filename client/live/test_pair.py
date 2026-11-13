@@ -6,7 +6,7 @@ import unittest
 from casualtieslink.launcher import game_dir, mp_arguments
 from casualtieslink.games.pair import GamePair, client_flags, host_flags
 
-from live import rig
+from live import shared_game
 
 STATE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".state")
 STOCK_DLL = os.environ.get("CU_STOCK_TOGETHER_DLL", "")
@@ -28,7 +28,7 @@ MISMATCH_OBSERVE_SECONDS = 45.0
 PLAYER_BODY_PREFIX = "Body_"
 HOST_BODY = "Body_HostD"
 CLIENT_BODY = "Body_ClientD"
-PAIR_ENABLED = os.environ.get(rig.PAIR_ENABLED_ENVIRONMENT_VARIABLE) == "1"
+PAIR_ENABLED = os.environ.get(shared_game.PAIR_ENABLED_ENVIRONMENT_VARIABLE) == "1"
 SKIP_REASON = "two instance tests start a host and a client game; run run_tests.py --pair"
 
 
@@ -107,7 +107,7 @@ class PairCase(unittest.TestCase):
             raise unittest.SkipTest(SKIP_REASON)
         host = dict(host_flags())
         client = dict(client_flags())
-        if cls.setchar is not None and not rig.mutation_active(NO_DUNE_MUTATION):
+        if cls.setchar is not None and not shared_game.mutation_active(NO_DUNE_MUTATION):
             host["setchar"] = cls.setchar
             client["setchar"] = cls.setchar
         if cls.host_character is not None:
