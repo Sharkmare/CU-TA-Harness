@@ -233,6 +233,25 @@ def steamlike_lines(log_text):
     return [line.strip()[-200:] for line in log_text.splitlines() if STEAMLIKE_MARKER in line.lower()][:10]
 
 
+STEAMLIKE_STARTUP_MARKER = "STEAMLIKE delivery on"
+STEAMLIKE_CONNECT_MARKER = "STEAMLIKE local delivery on"
+STEAMLIKE_OFF_MARKER = "STEAMLIKE delivery off"
+
+
+def steamlike_problems(full_logs):
+    """Both games must say at startup that the steamlike delivery is on and must have logged it for the connection; a game that says off, or says nothing, makes the run invalid."""
+    problems = []
+    for side in ("host", "client"):
+        text = full_logs.get(side) or ""
+        if STEAMLIKE_OFF_MARKER in text:
+            problems.append("the %s log says the steamlike delivery is off" % side)
+        elif STEAMLIKE_STARTUP_MARKER not in text:
+            problems.append("the %s log has no steamlike startup line" % side)
+        elif STEAMLIKE_CONNECT_MARKER not in text:
+            problems.append("the %s log has no steamlike line for the connection" % side)
+    return problems
+
+
 def baseline_problems(baseline):
     """The cell must be undamaged on both games before the first swing: damage left over from an earlier run (a block that stayed broken on one side only) would shorten the run."""
     problems = []
@@ -313,7 +332,8 @@ def extend_report(report, observation, run_logs, packets):
                 "hostCooldownSeconds": HOST_COOLDOWN_SECONDS, "ignoredAttempts": sum(entry["ignoredAttempts"] for entry in swings)}
     identities = context["identities"]
     client_units = damage_units(damage_steps(observation.samples, "client"), unit)
-    judged = judge_wood_run(context, report["findings"], identities, swings, client_units, proxy_problems(report) + baseline_problems(getattr(observation, "baseline", None)))
+    judged = judge_wood_run(context, report["findings"], identities, swings, client_units,
+                            proxy_problems(report) + baseline_problems(getattr(observation, "baseline", None)) + list(report.get("launchProblems") or []))
     report["woodRun"] = dict(judged, swingsFired=len(swings), damage=record, bunching=bunching, scraps={"before": context.get("scrapsBefore"), "end": {side: final_scraps(observation.samples, side) for side in ("host", "client")}},
                              identities=identities)
     report["woodSwings"] = [dict(entry, arrivalEstimate=None if arrivals[index] is None else round(arrivals[index] - started, 3)) for index, entry in enumerate(swings)]
@@ -335,6 +355,8 @@ def make_scenario(name, description, group):
                               interval_seconds=SAMPLE_INTERVAL_SECONDS, cleanup=base.remove_fresh_block)
     scenario.extend_report = extend_report
     scenario.client_character = CLIENT_CHARACTERS[group]
+    if group == "wood-mining-steamlike":
+        scenario.launch_problems = steamlike_problems
     return scenario
 
 

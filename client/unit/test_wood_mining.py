@@ -181,6 +181,36 @@ class SwingBurstRecordTests(unittest.TestCase):
         self.assertEqual(report["steamlikeLines"]["client"], ["steamlike on"])
 
 
+class SteamlikeProblemTests(unittest.TestCase):
+    GOOD = "STEAMLIKE delivery on (reliable messages sent as ReliableOrdered)\nx\nSTEAMLIKE local delivery on peer=1\n"
+
+    def test_both_games_saying_on_and_connected_are_fine(self):
+        self.assertEqual(wood.steamlike_problems({"host": self.GOOD, "client": self.GOOD}), [])
+
+    def test_a_game_that_says_off_a_missing_startup_line_or_a_missing_connect_line_is_a_problem(self):
+        problems = wood.steamlike_problems({"host": "STEAMLIKE delivery off\n", "client": ""})
+        self.assertEqual(len(problems), 2)
+        self.assertIn("host log says the steamlike delivery is off", problems[0])
+        self.assertIn("client log has no steamlike startup line", problems[1])
+        connect = wood.steamlike_problems({"host": "STEAMLIKE delivery on (x)\n", "client": self.GOOD})
+        self.assertEqual(connect, ["the host log has no steamlike line for the connection"])
+
+    def test_launch_problems_in_the_report_make_the_run_invalid(self):
+        observation = ReportTests.Observation(good_context(), series(climb(3), climb(3)))
+        observation.baseline = {"host": [11, 0.0], "client": [11, 0.0]}
+        context = observation.context
+        context["identities"] = dict(GOOD_IDENTITIES)
+        context["seriesStarted"] = 100.0
+        context["woodSwings"] = [{"swing": index + 1, "invokedAt": 100.0 + moment, "ignoredAttempts": 0, "interval": None} for index, moment in enumerate([0.5, 0.7, 0.9, 1.1])]
+        report = {"findings": {"client": finding(0.4), "host": finding(0.4)}, "network": {"delay_ms": 0.0}, "proxyObserved": {}, "launchProblems": ["the client log has no steamlike startup line"]}
+        issues = wood.extend_report(report, observation, {"host": "", "client": ""}, [])
+        self.assertTrue(issues[0].startswith("INVALID: the client log has no steamlike startup line"))
+
+    def test_only_the_steamlike_scenario_checks_the_launch_logs(self):
+        self.assertTrue([scenario for scenario in wood.WOOD_SCENARIOS if getattr(scenario, "launch_problems", None)][0].group == "wood-mining-steamlike")
+        self.assertEqual(len([scenario for scenario in wood.WOOD_SCENARIOS if getattr(scenario, "launch_problems", None)]), 1)
+
+
 class BaselineProblemTests(unittest.TestCase):
     def test_damage_left_on_the_cell_before_the_first_swing_is_a_problem_per_side(self):
         problems = wood.baseline_problems({"host": [11, 135.3], "client": [11, 0.0]})

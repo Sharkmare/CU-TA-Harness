@@ -140,6 +140,8 @@ def series_method(run):
         report["clientBody"] = body_identity(self)
         report["transpilerLines"] = {which: desync.transpiler_lines(GAMES.log_text(which)) for which in ("host", "client")}
         report["stallTrace"] = GAMES.proxy.stall_trace_since(stall_mark)
+        launch_problems = getattr(scenario, "launch_problems", None)
+        report["launchProblems"] = launch_problems({which: GAMES.log_text(which) for which in ("host", "client")}) if launch_problems else []
         extend_report = getattr(scenario, "extend_report", None)
         issues = extend_report(report, observation, run_logs, GAMES.proxy.trace_since(trace_mark)) if extend_report else []
         report["issues"] = issues
