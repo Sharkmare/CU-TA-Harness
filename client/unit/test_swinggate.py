@@ -277,6 +277,44 @@ class GateTests(unittest.TestCase):
         self.assertTrue(gate.check(mock.Mock())["passed"])
 
 
+class WaitReadyTests(unittest.TestCase):
+    def gate_with(self, verdicts):
+        gate = swinggate.Gate(good_spec(), lambda: {})
+        queue = list(verdicts)
+        gate.check = lambda client: dict(queue.pop(0) if len(queue) > 1 else queue[0])
+        return gate
+
+    def passed(self):
+        return {"passed": True, "failures": [], "values": {}}
+
+    def failed(self, gate="limb"):
+        return {"passed": False, "failures": [{"gate": gate, "detail": "limb1 is 3.98 from its rest pose (tolerance 0.50)"}], "values": {}}
+
+    def run_wait(self, gate, timeout=3.0):
+        clock = [0.0]
+        return gate.wait_ready(mock.Mock(), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds), now=lambda: clock[0], timeout=timeout)
+
+    def test_a_gate_that_passes_on_the_first_read_returns_at_once_without_waiting(self):
+        verdict = self.run_wait(self.gate_with([self.passed()]))
+        self.assertTrue(verdict["passed"])
+        self.assertEqual(verdict["waitedReads"], 0)
+
+    def test_a_limb_still_in_recoil_is_waited_for_and_the_returned_verdict_is_the_fresh_passing_read(self):
+        verdict = self.run_wait(self.gate_with([self.failed(), self.failed("seat"), self.passed()]))
+        self.assertTrue(verdict["passed"])
+        self.assertEqual(verdict["waitedReads"], 2)
+
+    def test_a_gate_that_never_passes_times_out_failed_and_nothing_is_fired(self):
+        verdict = self.run_wait(self.gate_with([self.failed()]), timeout=1.0)
+        self.assertFalse(verdict["passed"])
+        self.assertEqual(verdict["failures"][0]["gate"], "limb")
+        self.assertGreater(verdict["waitedReads"], 5)
+        self.assertLess(verdict["waitedReads"], 20)
+
+    def test_the_wait_is_bounded_by_the_named_timeout(self):
+        self.assertEqual((swinggate.READY_TIMEOUT_SECONDS, swinggate.READY_POLL_SECONDS), (3.0, 0.1))
+
+
 class RunVerdictTests(unittest.TestCase):
     def entries(self, landed=(True, True, True)):
         return [{"swing": index, "fired": True, "hostDelta": 19.3 if hit else 0.0, "clientDelta": 19.3 if hit else 0.0} for index, hit in enumerate(landed, 1)]
@@ -318,7 +356,7 @@ class RunVerdictTests(unittest.TestCase):
 class WorldActGateTests(unittest.TestCase):
     def run_act(self, verdicts, fire_result=True):
         gate = mock.Mock()
-        gate.check.side_effect = verdicts
+        gate.wait_ready.side_effect = verdicts
         context = {"host": mock.Mock(), "hostHandle": "id:7", "clientHandle": "id:-7", "position": {"x": 3.0, "y": 0.0}, "target": {}, "gate": gate}
         fired = []
         client = mock.Mock()

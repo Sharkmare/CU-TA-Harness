@@ -99,6 +99,9 @@ class PassingGate:
         self.checks += 1
         return {"passed": True, "failures": [], "values": {}}
 
+    def wait_ready(self, client, **options):
+        return self.check(client)
+
 
 def base_distance(first, second):
     return ((first["x"] - second["x"]) ** 2 + (first["y"] - second["y"]) ** 2) ** 0.5

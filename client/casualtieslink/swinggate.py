@@ -12,6 +12,8 @@ from casualtieslink import positioncontrol
 
 LIMB_REST_TOLERANCE = 0.2
 AIM_SETTLE_SECONDS = 0.5
+READY_TIMEOUT_SECONDS = 3.0
+READY_POLL_SECONDS = 0.1
 LIMB_POSE_TOLERANCE = 0.5
 LIMB_REACH = 4.5
 COOLDOWN_READY = 0.005
@@ -164,6 +166,21 @@ class Gate:
         self.settle_record = settle_limbs(client, self.client_paths, lambda: (self.read_target() or {}).get("position"), **options)
         self.spec["rest"] = self.settle_record["rest"]
         return self.settle_record
+
+    def wait_ready(self, client, sleep=None, now=None, timeout=READY_TIMEOUT_SECONDS, poll=READY_POLL_SECONDS):
+        """Read the gate until it passes, then return that fresh passing verdict so the swing is fired at once. After a swing the limb and the body are in recoil for a moment, so the
+        next swing waits for them; a gate that has not passed within the timeout is returned as failed and the swing is not fired."""
+        sleep = sleep or time.sleep
+        now = now or time.time
+        started = now()
+        verdict = self.check(client)
+        waited = 0
+        while not verdict["passed"] and now() - started < timeout:
+            sleep(poll)
+            verdict = self.check(client)
+            waited += 1
+        verdict["waitedReads"] = waited
+        return verdict
 
     def check(self, client):
         self.aim(client)

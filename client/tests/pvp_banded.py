@@ -190,6 +190,11 @@ def run_punches(host, client, context, entries, accept_range):
         if not band["ok"]:
             context["bandFailure"] = {"swing": index, "distances": band["distances"]}
             break
+        if index == 1 and band.get("seat") is None:
+            held_at = base.player_position(client)
+            held = positioncontrol.seat_swinging_body(client, held_at, paths=PATHS["client"])
+            band["seat"] = held_at
+            band["heldInPlace"] = {"ok": held["ok"], "issues": held["issues"]}
         if index == 1:
             context["positionControl"] = preflight(host, client, spot, band)
             if not context["positionControl"]["ok"]:
@@ -205,7 +210,7 @@ def run_punches(host, client, context, entries, accept_range):
         verdict = None
         if gate is not None:
             gate.spec["seat"] = band.get("seat") or gate.spec["seat"]
-            verdict = gate.check(client)
+            verdict = gate.wait_ready(client)
             if not verdict["passed"]:
                 context["gateFailure"] = dict(verdict, swing=index)
                 break

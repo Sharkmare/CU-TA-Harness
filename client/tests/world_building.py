@@ -263,7 +263,7 @@ def act(client, context, before_swing=None):
         verdict = None
         gate = context.get("gate")
         if gate is not None:
-            verdict = gate.check(client)
+            verdict = gate.wait_ready(client)
             if not verdict["passed"]:
                 context["gateFailure"] = dict(verdict, swing=index)
                 break

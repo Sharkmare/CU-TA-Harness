@@ -17,6 +17,7 @@ MUTATIONS = [
     ("casualtieslink/swinggate.py", "    if gate_failure:\n        first = gate_failure[\"failures\"][0]\n        return \"invalid\"", "    if gate_failure:\n        first = gate_failure[\"failures\"][0]\n        return \"fail\"", "a gate failure classified fail"),
     ("casualtieslink/swinggate.py", "        steady = previous is not None and all(", "        steady = True or previous is not None and all(", "settle without waiting for steady limbs"),
     ("casualtieslink/swinggate.py", "        stable = stable + 1 if steady and reach is not None and reach <= LIMB_REACH else 0", "        stable = stable + 1 if steady else 0", "settle ignores reach"),
+    ("casualtieslink/swinggate.py", "        while not verdict[\"passed\"] and now() - started < timeout:", "        while False:", "no wait for the recoil to settle"),
     ("tests/world_building.py", "            if not verdict[\"passed\"]:\n                context[\"gateFailure\"] = dict(verdict, swing=index)\n                break", "            if not verdict[\"passed\"]:\n                context[\"gateFailure\"] = dict(verdict, swing=index)", "a failed gate does not stop the swing"),
 ]
 
