@@ -54,6 +54,28 @@ class ArgumentTests(unittest.TestCase):
         self.assertFalse(selfjoin.lobby_type_is_not_private({"unreadable": "x"}))
 
 
+class LinkLobbyIdTests(unittest.TestCase):
+    class Game:
+        def __init__(self, values):
+            self.values = values
+
+        def get(self, target, path, depth=0):
+            if path in self.values:
+                return self.values[path]
+            raise RuntimeError("no such path")
+
+    def test_the_first_path_that_gives_a_positive_number_is_the_lobby_id(self):
+        game = self.Game({"CURRENT_LOBBY.lobby_steamID.m_SteamID": 109775241234567890})
+        self.assertEqual(selfjoin.lobby_id_from_link(game), 109775241234567890)
+
+    def test_a_zero_or_unreadable_value_gives_none(self):
+        self.assertIsNone(selfjoin.lobby_id_from_link(self.Game({"CURRENT_LOBBY.lobby_steamID.m_SteamID": 0})))
+        self.assertIsNone(selfjoin.lobby_id_from_link(self.Game({})))
+
+    def test_a_numeric_string_is_accepted(self):
+        self.assertEqual(selfjoin.lobby_id_from_link(self.Game({"LobbyId.m_SteamID": "109775241234567891"})), 109775241234567891)
+
+
 class LogReadingTests(unittest.TestCase):
     def test_the_lobby_id_is_the_eighteen_digit_number_on_a_lobby_line(self):
         text = "noise 109775240000000001\nSTEAM: [513 - LobbyCreated] - k_EResultOK -- 109775241234567890\n"

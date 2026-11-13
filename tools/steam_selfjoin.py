@@ -45,6 +45,29 @@ STEP_PATTERNS = (
 STAGE_DIRECTORY_BY_CHOICE = {"pr24-3d060fe-plain-stage": instances.pr24_tip_plain_stage_directory}
 
 
+LOBBY_ID_PATHS = (("static:Together.KSteam", "CURRENT_LOBBY.lobby_steamID.m_SteamID"), ("static:Together.KSteam", "LobbyId.m_SteamID"), ("static:Together.KSteam", "CURRENT_LOBBY.lobby_steamID"))
+
+
+def lobby_id_from_link(game, paths=LOBBY_ID_PATHS):
+    """The id of the lobby the host created, read through the link from the mod's own lobby state; None until it exists."""
+    for target, path in paths:
+        try:
+            value = game.get(target, path, depth=0)
+        except Exception:
+            continue
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and int(value) > 0:
+            return int(value)
+        if isinstance(value, str) and value.isdigit() and int(value) > 0:
+            return int(value)
+    try:
+        lobby = game.get("static:Together.KSteam", "CURRENT_LOBBY", depth=4)
+    except Exception:
+        return None
+    nested = (lobby or {}).get("lobby_steamID") if isinstance(lobby, dict) else None
+    value = nested.get("m_SteamID") if isinstance(nested, dict) else None
+    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and int(value) > 0 else None
+
+
 def lobby_id_from_text(text):
     """The first Steam lobby id (an 18 digit number starting with 1) on a line that mentions a lobby."""
     for line in text.splitlines():
@@ -161,7 +184,7 @@ def run(label, stage_choice, dry_run, output_directory):
                                  window_args=["-screen-fullscreen", "0", "-screen-width", "640", "-screen-height", "360"])
         games.host.start(instances.START_TIMEOUT_SECONDS, allow_existing=True)
         record["hostStarted"] = True
-        lobby_id = wait_for(lambda: lobby_id_from_text(read_log(games.host_copy)), LOBBY_WAIT_SECONDS)
+        lobby_id = wait_for(lambda: lobby_id_from_link(games.host.game) or lobby_id_from_text(read_log(games.host_copy)), LOBBY_WAIT_SECONDS)
         record["lobbyId"] = lobby_id
         record["hostLobbyRead"] = link_read(games.host.game, "static:Together.KSteam", "CURRENT_LOBBY")
         chosen = link_read(games.host.game, "static:Together.UIMainMenu", "_STEAM_CHOSEN_LOBBYTYPE")
