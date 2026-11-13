@@ -62,6 +62,41 @@ def facing_record(client, corpse):
             "facingCorpse": look is not None and side_of(player, look) == side_of(player, corpse)}
 
 
+def hold_rows(game):
+    try:
+        rows = game.call(positioncontrol.STATUS_COMMAND)
+    except Exception as failure:
+        return {"error": "%s: %s" % (type(failure).__name__, str(failure)[:120])}
+    if not isinstance(rows, list):
+        return {"error": "the hold status is not a list: %s" % str(rows)[:80]}
+    return [{key: row.get(key) for key in ("target", "position", "drift", "maxDrift", "exceededTicks", "heldWithinTolerance", "lost", "tolerance")} for row in rows]
+
+
+def hold_snapshot(host, client):
+    return {"host": hold_rows(host), "client": hold_rows(client)}
+
+
+def hold_problems(snapshots, entries):
+    """Anything that makes the corpse result confounded: a hold that is missing, lost, over its tolerance or unreadable, or a swing that was not fired."""
+    problems = []
+    for moment, snapshot in snapshots.items():
+        for which in ("host", "client"):
+            rows = snapshot[which]
+            if isinstance(rows, dict):
+                problems.append("%s hold status at %s unreadable: %s" % (which, moment, rows["error"]))
+                continue
+            if not rows:
+                problems.append("no %s hold at %s" % (which, moment))
+            for row in rows:
+                if row.get("lost") or row.get("heldWithinTolerance") is not True or (row.get("exceededTicks") or 0) > 0:
+                    problems.append("%s hold at %s: held within tolerance %s, exceeded ticks %s, max drift %s, lost %s" % (
+                        which, moment, row.get("heldWithinTolerance"), row.get("exceededTicks"), row.get("maxDrift"), row.get("lost")))
+    unfired = [entry["swing"] for entry in entries if not entry.get("fired")]
+    if unfired:
+        problems.append("swings that did not fire: %s" % unfired)
+    return problems
+
+
 def point_look_at(client, corpse):
     client.set("player", "targetLookPos", {"x": corpse["x"], "y": corpse["y"], "z": 0.0})
 
@@ -129,6 +164,7 @@ def act(client, context):
             return
         started = time.time()
         entries = context["measurements"]
+        snapshots = target["holds"] = {"beforeFirstSwing": hold_snapshot(host, client)}
         for index in range(1, SWINGS + 1):
             slot = started + (index - 1) * CADENCE_SECONDS
             wait = slot - time.time()
@@ -137,9 +173,16 @@ def act(client, context):
             before = read_both(client, context)
             fired = hooks.fire_one_swing(client, corpse_point(host, context))
             entries.append(record_swing(index, started, fired, before, read_both(client, context), context, client))
+        snapshots["afterLastSwing"] = hold_snapshot(host, client)
         context["samples"] = sample_after(client, context, started, AFTER_LAST_SWING_SECONDS)
         target["samples"] = context["samples"]
-        target["prediction"] = evaluate(entries, context["samples"], target["hostFlags"], target["clientFlags"])
+        snapshots["end"] = hold_snapshot(host, client)
+        prediction = evaluate(entries, context["samples"], target["hostFlags"], target["clientFlags"])
+        problems = hold_problems(snapshots, entries)
+        target["holdProblems"] = problems
+        if problems:
+            prediction = dict(prediction, ifRead=prediction["verdict"], verdict="confounded: the corpse result is not read against the prediction", confoundedBy=problems)
+        target["prediction"] = prediction
     finally:
         banded.destroy(host, context["hostHandle"])
         positioncontrol.release_quietly(client)

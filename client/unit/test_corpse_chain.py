@@ -57,6 +57,56 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "prediction refuted")
 
 
+def hold_row(held=True, exceeded=0, lost=False, drift=0.01):
+    return {"target": {"x": 1.0, "y": 2.0}, "position": {"x": 1.0, "y": 2.0}, "drift": drift, "maxDrift": drift, "exceededTicks": exceeded, "heldWithinTolerance": held, "lost": lost, "tolerance": 0.05}
+
+
+def snapshots(host=None, client=None):
+    row_host = [hold_row()] if host is None else host
+    row_client = [hold_row()] if client is None else client
+    return {moment: {"host": row_host, "client": row_client} for moment in ("beforeFirstSwing", "afterLastSwing", "end")}
+
+
+class HoldTests(unittest.TestCase):
+    def test_holds_that_stayed_within_tolerance_and_all_swings_fired_are_not_a_problem(self):
+        self.assertEqual(chain.hold_problems(snapshots(), [entry(1, 250.0, -10.0)]), [])
+
+    def test_a_hold_that_exceeded_its_tolerance_is_a_problem_naming_the_machine_and_moment(self):
+        problems = chain.hold_problems(snapshots(client=[hold_row(held=False, exceeded=3, drift=0.9)]), [entry(1, 250.0, -10.0)])
+        self.assertTrue(any(problem.startswith("client hold at beforeFirstSwing") and "exceeded ticks 3" in problem for problem in problems), problems)
+        self.assertFalse(any(problem.startswith("host hold") for problem in problems))
+
+    def test_a_lost_body_is_a_problem(self):
+        self.assertTrue(chain.hold_problems(snapshots(host=[hold_row(lost=True)]), [entry(1, 250.0, -10.0)]))
+
+    def test_a_missing_hold_is_a_problem(self):
+        problems = chain.hold_problems(snapshots(host=[]), [entry(1, 250.0, -10.0)])
+        self.assertTrue(any("no host hold" in problem for problem in problems), problems)
+
+    def test_an_unreadable_status_is_a_problem_not_a_pass(self):
+        shot = snapshots()
+        shot["end"]["client"] = {"error": "LinkError: unknown command"}
+        self.assertTrue(any("unreadable" in problem for problem in chain.hold_problems(shot, [entry(1, 250.0, -10.0)])))
+
+    def test_a_swing_that_did_not_fire_is_a_problem(self):
+        unfired = dict(entry(2, 250.0, -10.0), fired=False)
+        self.assertEqual(chain.hold_problems(snapshots(), [entry(1, 250.0, -10.0), unfired]), ["swings that did not fire: [2]"])
+
+    def test_a_status_that_is_not_a_list_is_reported_as_an_error(self):
+        game = mock.Mock()
+        game.call.return_value = mock.Mock()
+        self.assertIn("not a list", chain.hold_rows(game)["error"])
+
+    def test_the_status_rows_keep_only_the_fields_the_report_needs(self):
+        game = mock.Mock()
+        game.call.return_value = [dict(hold_row(), id=5, ticks=900)]
+        rows = chain.hold_rows(game)
+        self.assertNotIn("id", rows[0])
+        self.assertEqual(rows[0]["maxDrift"], 0.01)
+        game.call.side_effect = RuntimeError("down")
+        self.assertEqual(chain.hold_rows(game), {"error": "RuntimeError: down"})
+
+
 class PrepareTests(unittest.TestCase):
     def setUp(self):
         crates.reset_launch_state()
@@ -104,6 +154,8 @@ class ActTests(unittest.TestCase):
         self.addCleanup(crates.reset_launch_state)
         self.client = mock.Mock()
         self.host = mock.Mock()
+        self.client.call.return_value = [hold_row()]
+        self.host.call.return_value = [hold_row()]
         self.clock = [100.0]
         self.sleeps = []
         self.fired = []
@@ -149,6 +201,29 @@ class ActTests(unittest.TestCase):
         planned = round(chain.AFTER_LAST_SWING_SECONDS / chain.SAMPLE_INTERVAL_SECONDS)
         self.assertIn(len(context["samples"]), (planned, planned + 1))
         self.assertEqual(context["target"]["prediction"]["verdict"], "prediction holds")
+
+    def hold_status_for(self, game, exceeded=0):
+        return [hold_row(held=exceeded == 0, exceeded=exceeded)]
+
+    def test_the_hold_status_is_taken_before_the_first_swing_after_the_last_and_at_the_end(self):
+        context = self.context()
+        self.host.call.side_effect = lambda command, **arguments: self.hold_status_for(self.host)
+        self.client.call.side_effect = lambda command, **arguments: self.hold_status_for(self.client)
+        self.run_act(context)
+        holds = context["target"]["holds"]
+        self.assertEqual(sorted(holds), ["afterLastSwing", "beforeFirstSwing", "end"])
+        self.assertEqual(context["target"]["holdProblems"], [])
+        self.assertEqual(context["target"]["prediction"]["verdict"], "prediction holds")
+
+    def test_a_hold_over_its_tolerance_labels_the_corpse_result_confounded_instead_of_reading_the_prediction(self):
+        context = self.context()
+        self.host.call.side_effect = lambda command, **arguments: self.hold_status_for(self.host)
+        self.client.call.side_effect = lambda command, **arguments: self.hold_status_for(self.client, exceeded=4)
+        self.run_act(context)
+        prediction = context["target"]["prediction"]
+        self.assertTrue(prediction["verdict"].startswith("confounded"))
+        self.assertEqual(prediction["ifRead"], "prediction holds")
+        self.assertTrue(prediction["confoundedBy"])
 
     def test_every_swing_aims_at_the_corpse(self):
         context = self.context()
