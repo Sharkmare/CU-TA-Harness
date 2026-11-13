@@ -17,12 +17,13 @@ BUILDS = (("fullbuild-control", "fullbuild-control-stage", instances.FULLBUILD_C
           ("pr24-corpse-verbose", "pr24-corpse-verbose-stage", instances.PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_verbose"),
           ("pr24-corpse-fix", "pr24-corpse-fix-stage", instances.PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_fix"),
           ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-corpse-fix-stage", instances.PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix"),
-          ("pr24-3d060fe-plain", "pr24-3d060fe-plain-stage", instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_plain"))
+          ("pr24-3d060fe-plain", "pr24-3d060fe-plain-stage", instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_plain"),
+          ("pr24-3d060fe-corpse-fix2", "pr24-3d060fe-corpse-fix2-stage", instances.PR24_TIP_FIX2_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix2"))
 PINNED_MD5 = {"fullbuild-control": "5f44699a7e034bdcbdb8ba66969d04de", "fullbuild-fixed": "2eda43381ed4445d367e27af5edefedb",
               "pr24-control": "f209be8eb9d37eda5a4aafa407deda0f", "pr24-fixed": "aac74832f4e3dd8a2c13d12cba785e3a",
               "pr24-fixed-verbose": "ce681dc17f3c76d448e107275a9b76f5", "pr24-control-verbose": "04b8ecd02fbb347b70309abe9ee07cc1", "pr24-corpse-verbose": "435da880cbee2060fd259116bff43f5d",
               "pr24-corpse-fix": "6e57bc2d90f04736c3eec8a5fce4cab8", "pr24-3d060fe-corpse-fix": "fea4725f5d7466c9ecebbca7553d4740",
-              "pr24-3d060fe-plain": "424f961ea469e10dd697029f04adc367"}
+              "pr24-3d060fe-plain": "424f961ea469e10dd697029f04adc367", "pr24-3d060fe-corpse-fix2": "0325037dceac4dbc5ae851315205d76d"}
 CUCORELIB_MD5 = "d696c8a1ccce7cb934c85a0e8cb21091"
 
 
