@@ -74,6 +74,15 @@ class JudgeTests(unittest.TestCase):
         self.assertIn("limb", gates)
         self.assertTrue(any("limb 1 is 8.50 from the target" in item["detail"] for item in verdict["failures"]))
 
+    def test_a_resting_limb_four_units_behind_the_target_as_in_real_landed_swings_is_in_reach(self):
+        state = good_state()
+        state["pose"]["limb1"] = {"x": -1.08, "y": -1.06}
+        rest = copy.deepcopy(REST)
+        rest["limb1"] = {"x": -1.08, "y": -1.06}
+        gates, verdict = failed_gates(state, good_spec(rest=rest))
+        self.assertEqual(gates, [])
+        self.assertEqual(verdict["values"]["limb"]["limb1ToTarget"], 4.09)
+
     def test_without_a_rest_pose_nothing_is_fired(self):
         gates, verdict = failed_gates(good_state(), good_spec(rest=None))
         self.assertEqual(gates, ["limb"])
@@ -137,7 +146,7 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(failed_gates(state)[0], ["cooldown", "facing"])
 
     def test_the_tolerances_are_named_constants_and_the_pose_spec_can_tighten_the_limb_tolerance(self):
-        self.assertEqual((swinggate.LIMB_POSE_TOLERANCE, swinggate.LIMB_REACH, swinggate.COOLDOWN_READY, swinggate.PARKED_MIN_DISTANCE), (0.5, 4.0, 0.005, 6.0))
+        self.assertEqual((swinggate.LIMB_POSE_TOLERANCE, swinggate.LIMB_REACH, swinggate.COOLDOWN_READY, swinggate.PARKED_MIN_DISTANCE), (0.5, 4.5, 0.005, 6.0))
         state = good_state()
         state["pose"]["limb1"] = {"x": 0.7, "y": -0.2}
         self.assertEqual(failed_gates(state)[0], [])
