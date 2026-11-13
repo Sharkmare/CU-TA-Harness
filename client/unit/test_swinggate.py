@@ -62,10 +62,17 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(gates, ["limb"])
         self.assertTrue(any("limb1 is 9.00 from its rest pose" in item["detail"] for item in verdict["failures"]))
 
-    def test_limb_zero_out_of_its_rest_pose_is_never_fired_either(self):
+    def test_limb_zero_is_recorded_but_does_not_gate_by_default_because_it_is_not_the_swing_origin(self):
         state = good_state()
         state["pose"]["limb0"] = {"x": 3.0, "y": 1.0}
-        self.assertEqual(failed_gates(state)[0], ["limb"])
+        gates, verdict = failed_gates(state)
+        self.assertEqual(gates, [])
+        self.assertEqual(verdict["values"]["limb"]["limb0Moved"], 3.0)
+
+    def test_a_profile_that_gates_limb_zero_never_fires_a_swing_with_limb_zero_out_of_place(self):
+        state = good_state()
+        state["pose"]["limb0"] = {"x": 3.0, "y": 1.0}
+        self.assertEqual(failed_gates(state, good_spec(gatedLimbs=("limb0", "limb1")))[0], ["limb"])
 
     def test_a_limb_beyond_reach_of_the_target_is_never_fired_even_in_its_rest_pose(self):
         state = good_state()

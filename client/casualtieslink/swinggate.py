@@ -19,6 +19,7 @@ SETTLE_TIMEOUT_SECONDS = 6.0
 SETTLE_POLL_SECONDS = 0.15
 SETTLE_READS_IN_A_ROW = 2
 PARKED_MIN_DISTANCE = 6.0
+GATED_LIMBS = ("limb1",)
 LIMB_PATHS = {"limb0": "limbs[0].transform.position", "limb1": "limbs[1].transform.position"}
 GATE_NAMES = ("seat", "limb", "facing", "cooldown", "target", "distance", "box")
 
@@ -86,14 +87,17 @@ def judge(state, spec):
     for name in ("limb0", "limb1"):
         current = offset(pose[name], body)
         limb_values[name] = current
+        gated = name in spec.get("gatedLimbs", GATED_LIMBS)
         if rest is None or rest.get(name) is None:
-            failures.append({"gate": "limb", "detail": "no rest pose for %s" % name})
+            if gated:
+                failures.append({"gate": "limb", "detail": "no rest pose for %s" % name})
         elif current is None:
-            failures.append({"gate": "limb", "detail": "%s is not readable" % name})
+            if gated:
+                failures.append({"gate": "limb", "detail": "%s is not readable" % name})
         else:
             moved = distance(current, rest[name])
             limb_values[name + "Moved"] = round(moved, 3)
-            if moved > spec.get("limbPoseTolerance", LIMB_POSE_TOLERANCE):
+            if gated and moved > spec.get("limbPoseTolerance", LIMB_POSE_TOLERANCE):
                 failures.append({"gate": "limb", "detail": "%s is %.2f from its rest pose (tolerance %.2f)" % (name, moved, spec.get("limbPoseTolerance", LIMB_POSE_TOLERANCE))})
     reach = None if pose["limb1"] is None or target_point is None else distance(pose["limb1"], target_point)
     limb_values["limb1ToTarget"] = None if reach is None else round(reach, 3)
