@@ -57,9 +57,10 @@ def side_of(origin, point):
 def facing_record(client, corpse):
     player = base.player_position(client)
     look = crates.point_of(crates.optional_read(client, "targetLookPos"))
-    return {"clientPosition": player, "corpse": corpse, "isRight": crates.optional_read(client, "isRight"), "lookPosition": look,
-            "corpseSide": side_of(player, corpse), "lookSide": None if look is None else side_of(player, look),
-            "facingCorpse": look is not None and side_of(player, look) == side_of(player, corpse)}
+    is_right = crates.optional_read(client, "isRight")
+    corpse_side = side_of(player, corpse)
+    return {"clientPosition": player, "corpse": corpse, "isRight": is_right, "lookPosition": look, "corpseSide": corpse_side,
+            "lookSide": None if look is None else side_of(player, look), "facingCorpse": is_right is (corpse_side > 0)}
 
 
 def hold_rows(game):
@@ -95,10 +96,6 @@ def hold_problems(snapshots, entries):
     if unfired:
         problems.append("swings that did not fire: %s" % unfired)
     return problems
-
-
-def point_look_at(client, corpse):
-    client.set("player", "targetLookPos", {"x": corpse["x"], "y": corpse["y"], "z": 0.0})
 
 
 def prepare(host, client):
@@ -151,12 +148,7 @@ def act(client, context):
             context["positionFailure"] = target["positionControl"]
             return
         corpse = corpse_point(host, context)
-        point_look_at(client, corpse)
-        context["facingBefore"] = facing_record(client, corpse)
-        target["facingBefore"] = context["facingBefore"]
-        if not context["facingBefore"]["facingCorpse"]:
-            context["facingFailure"] = context["facingBefore"]
-            return
+        target["facingBefore"] = facing_record(client, corpse)
         distance = base.distance(base.player_position(client), corpse)
         target["swingDistance"] = round(distance, 3)
         if distance > MAX_SWING_DISTANCE:
@@ -173,6 +165,11 @@ def act(client, context):
             before = read_both(client, context)
             fired = hooks.fire_one_swing(client, corpse_point(host, context))
             entries.append(record_swing(index, started, fired, before, read_both(client, context), context, client))
+            if index == 1:
+                target["facingAfterFirstSwing"] = facing_record(client, corpse_point(host, context))
+                if not target["facingAfterFirstSwing"]["facingCorpse"]:
+                    context["facingFailure"] = target["facingAfterFirstSwing"]
+                    break
         snapshots["afterLastSwing"] = hold_snapshot(host, client)
         context["samples"] = sample_after(client, context, started, AFTER_LAST_SWING_SECONDS)
         target["samples"] = context["samples"]
@@ -222,11 +219,11 @@ def evaluate(entries, samples, host_flags, client_flags):
 
 
 def check(context):
-    for key, label in (("positionFailure", "the position preflight failed"), ("facingFailure", "the client does not face the corpse before the first swing")):
+    for key, label in (("positionFailure", "the position preflight failed"), ("facingFailure", "the client does not face the corpse after the first swing")):
         failure = context.get(key)
         if failure:
             STATE["setup_failed"] += 1
-            detail = "; ".join(failure.get("issues", [])) if "issues" in failure else "look side %s, corpse side %s (isRight %s)" % (failure.get("lookSide"), failure.get("corpseSide"), failure.get("isRight"))
+            detail = "; ".join(failure.get("issues", [])) if "issues" in failure else "isRight %s, corpse side %s, look side %s" % (failure.get("isRight"), failure.get("corpseSide"), failure.get("lookSide"))
             message = "INVALID: %s: %s" % (label, detail)
             crates.record_failure(key, message)
             return [message]

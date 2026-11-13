@@ -175,10 +175,10 @@ class ActTests(unittest.TestCase):
         self.clock[0] += seconds
 
     def patches(self, facing=True):
-        look = {"x": CORPSE["x"], "y": CORPSE["y"]} if facing else {"x": 0.0, "y": 5.0}
+        look = {"x": CORPSE["x"], "y": CORPSE["y"]}
         return [mock.patch.object(chain.time, "time", lambda: self.clock[0]), mock.patch.object(chain.time, "sleep", self.sleep),
                 mock.patch.object(chain.world, "host_position", lambda host, handle: dict(CORPSE)), mock.patch.object(chain.base, "player_position", lambda game: {"x": 10.0, "y": 5.0}),
-                mock.patch.object(chain.crates, "optional_read", lambda game, path: look if path == "targetLookPos" else True),
+                mock.patch.object(chain.crates, "optional_read", lambda game, path: look if path == "targetLookPos" else facing),
                 mock.patch.object(chain.hooks, "fire_one_swing", self.fire),
                 mock.patch.object(chain, "read_health", lambda game, handle: 250.0 if game is self.host else self.client_hp), mock.patch.object(chain, "read_flag", lambda game, handle: game is self.host),
                 mock.patch.object(chain.banded, "destroy"), mock.patch.object(chain.positioncontrol, "release_quietly")]
@@ -230,13 +230,29 @@ class ActTests(unittest.TestCase):
         self.run_act(context)
         self.assertTrue(all(aim == CORPSE for aim in self.fired))
 
-    def test_a_client_that_does_not_face_the_corpse_fires_nothing_and_the_run_is_invalid(self):
+    def test_a_client_that_still_faces_away_after_the_first_swing_stops_after_that_swing_and_the_run_is_invalid(self):
         context = self.context()
         self.run_act(context, facing=False)
-        self.assertEqual(self.fired, [])
-        self.assertFalse(context["facingBefore"]["facingCorpse"])
+        self.assertEqual(len(self.fired), 1)
+        self.assertFalse(context["target"]["facingBefore"]["facingCorpse"])
+        self.assertFalse(context["target"]["facingAfterFirstSwing"]["facingCorpse"])
         issues = chain.check(context)
-        self.assertTrue(issues[0].startswith("INVALID: the client does not face the corpse"), issues)
+        self.assertTrue(issues[0].startswith("INVALID: the client does not face the corpse after the first swing"), issues)
+        self.assertIn("isRight False, corpse side 1", issues[0])
+
+    def test_a_client_that_faces_the_corpse_records_the_facing_before_and_after_the_first_swing(self):
+        context = self.context()
+        self.run_act(context)
+        target = context["target"]
+        self.assertTrue(target["facingBefore"]["facingCorpse"])
+        self.assertTrue(target["facingAfterFirstSwing"]["facingCorpse"])
+
+    def test_the_look_position_is_not_used_to_judge_facing_because_the_game_resets_it_every_frame(self):
+        with mock.patch.object(chain.base, "player_position", lambda game: {"x": 10.0, "y": 5.0}), \
+                mock.patch.object(chain.crates, "optional_read", lambda game, path: {"x": -22.0, "y": 9.0} if path == "targetLookPos" else True):
+            record = chain.facing_record(mock.Mock(), {"x": 12.5, "y": 5.0})
+        self.assertEqual((record["lookSide"], record["corpseSide"]), (-1, 1))
+        self.assertTrue(record["facingCorpse"])
 
     def test_a_failed_seat_fires_nothing_and_is_invalid_and_the_holds_are_still_released(self):
         context = self.context(seat_ok=False)
