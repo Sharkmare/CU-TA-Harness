@@ -1,7 +1,8 @@
 """Compact result tables for one PR or topic, computed from the harness report JSONs and driven by a profile file.
 
-A profile (client/profiles/*.json) names the report files, the builds to compare, the rows and the columns. The numbers are read from the reports, never typed.
-Two renderings come from the same data: aligned text for a terminal or chat, and a Markdown table for a PR body.
+A profile (client/profiles/*.json) names the report files, the builds to compare, the rows and the columns, and gives every test a role: MAIN (what the PR changes) or
+REGRESSION (existing behaviour that must still hold). The numbers are read from the reports, never typed. The output has a MAIN block and a REGRESSION block, each with its
+own tables and its own verdict line. Renderings from the same data: aligned text for a terminal or chat, the same text in a fenced code block, and GitHub-flavoured Markdown for a PR body.
 """
 import glob
 import hashlib
@@ -24,6 +25,9 @@ DEFAULT_REASONS = (
     (r"does not face the corpse", "client not facing corpse"),
 )
 REQUIRED_PROFILE_KEYS = ("name", "topic", "sources", "tables")
+ROLES = ("MAIN", "REGRESSION")
+ROLE_HEADINGS = {"MAIN": "Main tests", "REGRESSION": "Regression tests"}
+FAIL_PREFIX = "FAIL"
 
 
 class ProfileError(ValueError):
@@ -36,12 +40,19 @@ def load_profile(path):
     for key in REQUIRED_PROFILE_KEYS:
         if key not in profile:
             raise ProfileError("profile %s has no %r" % (path, key))
+    validate_profile(profile, path)
+    return profile
+
+
+def validate_profile(profile, where="profile"):
     for table in profile["tables"]:
         if table.get("kind") not in ("pair_rows", "metric_rows"):
             raise ProfileError("table %r has the unknown kind %r" % (table.get("title"), table.get("kind")))
         if not table.get("builds"):
             raise ProfileError("table %r lists no builds" % table.get("title"))
-    return profile
+        for row in table.get("rows") or []:
+            if row.get("role") not in ROLES:
+                raise ProfileError("test %r in %s has no role: give it one of %s" % (row.get("label"), where, " or ".join(ROLES)))
 
 
 def load_report(path):
@@ -77,6 +88,9 @@ def run_status(report, profile):
     for issue in issues:
         if issue.startswith(INVALID_PREFIXES):
             return "invalid", short_reason(issue, extra)
+    for issue in issues:
+        if issue.startswith(FAIL_PREFIX):
+            return "fail", short_reason(issue, extra)
     for issue in issues:
         if issue.startswith(CONFOUNDED_PREFIX):
             return "confounded", short_reason(issue, extra)
@@ -159,30 +173,36 @@ def distinct_join(values):
     return " / ".join(ordered) if ordered else MISSING_CELL
 
 
+def reclassify(runs, row):
+    """A swing test is all or nothing: a run in which any swing did not land is not a valid run. With every gate recorded as passed at fire time the miss is a FAIL; a run with no gate
+    record (a report from before the gate) cannot show the miss was not caused by the setup, so it is invalid; the profile's miss_cause names a recorded cause when it explains every miss."""
+    metric = row.get("metric")
+    for run in runs:
+        if run["_status"] != "valid":
+            continue
+        if metric == "swings_landed":
+            entries = run.get("measurements") or []
+            missed = [entry for entry in entries if not landed(entry)]
+            if not missed:
+                continue
+            if all((entry.get("gate") or {}).get("passed") for entry in entries):
+                run["_status"], run["_reason"] = "fail", "swing %s missed, every gate passed" % missed[0].get("swing", "?")
+                continue
+            cause = row.get("miss_cause")
+            explained = bool(cause) and all((dig(entry, cause["field"]) or 0) > cause["above"] for entry in missed)
+            run["_status"], run["_reason"] = "invalid", "swing missed, " + (cause["label"] if explained else "no gate record")
+        elif metric == "verdict_count" and run.get("verdict") != row["verdict"]:
+            run["_status"], run["_reason"] = "fail", "verdict %s" % run.get("verdict")
+
+
 def count_cell(runs, row, profile):
-    """landed/total swings, or verdict count, over the valid runs of one cell, with the miss-cause note when the profile asks for one."""
-    metric = row["metric"]
-    if metric == "swings_landed":
-        entries = [entry for run in runs for entry in (run.get("measurements") or [])]
-        if not entries:
-            return MISSING_CELL, None
-        done = len([entry for entry in entries if landed(entry)])
-        text = "%d/%d" % (done, len(entries))
-        cause = row.get("miss_cause")
-        misses = [entry for entry in entries if not landed(entry)]
-        if cause and misses:
-            explained = [entry for entry in misses if (dig(entry, cause["field"]) or 0) > cause["above"]]
-            if len(explained) == len(misses):
-                text += " (misses: %s)" % cause["label"]
-            elif explained:
-                text += " (%d of %d misses: %s)" % (len(explained), len(misses), cause["label"])
-        return text, None
-    if metric == "verdict_count":
-        if not runs:
-            return MISSING_CELL, None
-        done = len([run for run in runs if run.get("verdict") == row["verdict"]])
-        return "%d/%d" % (done, len(runs)), None
-    raise ProfileError("unknown metric %r" % metric)
+    """valid runs over executed runs: a run counts only when every swing landed (or the verdict is the wanted one)."""
+    if row["metric"] not in ("swings_landed", "verdict_count"):
+        raise ProfileError("unknown metric %r" % row["metric"])
+    if not runs:
+        return MISSING_CELL, (0, 0)
+    done = len([run for run in runs if run["_status"] == "valid"])
+    return "%d/%d" % (done, len(runs)), (done, len(runs))
 
 
 def attack_hook_cell(checks):
@@ -231,7 +251,7 @@ def checks_for(all_runs, build, sources=None, root=None):
 
 def deviations_for(label, runs, planned=None):
     lines = []
-    for status, word in (("invalid", "invalid"), ("confounded", "confounded"), ("excluded", "excluded")):
+    for status, word in (("fail", "FAIL"), ("invalid", "invalid"), ("confounded", "confounded"), ("excluded", "excluded")):
         picked = [run for run in runs if run["_status"] == status]
         if not picked:
             continue
@@ -289,89 +309,172 @@ def build_identity(profile, build, root, all_runs):
     return "/".join(shas) if shas else MISSING_CELL
 
 
+def new_stats():
+    return {"valid": 0, "invalid": 0, "fail": 0, "notrun": 0, "excluded": 0, "unmet": []}
+
+
+def add_runs(stats, runs, planned):
+    for run in runs:
+        if run["_status"] == "valid":
+            stats["valid"] += 1
+        elif run["_status"] == "fail":
+            stats["fail"] += 1
+        elif run["_status"] == "excluded":
+            stats["excluded"] += 1
+        else:
+            stats["invalid"] += 1
+    if planned is not None and len(runs) < planned:
+        stats["notrun"] += planned - len(runs)
+
+
+def verdict_line(stats):
+    """One line for a block: every valid run as expected, how many are invalid or not run, or FAIL with what failed."""
+    extras = []
+    if stats["invalid"]:
+        extras.append("%d invalid" % stats["invalid"])
+    if stats["excluded"]:
+        extras.append("%d excluded" % stats["excluded"])
+    if stats["notrun"]:
+        extras.append("%d not run" % stats["notrun"])
+    if stats["fail"] or stats["unmet"]:
+        reasons = []
+        if stats["fail"]:
+            reasons.append("%d run%s FAIL" % (stats["fail"], "" if stats["fail"] == 1 else "s"))
+        if stats["unmet"]:
+            reasons.append("expected not met: " + "; ".join(stats["unmet"][:3]) + ("; and %d more" % (len(stats["unmet"]) - 3) if len(stats["unmet"]) > 3 else ""))
+        return "FAIL (" + ", ".join(reasons) + ")" + ("".join(", " + item for item in extras))
+    base = "all %d valid runs as expected" % stats["valid"] if stats["valid"] else "no valid run"
+    return base + "".join(", " + item for item in extras)
+
+
 def build_result(profile, root):
+    validate_profile(profile)
     all_runs = group_runs(expand_sources(profile["sources"], root), profile)
-    result = {"header": header_line(profile, all_runs), "builds": [], "tables": [], "deviations": []}
+    header_scenarios = {row["scenario"] for table in profile["tables"] if table["kind"] == "pair_rows" for row in table["rows"]}
+    header_runs = [run for run in all_runs if run["_kind"] == "report" and run.get("scenario") in header_scenarios] if header_scenarios else all_runs
+    result = {"header": header_line(profile, header_runs), "builds": [], "blocks": [], "tables": [], "deviations": []}
     seen_builds = []
     for table in profile["tables"]:
         for build in table["builds"]:
             if build["build"] not in [item[1] for item in seen_builds]:
                 seen_builds.append((build["label"], build["build"]))
-    result["builds"] = ["%s %s" % (label, build_identity(profile, build, root, all_runs)) for label, build in seen_builds]
+    result["builds"] = [(label, build_identity(profile, build, root, all_runs)) for label, build in seen_builds]
+    blocks = {role: {"role": role, "heading": ROLE_HEADINGS[role], "tables": [], "stats": new_stats()} for role in ROLES}
     for table in profile["tables"]:
-        if table["kind"] == "pair_rows":
-            rendered = pair_table(table, all_runs, profile, root, result["deviations"])
-        else:
-            rendered = metric_table(table, all_runs, profile, root, result["deviations"])
-        result["tables"].append(rendered)
+        for role in ROLES:
+            rows = [row for row in table["rows"] if row["role"] == role]
+            if not rows:
+                continue
+            block = blocks[role]
+            if table["kind"] == "pair_rows":
+                rendered = pair_table(table, rows, all_runs, root, result["deviations"], block["stats"])
+            else:
+                rendered = metric_table(table, rows, all_runs, root, result["deviations"], block["stats"])
+            block["tables"].append(rendered)
+    for role in ROLES:
+        block = blocks[role]
+        if block["tables"]:
+            block["verdict"] = verdict_line(block["stats"])
+            result["blocks"].append(block)
+            result["tables"].extend(block["tables"])
     return result
 
 
-def pair_table(table, all_runs, profile, root, deviations):
+def pair_table(table, rows_spec, all_runs, root, deviations, stats):
     columns = table["columns"]
     rows = []
-    for pair in table["rows"]:
+    for pair in rows_spec:
         for build in table["builds"]:
             runs = runs_for(all_runs, pair["scenario"], build["build"], pair.get("sources"), root)
             valid = [run for run in runs if run["_status"] == "valid"]
             cells = [corpse_cells(run) for run in valid]
             row = [pair["label"], build["label"]] + [distinct_join([cell[column["id"]] for cell in cells]) if cells else MISSING_CELL for column in columns]
             rows.append(row)
+            add_runs(stats, runs, pair.get("planned_runs"))
+            for column_id, wanted in (pair.get("expect", {}).get(build["label"]) or {}).items():
+                got = distinct_join([cell[column_id] for cell in cells]) if cells else MISSING_CELL
+                if cells and got != wanted:
+                    stats["unmet"].append("%s %s %s %s not %s" % (pair["label"], build["label"], column_id, got, wanted))
             deviations.extend(deviations_for("%s %s" % (pair["label"], build["label"]), runs, pair.get("planned_runs")))
     return {"title": table.get("title"), "headers": ["host/client", "build"] + [column["label"] for column in columns], "rows": rows}
 
 
-def metric_table(table, all_runs, profile, root, deviations):
+def metric_table(table, rows_spec, all_runs, root, deviations, stats):
     rows = []
-    for row in table["rows"]:
+    for row in rows_spec:
         cells = []
         for build in table["builds"]:
             if row.get("metric") == "attack_hook":
                 checks = checks_for(all_runs, build["build"], row.get("sources"), root)
                 cells.append(attack_hook_cell(checks))
                 continue
-            runs = runs_for(all_runs, row["scenario"], build["build"], row.get("sources"), root)
-            valid = [run for run in runs if run["_status"] == "valid"]
-            text, _ = count_cell(valid, row, profile)
+            runs = [run for run in runs_for(all_runs, row["scenario"], build["build"], row.get("sources"), root) if run["_status"] != "excluded"]
+            reclassify(runs, row)
+            text, counts = count_cell(runs, row, table)
             cells.append(text)
+            add_runs(stats, runs, row.get("planned_runs"))
+            expect = row.get("expect")
+            if isinstance(expect, dict):
+                expect = expect.get(build["label"])
+            if expect == "all" and counts[1] and counts[0] != counts[1]:
+                stats["unmet"].append("%s %s %d of %d" % (row["label"], build["label"], counts[0], counts[1]))
             deviations.extend(deviations_for("%s %s" % (row["label"], build["label"]), runs, row.get("planned_runs")))
         rows.append([row["label"]] + cells)
-    return {"title": table.get("title"), "headers": [table.get("row_label", "")] + [build["label"] for build in table["builds"]], "rows": rows}
+    return {"title": table.get("title"), "headers": [table.get("row_label", "test")] + [build["label"] for build in table["builds"]], "rows": rows}
 
 
 def render_text(result):
     lines = [result["header"]]
     if result["builds"]:
-        lines.append("builds  " + "  ".join(result["builds"]))
-    for table in result["tables"]:
+        lines.append("builds  " + "  ".join("%s %s" % item for item in result["builds"]))
+    for block in result["blocks"]:
         lines.append("")
-        if table["title"]:
-            lines.append(table["title"])
-        grid = [table["headers"]] + table["rows"]
-        widths = [max(len(str(row[index])) for row in grid) for index in range(len(table["headers"]))]
-        for row in grid:
-            lines.append("  ".join(str(cell).ljust(widths[index]) for index, cell in enumerate(row)).rstrip())
+        lines.append(block["role"])
+        for table in block["tables"]:
+            if table["title"]:
+                lines.append(table["title"])
+            grid = [table["headers"]] + table["rows"]
+            widths = [max(len(str(row[index])) for row in grid) for index in range(len(table["headers"]))]
+            for row in grid:
+                lines.append("  ".join(str(cell).ljust(widths[index]) for index, cell in enumerate(row)).rstrip())
+        lines.append("verdict  " + block["verdict"])
     if result["deviations"]:
         lines.append("")
         lines.extend(result["deviations"])
     return "\n".join(lines) + "\n"
 
 
+def render_fenced(result):
+    """The aligned text in a fenced code block, so the columns survive in a PR comment."""
+    return "```text\n" + render_text(result) + "```\n"
+
+
+def escape_cell(value):
+    return str(value).replace("\\", "\\\\").replace("|", "\\|").replace("<", "\\<").replace(">", "\\>")
+
+
 def render_markdown(result):
-    lines = ["**%s**" % result["header"]]
+    lines = ["**%s**" % escape_cell(result["header"])]
     if result["builds"]:
         lines.append("")
-        lines.append("builds: " + ", ".join(result["builds"]))
-    for table in result["tables"]:
+        lines.append("builds: " + ", ".join("%s `%s`" % (escape_cell(label), identity) for label, identity in result["builds"]))
+    for block in result["blocks"]:
         lines.append("")
-        if table["title"]:
-            lines.append("**%s**" % table["title"])
+        lines.append("### " + block["heading"])
+        for table in block["tables"]:
             lines.append("")
-        lines.append("| " + " | ".join(table["headers"]) + " |")
-        lines.append("|" + "|".join("---" for _ in table["headers"]) + "|")
-        for row in table["rows"]:
-            lines.append("| " + " | ".join(str(cell).replace("|", "\\|") for cell in row) + " |")
+            if table["title"]:
+                lines.append("**%s**" % escape_cell(table["title"]))
+                lines.append("")
+            lines.append("| " + " | ".join(escape_cell(cell) for cell in table["headers"]) + " |")
+            lines.append("|" + "|".join("---" for _ in table["headers"]) + "|")
+            for row in table["rows"]:
+                lines.append("| " + " | ".join(escape_cell(cell) for cell in row) + " |")
+        lines.append("")
+        lines.append("Verdict: " + escape_cell(block["verdict"]))
     if result["deviations"]:
         lines.append("")
-        lines.extend("- " + item for item in result["deviations"])
+        lines.append("### Deviations")
+        lines.append("")
+        lines.extend("- " + escape_cell(item) for item in result["deviations"])
     return "\n".join(lines) + "\n"

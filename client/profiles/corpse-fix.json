@@ -6,58 +6,281 @@
     ".state/corpse_dune/*.json",
     ".state/corpse_milky/*.json",
     ".state/corpse_fix*/*.json",
-    ".state/corpse_tip*/*.json"
+    ".state/corpse_tip*/*.json",
+    ".state/tiphits2_reports/*.json",
+    ".state/plainhits_reports/*.json",
+    ".state/tipcrates2_reports/*.json",
+    ".state/plaincrates2_reports/*.json",
+    ".state/tipmining_reports/*.json",
+    ".state/plainmining_reports/*.json"
   ],
-  "params": {"real_rate_median_max": 0.3},
-  "superseded_confounders": ["^host hold at"],
+  "params": {
+    "real_rate_median_max": 0.3
+  },
+  "superseded_confounders": [
+    "^host hold at"
+  ],
   "header": [
-    {"id": "game_version"},
-    {"id": "swings", "text": "{n} bare swings"},
-    {"id": "median_interval"},
-    {"id": "distance", "text": "corpse"},
-    {"id": "held"}
+    {
+      "id": "game_version"
+    },
+    {
+      "id": "swings",
+      "text": "{n} bare swings"
+    },
+    {
+      "id": "median_interval"
+    },
+    {
+      "id": "distance",
+      "text": "corpse"
+    },
+    {
+      "id": "held"
+    }
   ],
   "builds": {
-    "pr24-corpse-verbose": {"stageDll": "../Private CU together/build/stage_pr24_corpse_verbose/plugins/Together/CasualtiesMP.dll"},
-    "pr24-corpse-fix": {"stageDll": "../Private CU together/build/stage_pr24_corpse_fix/plugins/Together/CasualtiesMP.dll"},
-    "pr24-3d060fe-corpse-fix": {"stageDll": "../Private CU together/build/stage_pr24_3d060fe_corpse_fix/plugins/Together/CasualtiesMP.dll"}
+    "pr24-corpse-verbose": {
+      "stageDll": "../Private CU together/build/stage_pr24_corpse_verbose/plugins/Together/CasualtiesMP.dll"
+    },
+    "pr24-corpse-fix": {
+      "stageDll": "../Private CU together/build/stage_pr24_corpse_fix/plugins/Together/CasualtiesMP.dll"
+    },
+    "pr24-3d060fe-corpse-fix": {
+      "stageDll": "../Private CU together/build/stage_pr24_3d060fe_corpse_fix/plugins/Together/CasualtiesMP.dll"
+    },
+    "pr24-3d060fe-plain": {
+      "stageDll": "../Private CU together/build/stage_pr24_3d060fe_plain/plugins/Together/CasualtiesMP.dll"
+    }
   },
   "tables": [
     {
       "kind": "pair_rows",
       "title": null,
       "builds": [
-        {"label": "PR24", "build": "pr24-corpse-verbose"},
-        {"label": "PR24+fix", "build": "pr24-corpse-fix"}
+        {
+          "label": "PR24",
+          "build": "pr24-corpse-verbose"
+        },
+        {
+          "label": "PR24+fix",
+          "build": "pr24-corpse-fix"
+        }
       ],
       "columns": [
-        {"id": "host_hp", "label": "host hp"},
-        {"id": "client_min", "label": "client hp (min)"},
-        {"id": "broke", "label": "broke"}
+        {
+          "id": "host_hp",
+          "label": "host hp"
+        },
+        {
+          "id": "client_min",
+          "label": "client hp (min)"
+        },
+        {
+          "id": "broke",
+          "label": "broke"
+        }
       ],
       "rows": [
-        {"label": "Milky/Dune", "scenario": "corpse_chain_by_client", "planned_runs": 1},
-        {"label": "Dune/Dune", "scenario": "corpse_chain_dune_dune_by_client", "planned_runs": 1},
-        {"label": "Milky/Milky", "scenario": "corpse_chain_milky_milky_by_client", "planned_runs": 1},
-        {"label": "Dune/Milky", "scenario": "corpse_chain_dune_milky_by_client", "planned_runs": 1}
+        {
+          "label": "Milky/Dune",
+          "scenario": "corpse_chain_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "PR24+fix": {
+              "broke": "sw11"
+            }
+          }
+        },
+        {
+          "label": "Dune/Dune",
+          "scenario": "corpse_chain_dune_dune_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "PR24+fix": {
+              "broke": "sw11"
+            }
+          }
+        },
+        {
+          "label": "Milky/Milky",
+          "scenario": "corpse_chain_milky_milky_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "PR24+fix": {
+              "broke": "never"
+            }
+          }
+        },
+        {
+          "label": "Dune/Milky",
+          "scenario": "corpse_chain_dune_milky_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "PR24+fix": {
+              "broke": "never"
+            }
+          }
+        }
       ]
     },
     {
       "kind": "pair_rows",
       "title": "3d060fe tip",
       "builds": [
-        {"label": "tip+fix", "build": "pr24-3d060fe-corpse-fix"}
+        {
+          "label": "tip+fix",
+          "build": "pr24-3d060fe-corpse-fix"
+        }
       ],
       "columns": [
-        {"id": "host_hp", "label": "host hp"},
-        {"id": "client_min", "label": "client hp (min)"},
-        {"id": "broke", "label": "broke"}
+        {
+          "id": "host_hp",
+          "label": "host hp"
+        },
+        {
+          "id": "client_min",
+          "label": "client hp (min)"
+        },
+        {
+          "id": "broke",
+          "label": "broke"
+        }
       ],
       "rows": [
-        {"label": "Milky/Dune", "scenario": "corpse_chain_by_client", "planned_runs": 1},
-        {"label": "Dune/Dune", "scenario": "corpse_chain_dune_dune_by_client", "planned_runs": 1},
-        {"label": "Milky/Milky", "scenario": "corpse_chain_milky_milky_by_client", "planned_runs": 1},
-        {"label": "Dune/Milky", "scenario": "corpse_chain_dune_milky_by_client", "planned_runs": 1}
+        {
+          "label": "Milky/Dune",
+          "scenario": "corpse_chain_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "tip+fix": {
+              "broke": "sw11"
+            }
+          }
+        },
+        {
+          "label": "Dune/Dune",
+          "scenario": "corpse_chain_dune_dune_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "tip+fix": {
+              "broke": "sw11"
+            }
+          }
+        },
+        {
+          "label": "Milky/Milky",
+          "scenario": "corpse_chain_milky_milky_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "tip+fix": {
+              "broke": "never"
+            }
+          }
+        },
+        {
+          "label": "Dune/Milky",
+          "scenario": "corpse_chain_dune_milky_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "tip+fix": {
+              "broke": "never"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "kind": "metric_rows",
+      "title": "3d060fe, plain vs fix",
+      "row_label": "",
+      "builds": [
+        {
+          "label": "plain",
+          "build": "pr24-3d060fe-plain"
+        },
+        {
+          "label": "fix",
+          "build": "pr24-3d060fe-corpse-fix"
+        }
+      ],
+      "rows": [
+        {
+          "label": "PvP punches landed",
+          "scenario": "pvp_banded_by_client",
+          "metric": "swings_landed",
+          "planned_runs": 6,
+          "sources": [
+            ".state/tiphits2_reports/pvp_banded*.json",
+            ".state/plainhits_reports/pvp_banded*.json"
+          ],
+          "role": "REGRESSION",
+          "expect": {
+            "fix": "all"
+          }
+        },
+        {
+          "label": "crate swings",
+          "scenario": "spawned_crate_hit_by_client",
+          "metric": "swings_landed",
+          "planned_runs": 6,
+          "sources": [
+            ".state/tipcrates2_reports/spawned_crate*.json",
+            ".state/plaincrates2_reports/spawned_crate*.json"
+          ],
+          "role": "REGRESSION",
+          "expect": {
+            "fix": "all"
+          }
+        },
+        {
+          "label": "static copy",
+          "scenario": "staticcrate_hit_by_client",
+          "metric": "swings_landed",
+          "planned_runs": 6,
+          "miss_cause": {
+            "field": "geometry.limb1Distance",
+            "above": 4.0,
+            "label": "limb lag"
+          },
+          "sources": [
+            ".state/tipcrates2_reports/staticcrate*.json",
+            ".state/plainhits_reports/staticcrate*.json"
+          ],
+          "role": "REGRESSION"
+        },
+        {
+          "label": "mining persisted",
+          "scenario": "v2check_dig_cracks",
+          "metric": "verdict_count",
+          "verdict": "persisted",
+          "planned_runs": 15,
+          "sources": [
+            ".state/tipmining_reports/v2check*.json",
+            ".state/plainmining_reports/v2check*.json"
+          ],
+          "role": "REGRESSION",
+          "expect": {
+            "fix": "all"
+          }
+        },
+        {
+          "label": "Body.Attack hook",
+          "metric": "attack_hook",
+          "sources": [
+            ".state/tipmining_reports/launch_checks*.json",
+            ".state/plainmining_reports/launch_checks*.json"
+          ],
+          "role": "REGRESSION"
+        }
       ]
     }
   ]

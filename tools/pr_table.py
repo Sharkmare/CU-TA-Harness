@@ -1,4 +1,4 @@
-"""Print the compact result table of a PR profile: python tools/pr_table.py client/profiles/corpse-fix.json [--format text|markdown|both]"""
+"""Print the compact result tables of a PR profile: python tools/pr_table.py client/profiles/corpse-fix.json [--format text|fenced|markdown|both]"""
 import argparse
 import os
 import sys
@@ -13,10 +13,12 @@ from casualtieslink.reports import prtable
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profile", help="profile file, for example client/profiles/corpse-fix.json")
-    parser.add_argument("--format", choices=("text", "markdown", "both"), default="text")
+    parser.add_argument("--format", choices=("text", "fenced", "markdown", "both"), default="text")
     parser.add_argument("--root", default=REPOSITORY_ROOT, help="the directory the profile's source patterns are relative to (default: the repository root)")
     arguments = parser.parse_args(argv)
     result = prtable.build_result(prtable.load_profile(arguments.profile), arguments.root)
+    if arguments.format == "fenced":
+        sys.stdout.write(prtable.render_fenced(result))
     if arguments.format in ("text", "both"):
         sys.stdout.write(prtable.render_text(result))
     if arguments.format == "both":
