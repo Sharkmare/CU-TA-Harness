@@ -401,6 +401,7 @@ def observe_series(scenario, host, client, perform_action=True, clock=time.monot
     hit_times = []
     stop = threading.Event()
     started = clock()
+    context["seriesStarted"] = started
 
     def sampler():
         while not stop.is_set():

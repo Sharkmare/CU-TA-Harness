@@ -286,6 +286,21 @@ class ObservedDelayTests(unittest.TestCase):
         self.assertEqual(everything["toHost"]["packets"], 3)
         self.assertEqual(everything["toHost"]["minMs"], 30.0)
 
+    def test_the_trace_lists_every_forwarded_packet_with_its_receive_moment_size_and_delay_since_the_mark(self):
+        clock = iter([10.0, 10.5, 11.0])
+        proxy = DelayProxy(1, 2, delay_ms=40, clock=lambda: next(clock))
+        proxy.schedule(None, None, b"abc", "toHost")
+        mark = proxy.trace_mark()
+        proxy.schedule(None, None, b"de", "toClient")
+        proxy.schedule(None, None, b"fghi", "toHost")
+        self.assertEqual(proxy.trace_since(mark), [(10.5, "toClient", 2, 40.0), (11.0, "toHost", 4, 40.0)])
+        self.assertEqual(len(proxy.trace_since()), 3)
+
+    def test_a_dropped_packet_is_not_traced(self):
+        proxy = DelayProxy(1, 2, loss=1.0, seed=3)
+        proxy.schedule(None, None, b"x", "toHost")
+        self.assertEqual(proxy.trace_since(), [])
+
     def test_no_packets_give_no_numbers(self):
         proxy = DelayProxy(1, 2)
         self.assertEqual(proxy.delay_stats()["toClient"], {"packets": 0, "minMs": None, "meanMs": None, "maxMs": None})

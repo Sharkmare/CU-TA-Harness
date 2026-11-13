@@ -124,6 +124,7 @@ def series_method(run):
         prepare_run(self, run.profile)
         log_marks = {which: len(GAMES.log_text(which).splitlines()) for which in ("host", "client")}
         proxy_mark = GAMES.proxy.mark()
+        trace_mark = GAMES.proxy.trace_mark()
         try:
             observation = desync.observe_series(scenario, self.host, self.client, perform_action=not rig.mutation_active(desync.SKIP_ACTION_MUTATION))
         finally:
@@ -138,7 +139,7 @@ def series_method(run):
         report["clientBody"] = body_identity(self)
         report["transpilerLines"] = {which: desync.transpiler_lines(GAMES.log_text(which)) for which in ("host", "client")}
         extend_report = getattr(scenario, "extend_report", None)
-        issues = extend_report(report, observation, run_logs) if extend_report else []
+        issues = extend_report(report, observation, run_logs, GAMES.proxy.trace_since(trace_mark)) if extend_report else []
         report["issues"] = issues
         text = desync.format_series_report(report)
         print("\n" + text)

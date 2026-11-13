@@ -57,6 +57,7 @@ class DelayProxy:
         self.forwarded = {"toHost": 0, "toClient": 0}
         self.dropped = {"toHost": 0, "toClient": 0}
         self.planned = []
+        self.trace = []
 
     def start(self):
         self.front = self.bound_socket(self.listen_port)
@@ -102,6 +103,13 @@ class DelayProxy:
     def mark(self):
         return len(self.planned)
 
+    def trace_mark(self):
+        return len(self.trace)
+
+    def trace_since(self, mark=0):
+        """Every packet forwarded since the mark: (moment the proxy received it on its clock, direction, size in bytes, delay in ms it was given)."""
+        return list(self.trace[mark:])
+
     def delay_stats(self, mark=0):
         stats = {}
         for direction in ("toHost", "toClient"):
@@ -142,8 +150,10 @@ class DelayProxy:
         if delay is None:
             self.dropped[direction] += 1
             return
-        due = self.clock() + delay
+        received_at = self.clock()
+        due = received_at + delay
         self.planned.append((direction, delay * MILLISECONDS_PER_SECOND))
+        self.trace.append((received_at, direction, len(data), delay * MILLISECONDS_PER_SECOND))
         with self.condition:
             heapq.heappush(self.queue, (due, next(self.sequence), sock, destination, data, direction))
             self.condition.notify()

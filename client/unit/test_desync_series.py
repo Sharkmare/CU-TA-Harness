@@ -81,6 +81,12 @@ class ObserveSeriesTests(unittest.TestCase):
         self.assertEqual(observation.samples[-1]["client"], [0, 0.0])
         self.assertEqual(desync.judge_series(observation.samples)[0], desync.VERDICT_PERSISTED)
 
+    def test_the_start_of_the_series_clock_is_kept_in_the_context_for_the_scenario(self):
+        block = FakeBlock(hits_to_break=1)
+        clock = iter([100.0] + [100.0 + step * 0.01 for step in range(1, 400)])
+        observation = desync.observe_series(self.scenario(block), "host", "client", clock=lambda: next(clock))
+        self.assertEqual(observation.context["seriesStarted"], 100.0)
+
     def test_the_hit_limit_ends_a_block_that_never_breaks(self):
         block = FakeBlock(hits_to_break=99)
         observation = desync.observe_series(self.scenario(block, max_hits=4), "host", "client")
