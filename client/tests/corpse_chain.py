@@ -15,6 +15,8 @@ GROUP = "corpse-repro"
 NAME = "corpse_chain_by_client"
 HOST_CHARACTER = 1
 CLIENT_CHARACTER = 2
+CHARACTER_NAMES = {0: "Experiment", 1: "Milky", 2: "Dune"}
+CONTROLS = (("corpse_chain_dune_dune_by_client", "corpse-control-dune", 2, 2), ("corpse_chain_milky_milky_by_client", "corpse-control-milky", 1, 1))
 CORPSE_ID = "corpse"
 MIN_CORPSE_HEALTH = 1.0
 SWINGS = 25
@@ -119,14 +121,28 @@ def release_mouse_quietly(client):
         pass
 
 
+def prepare_for(host_character, client_character):
+    """The scenario setup for one pair of characters: the characters are verified before anything is spawned."""
+    host_name, client_name = CHARACTER_NAMES[host_character], CHARACTER_NAMES[client_character]
+
+    def prepare_pair(host, client):
+        return prepare_with(host, client, host_character, client_character, host_name, client_name)
+
+    return prepare_pair
+
+
 def prepare(host, client):
+    return prepare_with(host, client, HOST_CHARACTER, CLIENT_CHARACTER, CHARACTER_NAMES[HOST_CHARACTER], CHARACTER_NAMES[CLIENT_CHARACTER])
+
+
+def prepare_with(host, client, host_character, client_character, host_name, client_name):
     base.empty_the_hand(client)
     characters = banded.characters_in_play(host, client)
-    if characters["clientBodyOnHost"] != CLIENT_CHARACTER:
-        fail_setup("client-body-on-host-not-dune", "the client body on the host has charType %s, expected Dune (%d); host %s, client %s" % (
-            characters["clientBodyOnHost"], CLIENT_CHARACTER, characters["host"], characters["client"]))
-    if characters["host"] != HOST_CHARACTER or characters["client"] != CLIENT_CHARACTER:
-        fail_setup("characters-not-set", "expected host Milky (%d) and client Dune (%d), got host %s and client %s" % (HOST_CHARACTER, CLIENT_CHARACTER, characters["host"], characters["client"]))
+    if characters["clientBodyOnHost"] != client_character:
+        fail_setup("client-body-on-host-wrong-character", "the client body on the host has charType %s, expected %s (%d); host %s, client %s" % (
+            characters["clientBodyOnHost"], client_name, client_character, characters["host"], characters["client"]))
+    if characters["host"] != host_character or characters["client"] != client_character:
+        fail_setup("characters-not-set", "expected host %s (%d) and client %s (%d), got host %s and client %s" % (host_name, host_character, client_name, client_character, characters["host"], characters["client"]))
     start = positioncontrol.start_positions(host, client)
     try:
         target = crates.spawn_object(host, client, CORPSE_ID, MIN_CORPSE_HEALTH)
@@ -355,7 +371,7 @@ def check(context):
 
 
 def preflight(fragments, attempts, builds=()):
-    if NAME not in base.matching_scenario_names(fragments):
+    if not set(base.matching_scenario_names(fragments)) & ({NAME} | {name for name, *_ in CONTROLS}):
         return []
     checks = [(SWINGS >= 1, "the swing count is below one"), (SWING_POLL_SECONDS > 0, "the swing poll interval is not positive"), (SEAT_DISTANCE < MAX_SWING_DISTANCE, "the seat distance is not inside the swing reach"),
               (HOST_CHARACTER != CLIENT_CHARACTER, "host and client are the same character"), (AFTER_LAST_SWING_SECONDS >= 1.0, "the logging after the last swing is below one second")]
@@ -367,6 +383,12 @@ base.PREFLIGHTS.append(preflight)
 SCENARIOS = [
     Scenario(NAME, "host Milky and client Dune, both held; the host spawns a world corpse next to the client, the client faces it and swings bare handed 25 times, each as soon as the attack cooldown allows (a player's rate); health and cantHit of both copies per swing and every 0.1 s for two seconds after the last swing, against the Together session's prediction",
              prepare, act, lambda game, context: 0, hooks.never_changes, group=GROUP, check=check, max_repeat=1),
+]
+
+SCENARIOS += [
+    Scenario(name, "control: host %s and client %s, otherwise the same run as the mixed pair: both held; the host spawns a world corpse next to the client, the client faces it and swings bare handed 25 times, each as soon as the attack cooldown allows; health and cantHit of both copies per swing and every 0.1 s for two seconds after the last swing" % (
+        CHARACTER_NAMES[host_character], CHARACTER_NAMES[client_character]), prepare_for(host_character, client_character), act, lambda game, context: 0, hooks.never_changes, group=group, check=check, max_repeat=1)
+    for name, group, host_character, client_character in CONTROLS
 ]
 
 base.SCENARIOS.extend(SCENARIOS)

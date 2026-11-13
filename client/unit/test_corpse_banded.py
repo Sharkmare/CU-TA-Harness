@@ -229,7 +229,7 @@ class WiringTests(unittest.TestCase):
         classes = {name: item for name, item in vars(test_desync).items() if name.startswith("Desync_") and isinstance(item, type)}
         dune = [item for name, item in classes.items() if name.endswith("hook_dune")]
         self.assertEqual([item.client_character for item in dune], [2])
-        self.assertTrue(all(item.client_character is None for name, item in classes.items() if not name.endswith(("hook_dune", "corpse_repro"))))
+        self.assertTrue(all(item.client_character is None for name, item in classes.items() if not name.endswith(("hook_dune", "corpse_repro", "corpse_control_dune", "corpse_control_milky"))))
 
     def test_the_character_is_set_through_the_client_link_before_the_world(self):
         game = mock.Mock()

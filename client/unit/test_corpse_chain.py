@@ -6,6 +6,7 @@ from tests import desync_scenarios as scenarios
 from tests import spawned_crates as crates
 
 CORPSE = {"x": 12.5, "y": 5.0}
+CONTROL_NAME = chain.CONTROLS[0][0]
 
 
 def entry(index, host, client, host_cant=True, client_cant=False):
@@ -140,7 +141,7 @@ class PrepareTests(unittest.TestCase):
             with self.assertRaises(crates.SetupFailure) as caught:
                 chain.prepare(mock.Mock(), mock.Mock())
         spawn.assert_not_called()
-        self.assertEqual(caught.exception.category, "client-body-on-host-not-dune")
+        self.assertEqual(caught.exception.category, "client-body-on-host-wrong-character")
 
     def test_the_wrong_host_character_is_a_setup_failure(self):
         characters = {"client": 2, "host": 0, "clientBodyOnHost": 2}
@@ -467,8 +468,30 @@ class CheckAndWiringTests(unittest.TestCase):
         self.assertEqual(chain.check({"measurements": []}), ["INVALID: no swing recorded"])
 
     def test_the_scenario_is_alone_in_its_own_startup_group_and_selectable(self):
-        self.assertEqual(scenarios.matching_scenario_names(["corpse_chain"]), [chain.NAME])
-        self.assertEqual(sorted(scenarios.counts_by_group(["corpse_chain"])), [chain.GROUP])
+        self.assertEqual(scenarios.matching_scenario_names(["corpse_chain_by_client"]), [chain.NAME])
+        self.assertEqual(sorted(scenarios.counts_by_group(["corpse_chain_by_client"])), [chain.GROUP])
+
+    def test_each_control_is_alone_in_its_own_group_and_selectable_by_its_own_name(self):
+        from tests import test_desync
+        for name, group, host_character, client_character in chain.CONTROLS:
+            self.assertEqual(scenarios.matching_scenario_names([name]), [name])
+            self.assertEqual(sorted(scenarios.counts_by_group([name])), [group])
+            self.assertEqual((test_desync.GROUP_HOST_CHARACTER[group], test_desync.GROUP_CLIENT_CHARACTER[group]), (host_character, client_character))
+            self.assertIn(group, test_desync.PROBE_GROUPS)
+            self.assertIn("--mp-verbose", test_desync.GROUP_HOST_ARGUMENTS[group])
+            self.assertIn("--mp-verbose", test_desync.GROUP_CLIENT_ARGUMENTS[group])
+        self.assertEqual([(host, client) for _, _, host, client in chain.CONTROLS], [(2, 2), (1, 1)])
+
+    def test_a_control_verifies_its_own_characters_before_spawning_anything(self):
+        prepare_milky_pair = chain.prepare_for(1, 1)
+        characters = {"client": 2, "host": 1, "clientBodyOnHost": 2}
+        with mock.patch.object(chain.base, "empty_the_hand", lambda game: None), mock.patch.object(chain.banded, "characters_in_play", lambda host, client: characters), \
+                mock.patch.object(chain.crates, "spawn_object") as spawn:
+            with self.assertRaises(crates.SetupFailure) as caught:
+                prepare_milky_pair(mock.Mock(), mock.Mock())
+        spawn.assert_not_called()
+        self.assertEqual(caught.exception.category, "client-body-on-host-wrong-character")
+        self.assertIn("expected Milky (1)", str(caught.exception))
 
     def test_the_group_starts_a_milky_host_and_a_dune_client_with_the_probe_on(self):
         from tests import test_desync
@@ -478,14 +501,16 @@ class CheckAndWiringTests(unittest.TestCase):
         self.assertIn("--mp-verbose", test_desync.GROUP_HOST_ARGUMENTS[chain.GROUP])
 
     def test_the_preflight_passes_and_ignores_other_launches(self):
-        self.assertEqual(chain.preflight(["corpse_chain"], 1), [])
+        self.assertEqual(chain.preflight(["corpse_chain_by_client"], 1), [])
+        self.assertEqual(chain.preflight([CONTROL_NAME], 1), [])
         self.assertEqual(chain.preflight(["spawned_crate"], 1), [])
 
     def test_a_planned_launch_is_one_launch_of_one_run(self):
         from casualtieslink import launchplan
-        counts = scenarios.counts_by_group(["corpse_chain", "launch_log_checks"])
-        launches = launchplan.plan_launches(["pr24-corpse-verbose"], sorted(counts), launchplan.parse_profiles(["100:0"]), 1, ["corpse_chain", "launch_log_checks"])
-        self.assertEqual(len(launches), 1)
+        for fragment in ["corpse_chain_by_client"] + [name for name, *_ in chain.CONTROLS]:
+            counts = scenarios.counts_by_group([fragment, "launch_log_checks"])
+            launches = launchplan.plan_launches(["pr24-corpse-verbose"], sorted(counts), launchplan.parse_profiles(["100:0"]), 1, [fragment, "launch_log_checks"])
+            self.assertEqual(len(launches), 1, fragment)
 
 
 if __name__ == "__main__":

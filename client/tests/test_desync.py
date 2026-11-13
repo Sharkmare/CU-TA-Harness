@@ -222,14 +222,14 @@ PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
                           "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                           "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"]}
+                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"]}
 GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                         "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"]}
-GROUP_CLIENT_CHARACTER = {"hook-dune": 2, "corpse-repro": 2}
-GROUP_HOST_CHARACTER = {"corpse-repro": 1}
+                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"]}
+GROUP_CLIENT_CHARACTER = {"hook-dune": 2, "corpse-repro": 2, "corpse-control-dune": 2, "corpse-control-milky": 1}
+GROUP_HOST_CHARACTER = {"corpse-repro": 1, "corpse-control-dune": 2, "corpse-control-milky": 1}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
-PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune", "corpse-repro")
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune", "corpse-repro", "corpse-control-dune", "corpse-control-milky")
 EVIDENCE_GROUPS = ("hook-evidence", "hook-dune")
 
 
