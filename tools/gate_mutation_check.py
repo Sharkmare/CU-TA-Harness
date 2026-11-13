@@ -5,7 +5,7 @@ import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "client")
 MUTATIONS = [
-    ("casualtieslink/swinggate.py", "            if moved > spec.get(\"limbPoseTolerance\", LIMB_POSE_TOLERANCE):", "            if False:", "limb pose tolerance ignored"),
+    ("casualtieslink/swinggate.py", "            if gated and moved > spec.get(\"limbPoseTolerance\", LIMB_POSE_TOLERANCE):", "            if False:", "limb pose tolerance ignored"),
     ("casualtieslink/swinggate.py", "    if reach is None or reach > spec.get(\"limbReach\", LIMB_REACH):", "    if False:", "limb reach ignored"),
     ("casualtieslink/swinggate.py", "    if wanted_right is None or pose[\"isRight\"] is not wanted_right:", "    if False:", "facing ignored"),
     ("casualtieslink/swinggate.py", "    if not isinstance(cooldown, (int, float)) or cooldown > COOLDOWN_READY:", "    if False:", "cooldown ignored"),
