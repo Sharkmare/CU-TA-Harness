@@ -8,6 +8,7 @@ STATUS_COMMAND = "hold_status"
 MIN_TOLERANCE = 0.001
 MAX_TOLERANCE = 5.0
 HOLD_TOLERANCE = 0.05
+PARKED_TOLERANCE = 0.5
 MIN_SEPARATION = 2.0
 PARK_DISTANCE = 12.0
 VERIFY_POLLS = 4
@@ -100,11 +101,12 @@ def place_and_hold(game, target, tolerance=HOLD_TOLERANCE, sleep=None):
             "maxDriftSeenByHolder": mine[0].get("maxDrift") if mine else None, "exceededTicks": mine[0].get("exceededTicks") if mine else None}
 
 
-def preflight_pair(host, client, host_target, client_target, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, copy_state=None):
-    """Both bodies at their targets within the tolerance and not overlapping; the result goes into the report and decides whether the run counts."""
+def preflight_pair(host, client, host_target, client_target, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, copy_state=None, host_tolerance=None):
+    """Both bodies at their targets within their tolerance and not overlapping; the result goes into the report and decides whether the run counts."""
     host_target = validate_point(host_target, "host target")
     client_target = validate_point(client_target, "client target")
     tolerance = validate_tolerance(tolerance)
+    host_tolerance = tolerance if host_tolerance is None else validate_tolerance(host_tolerance)
     if not isinstance(min_separation, (int, float)) or isinstance(min_separation, bool) or not math.isfinite(min_separation) or min_separation <= 0:
         raise PositionControlError("min_separation must be positive, got %r" % (min_separation,))
     host_position = read_position(host)
@@ -113,24 +115,25 @@ def preflight_pair(host, client, host_target, client_target, tolerance=HOLD_TOLE
     client_drift = distance_between(client_position, client_target)
     separation = distance_between(host_position, client_position)
     issues = []
-    if host_drift > tolerance:
-        issues.append("the host body is %.3f from its target (tolerance %.3f)" % (host_drift, tolerance))
+    if host_drift > host_tolerance:
+        issues.append("the host body is %.3f from its target (tolerance %.3f)" % (host_drift, host_tolerance))
     if client_drift > tolerance:
         issues.append("the client body is %.3f from its target (tolerance %.3f)" % (client_drift, tolerance))
     if separation < min_separation:
         issues.append("the bodies are %.3f apart, below the %.3f minimum: they overlap" % (separation, min_separation))
     state = copy_state() if callable(copy_state) else copy_state
     return {"ok": not issues, "issues": issues, "hostPosition": host_position, "clientPosition": client_position, "hostTarget": host_target, "clientTarget": client_target,
-            "hostDrift": round(host_drift, 4), "clientDrift": round(client_drift, 4), "separation": round(separation, 4), "tolerance": tolerance, "minSeparation": float(min_separation),
+            "hostDrift": round(host_drift, 4), "clientDrift": round(client_drift, 4), "separation": round(separation, 4), "tolerance": tolerance, "hostTolerance": host_tolerance, "minSeparation": float(min_separation),
             "copyState": state}
 
 
-def seat_pair(host, client, client_target, park_direction, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, park_distance=PARK_DISTANCE, copy_state=None, sleep=None, attempts=SEAT_ATTEMPTS):
-    """Seat the pair, and when a seat fails its verification release both holds and seat again, up to the attempt count. A body that
+def seat_pair(host, client, client_target, park_direction, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, park_distance=PARK_DISTANCE, copy_state=None, sleep=None, attempts=SEAT_ATTEMPTS,
+              parked_tolerance=PARKED_TOLERANCE):
+    """The client takes part in the swing and is held to `tolerance`; the host is only parked out of the way and is held to `parked_tolerance`. Seat the pair, and when a seat fails its verification release both holds and seat again, up to the attempt count. A body that
     keeps drifting fails every attempt; a single bad position read does not decide the run. Every attempt's issues stay in the report."""
     earlier_issues = []
     for attempt in range(1, attempts + 1):
-        check = seat_pair_once(host, client, client_target, park_direction, tolerance, min_separation, park_distance, copy_state, sleep)
+        check = seat_pair_once(host, client, client_target, park_direction, tolerance, min_separation, park_distance, copy_state, sleep, parked_tolerance)
         check["seatAttempts"] = attempt
         check["earlierAttemptIssues"] = list(earlier_issues)
         if check["ok"]:
@@ -141,13 +144,13 @@ def seat_pair(host, client, client_target, park_direction, tolerance=HOLD_TOLERA
     return check
 
 
-def seat_pair_once(host, client, client_target, park_direction, tolerance, min_separation, park_distance, copy_state, sleep):
+def seat_pair_once(host, client, client_target, park_direction, tolerance, min_separation, park_distance, copy_state, sleep, parked_tolerance):
     """Hold the attacking client at its seat and park the other player away from the swing line, then run the preflight."""
     client_target = validate_point(client_target, "client target")
     host_target = point_at(client_target, park_direction, park_distance)
     client_hold = place_and_hold(client, client_target, tolerance, sleep)
-    host_hold = place_and_hold(host, host_target, tolerance, sleep)
-    check = preflight_pair(host, client, host_target, client_target, tolerance, min_separation, copy_state)
+    host_hold = place_and_hold(host, host_target, parked_tolerance, sleep)
+    check = preflight_pair(host, client, host_target, client_target, tolerance, min_separation, copy_state, parked_tolerance)
     if not client_hold["ok"]:
         check["issues"].append("the client hold did not verify: drifts %s, exceeded ticks %s" % (client_hold["drifts"], client_hold["exceededTicks"]))
     if not host_hold["ok"]:
@@ -155,6 +158,8 @@ def seat_pair_once(host, client, client_target, park_direction, tolerance, min_s
     check["ok"] = not check["issues"]
     check["clientHold"] = client_hold
     check["hostHold"] = host_hold
+    check["parkedHost"] = {"position": check["hostPosition"], "target": host_target, "rawDriftReads": host_hold["drifts"], "largestRead": max(host_hold["drifts"], default=None),
+                           "driftNow": check["hostDrift"], "tolerance": parked_tolerance, "exceededTicks": host_hold["exceededTicks"], "maxDriftSeenByHolder": host_hold["maxDriftSeenByHolder"]}
     return check
 
 
