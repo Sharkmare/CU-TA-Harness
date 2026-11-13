@@ -27,7 +27,7 @@
     {
       "kind": "metric_rows",
       "title": "3d060fe, plain vs fix",
-      "row_label": "",
+      "row_label": "test",
       "builds": [
         {
           "label": "plain",
