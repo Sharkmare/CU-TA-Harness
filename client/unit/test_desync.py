@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import zipfile
 
+from casualtieslink.games import buildregistry
 from casualtieslink.scenarioengine import desync
 
 
@@ -101,11 +102,11 @@ class ReportTests(unittest.TestCase):
     def report(self, host_values, client_values, acted=True):
         observation = observe_script(host_values, client_values)
         observation.acted = acted
-        return desync.describe(observation, "stock-5.5.0", "ab" * 32, "1.0")
+        return desync.describe(observation, "example-flavour-b", "ab" * 32, "1.0")
 
     def test_the_report_carries_build_hash_both_values_and_the_verdict(self):
         text = desync.format_report(self.report([0, 0, 0, 0], [0, 5, 0, 0]))
-        self.assertIn("[stock-5.5.0]", text)
+        self.assertIn("[example-flavour-b]", text)
         self.assertIn("sha256 " + "ab" * 32, text)
         self.assertIn("t= 0.0s   host=0 client=5", text)
         self.assertIn("verdict: reverted-by-host", text)
@@ -122,37 +123,56 @@ class ReportTests(unittest.TestCase):
     def test_the_saved_report_is_json_named_by_scenario_build_and_hash_prefix(self):
         with tempfile.TemporaryDirectory() as directory:
             path = desync.save_report(self.report([0, 5, 5, 5], [0, 5, 5, 5]), directory)
-            self.assertEqual(os.path.basename(path), "scripted__stock-5.5.0_abababab__r1.json")
+            self.assertEqual(os.path.basename(path), "scripted__example-flavour-b_abababab__r1.json")
             with open(path, encoding="utf-8") as handle:
                 loaded = json.load(handle)
         self.assertEqual(loaded["verdict"], desync.VERDICT_PERSISTED)
         self.assertEqual(loaded["dllSha256"], "ab" * 32)
 
 
+REGISTRY = {"default": "example-flavour", "builds": {"example-flavour": {"kind": "flavour"}, "example-flavour-b": {"kind": "flavour"},
+                                                    "example-stage": {"kind": "stage", "directory_env": "CU_EXAMPLE_STAGE"},
+                                                    "example-python": {"kind": "python", "install": "x:y"}}}
+
+
 class BuildTests(unittest.TestCase):
-    def test_known_builds_parse_and_default_to_stock_5_5_0(self):
-        self.assertEqual(desync.parse_build("FORK"), "fork")
-        self.assertEqual(desync.parse_build(None), desync.DEFAULT_BUILD)
-        self.assertEqual(desync.parse_build(" pr24-3d060fe-plain "), "pr24-3d060fe-plain")
+    def setUp(self):
+        registry = buildregistry.use(REGISTRY)
+        registry.__enter__()
+        self.addCleanup(registry.__exit__, None, None, None)
+
+    def test_known_builds_parse_and_default_to_the_registry_default(self):
+        self.assertEqual(desync.parse_build("EXAMPLE-FLAVOUR-B"), "example-flavour-b")
+        self.assertEqual(desync.parse_build(None), "example-flavour")
+        self.assertEqual(desync.parse_build(" example-stage "), "example-stage")
 
     def test_an_unknown_build_names_the_choices(self):
         with self.assertRaises(ValueError) as caught:
-            desync.parse_build("stock-9")
-        self.assertIn("stock-5.4.0", str(caught.exception))
+            desync.parse_build("nothing")
+        self.assertIn("example-flavour-b", str(caught.exception))
+
+    def test_a_build_that_is_neither_flavour_nor_stage_cannot_be_chosen(self):
+        with self.assertRaises(ValueError):
+            desync.parse_build("example-python")
+
+    def test_without_a_registry_no_build_can_be_chosen(self):
+        with buildregistry.use({}):
+            self.assertEqual(desync.known_builds(), ())
+            with self.assertRaisesRegex(ValueError, "none registered"):
+                desync.parse_build(None)
 
     def test_flavour_builds_map_to_the_flavour_choice_and_staged_builds_to_their_stage(self):
-        self.assertEqual(desync.together_choice("stock-5.4.0"), "flavour:stock-5.4.0")
-        self.assertEqual(desync.together_choice("fork"), "flavour:fork")
-        self.assertEqual(desync.together_choice("pr24-3d060fe-plain"), "pr24-3d060fe-plain-stage")
+        self.assertEqual(desync.together_choice("example-flavour-b"), "flavour:example-flavour-b")
+        self.assertEqual(desync.together_choice("example-stage"), "example-stage-stage")
 
     def test_the_flavour_hash_is_read_from_the_package_zip(self):
         with tempfile.TemporaryDirectory() as directory:
             package = os.path.join(directory, "package.zip")
             with zipfile.ZipFile(package, "w") as archive:
-                archive.writestr("BepInEx/together-flavours/fork/CasualtiesMP.dll", b"fork bytes")
-            self.assertEqual(desync.flavour_dll_hash(package, "fork"), desync.sha256_of_bytes(b"fork bytes"))
-            self.assertEqual(desync.flavour_dll_hash(package, "stock-5.5.0"), desync.UNKNOWN_HASH)
-            self.assertEqual(desync.flavour_dll_hash(os.path.join(directory, "missing.zip"), "fork"), desync.UNKNOWN_HASH)
+                archive.writestr("BepInEx/together-flavours/example-flavour/CasualtiesMP.dll", b"flavour bytes")
+            self.assertEqual(desync.flavour_dll_hash(package, "example-flavour"), desync.sha256_of_bytes(b"flavour bytes"))
+            self.assertEqual(desync.flavour_dll_hash(package, "example-flavour-b"), desync.UNKNOWN_HASH)
+            self.assertEqual(desync.flavour_dll_hash(os.path.join(directory, "missing.zip"), "example-flavour"), desync.UNKNOWN_HASH)
 
     def test_the_stage_hash_is_read_from_the_staged_dll(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -163,8 +183,8 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(desync.stage_dll_hash(os.path.join(directory, "nothing")), desync.UNKNOWN_HASH)
 
     def test_the_label_and_class_suffix_carry_build_and_short_hash(self):
-        self.assertEqual(desync.build_label("fork", "0123456789abcdef"), "fork@01234567")
-        self.assertEqual(desync.class_suffix("stock-5.5.0", "0123456789abcdef"), "stock_5_5_0_01234567")
+        self.assertEqual(desync.build_label("example-flavour", "0123456789abcdef"), "example-flavour@01234567")
+        self.assertEqual(desync.class_suffix("example-flavour-b", "0123456789abcdef"), "example_flavour_b_01234567")
 
 
 if __name__ == "__main__":

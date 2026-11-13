@@ -12,7 +12,7 @@ python -m casualtieslink events --since 0 --wait-ms 5000 --type damage
 python -m casualtieslink --port 7650 launch --mp starthost immidiate-start setname=Alice ip-port=127.0.0.1:7790
 ```
 
-The library modules and what each does are listed in `docs/ARCHITECTURE.md`. The `--mp-*` flag names come from the Together repo linked at the top.
+The library modules and what each does are listed in `docs/ARCHITECTURE.md`. The `--mp-*` flag names are those of the Together mod.
 
 `GameProcess.start()` refuses to start while a `CasualtiesUnknown.exe` is running, because starting a second copy of an online game loses the match. It copies `save.sv` aside before the tests and puts it back afterwards, or deletes the test save if there was none.
 

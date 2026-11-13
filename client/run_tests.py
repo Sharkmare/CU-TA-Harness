@@ -8,8 +8,9 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(HERE)
-SEARCH_ROOTS = [HERE, REPO_ROOT]
 sys.path.insert(0, HERE)
+from casualtieslink import localcontent
+SEARCH_ROOTS = [HERE, REPO_ROOT, localcontent.local_directory()]
 sys.path.insert(0, REPO_ROOT)
 
 import change_selection
@@ -28,7 +29,7 @@ DEFAULT_MP_FLAGS = ["disable"]
 SLOW_UNIT_SECONDS = 5.0
 SCENARIO_BUDGET_SECONDS_PER_RUN = 60.0
 LONG_SCENARIO_BUDGET_SECONDS_PER_RUN = 150.0
-LONG_SCENARIO_FRAGMENTS = ("v2check", "mining", "dig")
+LONG_SCENARIO_FRAGMENTS = ("mining", "dig")
 LAUNCH_STARTUP_SECONDS = 150.0
 
 
@@ -46,7 +47,7 @@ def parse_args(argv):
     parser.add_argument("--pair", action="store_true", help="run the two game tests (starts a host and a client game)")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--mp", nargs="*", default=[], metavar="FLAG[=VALUE]", help="Together mod flags for the launched game (default: disable, because the mod blocks singleplayer)")
-    parser.add_argument("--together", default=None, metavar="BUILD", help="Together build for the desync group: %s" % ", ".join(desync.KNOWN_BUILDS))
+    parser.add_argument("--together", default=None, metavar="BUILD", help="build for the desync group, one of the registry builds: %s" % (", ".join(desync.known_builds()) or "none registered"))
     parser.add_argument("--builds", nargs="+", default=None, metavar="BUILD", help="desync group: run these Together builds, one game launch per build and startup group")
     parser.add_argument("--net", nargs="+", default=None, metavar="DELAY:JITTER[:LOSS[:REORDER]]", help="desync group: network profiles in ms (direct = none), changed live inside a launch")
     parser.add_argument("--repeat", type=int, default=1, help="desync group: run every scenario this many times inside one launch")
@@ -54,7 +55,7 @@ def parse_args(argv):
     parser.add_argument("--group", default=None, help="desync group: only the scenarios of this startup group")
     parser.add_argument("--delay-ms", default=None, metavar="MS", help="desync group: put a UDP delay proxy of this one way delay between client and host (0 keeps the proxy with no delay)")
     parser.add_argument("--jitter-ms", default="0", metavar="MS", help="desync group: extra random delay from 0 up to this many ms")
-    parser.add_argument("--mutate", default=None, help="break a behaviour on purpose to prove a test can fail (corrupt-save, no-dune)")
+    parser.add_argument("--mutate", default=None, help="break a behaviour on purpose to prove a test can fail (corrupt-save; local live groups add their own)")
     return parser.parse_args(argv)
 
 
@@ -168,7 +169,7 @@ def main(argv=None):
     if arguments.together:
         os.environ[desync.BUILD_ENVIRONMENT_VARIABLE] = desync.parse_build(arguments.together)
     with open(CONFIG_PATH, encoding="utf-8") as handle:
-        config = json.load(handle)
+        config = localcontent.merged_test_groups(json.load(handle))
     state = change_selection.load_state(STATE_PATH)
     selected = change_selection.select_units(HERE, SEARCH_ROOTS, config, state, arguments.all, arguments.only, arguments.offline)
     print("selection:")

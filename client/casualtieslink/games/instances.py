@@ -1,54 +1,29 @@
 import glob
+import importlib
 import os
 import re
 import shutil
 import subprocess
 import zipfile
 
-from casualtieslink.games import friendszip, testcopy
+from casualtieslink.games import buildregistry, testcopy
 from casualtieslink.launcher import GameProcess, mp_arguments
 from casualtieslink.games.pair import PREFS_REGISTRY_KEY, ProfileGuard
 from casualtieslink.games.udpproxy import DelayProxy
 
-MODS_ROOT_ENVIRONMENT_VARIABLE = "CU_MODS_ROOT"
 STOCK_DIR_ENVIRONMENT_VARIABLE = "CU_STOCK_TOGETHER_DIR"
 STOCK_DLL_ENVIRONMENT_VARIABLE = "CU_STOCK_TOGETHER_DLL"
 PLUGINS_RELATIVE = os.path.join("BepInEx", "plugins")
 CONFIG_RELATIVE = os.path.join("BepInEx", "config")
 TOGETHER_FOLDER = "Together"
 STOCK_EXCLUDED_FILES = ("Multiupdater.dll",)
-FORK_ZIP_ENVIRONMENT_VARIABLE = "CU_FORK_TOGETHER_ZIP"
-TOGETHER_IN_ZIP = "BepInEx/plugins/Together/"
 FLAVOUR_ZIP_ENVIRONMENT_VARIABLE = "CU_FLAVOUR_ZIP"
 FLAVOUR_PREFIX = "flavour:"
-FRIENDS_ZIP_CHOICE = "friends-zip"
-PR24_TIP_FIX_STAGE_CHOICE = "pr24-3d060fe-corpse-fix-stage"
-PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_CORPSE_FIX_STAGE"
-PR24_TIP_FIX2_STAGE_CHOICE = "pr24-3d060fe-corpse-fix2-stage"
-PR24_TIP_FIX2_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_CORPSE_FIX2_STAGE"
-SWINGBURST_PACKAGE_STAGE_CHOICE = "swingburst-package-stage"
-SWINGBURST_PACKAGE_STAGE_ENVIRONMENT_VARIABLE = "CU_SWINGBURST_PACKAGE_STAGE"
-SWINGBURST_PACKAGE_MD5 = "f1f2214830d7aadaa8ff565f844ca882"
-PR24_TIP_PLAIN_STAGE_CHOICE = "pr24-3d060fe-plain-stage"
-PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_PLAIN_STAGE"
-CUCORELIB_FOLDER = "CUCoreLib"
-CUCORELIB_DLL = "CUCoreLib.dll"
-BUILDS_NEEDING_CUCORELIB = ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-plain", "pr24-3d060fe-corpse-fix2", "swingburst-package")
-FULLBUILD_PROJECT_FOLDER = "Private CU together"
-TOGETHER_CONFIG_NAME = "CasualtiesMP.cfg"
-PROBE_CONFIG_TEXT = "[Probe]\n\nFindTheBug = true\n"
 FLAVOUR_OPTION = "--mp-flavour"
 FLAVOUR_PATCHER = os.path.join("BepInEx", "patchers", "CT_FlavourSwitch.dll")
 FLAVOUR_FOLDER = os.path.join("BepInEx", "together-flavours")
 FLAVOUR_PACKAGE_PARTS = ("BepInEx/patchers/", "BepInEx/together-flavours/", "BepInEx/plugins/Together/")
-SIZE_FOLDER = "CasualtiesSize"
-LOADER_FOLDER = "CasualtiesCharacters"
-AVALI_FOLDER = "CasualtiesCharacters-Avali"
-SAMPLE_PACK_FOLDER = "CasualtiesCharacters-Sample"
-NO_SCATTER_FOLDER = "NoScatterPunish"
-MANAGED_FOLDERS = (SIZE_FOLDER, LOADER_FOLDER, AVALI_FOLDER, SAMPLE_PACK_FOLDER, NO_SCATTER_FOLDER)
-SIZE_GUID = "hive.casualties.size"
-LOADER_GUID = "hive.casualties.characters"
+TOGETHER_CONFIG_NAME = "CasualtiesMP.cfg"
 DEBUG_CONFIG_TEXT = "[Debug]\n\nEnabled = true\n"
 MP_DISABLE_VALUE_PATTERN = re.compile(r"^\s*(CasualtiesMP_FORCE_DISABLE_MP_MOD_h\d+)\s+REG_DWORD\s+(0x[0-9a-fA-F]+)\s*$", re.M)
 SESSION_ADDRESS = "127.0.0.1:7790"
@@ -58,10 +33,9 @@ CLIENT_PORT = 7651
 HOST_COPY_NAME = "CU-scenario-host"
 CLIENT_COPY_NAME = "CU-scenario-client"
 START_TIMEOUT_SECONDS = 240.0
+BUILTIN_TOGETHER_CHOICES = ("stock", "keep")
 
-
-def mods_root():
-    return os.environ.get(MODS_ROOT_ENVIRONMENT_VARIABLE) or os.path.dirname(testcopy.REPO_ROOT)
+mods_root = buildregistry.mods_root
 
 
 def stock_together_dir():
@@ -71,7 +45,7 @@ def stock_together_dir():
     dll = os.environ.get(STOCK_DLL_ENVIRONMENT_VARIABLE)
     if dll:
         return os.path.dirname(dll)
-    return os.path.join(os.path.dirname(mods_root()), "backup", "Together_5.4.0_original")
+    raise FileNotFoundError("set %s (or %s) to the folder of the stock Together plugin" % (STOCK_DIR_ENVIRONMENT_VARIABLE, STOCK_DLL_ENVIRONMENT_VARIABLE))
 
 
 def latest_zip(directory, prefix, must_not_contain=("previous",)):
@@ -87,48 +61,46 @@ def extract_release(zip_path, copy):
         archive.extractall(copy)
 
 
-def install_size(copy):
-    source = os.path.join(mods_root(), "size-mod", "bin", "CasualtiesSize.dll")
-    if not os.path.isfile(source):
-        raise FileNotFoundError(source)
-    folder = os.path.join(copy, PLUGINS_RELATIVE, SIZE_FOLDER)
-    os.makedirs(folder, exist_ok=True)
-    shutil.copy2(source, folder)
-    return source
+def plugin_set_installer(spec):
+    """One installer per plugin set kind of builds.json: dll (one file into its own plugin folder), directory (a folder copied as a plugin folder), release-zip (the newest matching zip extracted over the copy)."""
+    kind = spec["kind"]
+    if kind == "dll":
+        def install_dll(copy):
+            source = buildregistry.under_mods_root(spec["source"])
+            if not os.path.isfile(source):
+                raise FileNotFoundError(source)
+            folder = os.path.join(copy, PLUGINS_RELATIVE, spec["folder"])
+            os.makedirs(folder, exist_ok=True)
+            shutil.copy2(source, folder)
+            return source
+        return install_dll
+    if kind == "directory":
+        def install_directory(copy):
+            source = buildregistry.under_mods_root(spec["source"])
+            if not os.path.isdir(source):
+                raise FileNotFoundError(source)
+            shutil.copytree(source, os.path.join(copy, PLUGINS_RELATIVE, spec["folder"]))
+            return source
+        return install_directory
+    if kind == "release-zip":
+        def install_release(copy):
+            archive = latest_zip(buildregistry.under_mods_root(spec["directory"]), spec["prefix"])
+            extract_release(archive, copy)
+            return archive
+        return install_release
+    raise ValueError("unknown plugin set kind %r" % kind)
 
 
-def install_loader(copy):
-    archive = latest_zip(os.path.join(mods_root(), "CU Characters", "dist"), "CasualtiesCharacters-0")
-    extract_release(archive, copy)
-    return archive
+def plugin_installers():
+    return {name: plugin_set_installer(spec) for name, spec in buildregistry.plugin_sets().items()}
 
 
-def install_avali(copy):
-    archive = latest_zip(os.path.join(mods_root(), "CU Character Avali", "dist"), "CasualtiesCharacters-Avali")
-    extract_release(archive, copy)
-    return archive
+def managed_folders():
+    return [spec["folder"] for spec in buildregistry.plugin_sets().values() if spec.get("folder")]
 
 
-def install_sample_pack(copy):
-    source = os.path.join(mods_root(), "CU Characters", "tests", "fixtures", "samplepack")
-    if not os.path.isdir(source):
-        raise FileNotFoundError(source)
-    shutil.copytree(source, os.path.join(copy, PLUGINS_RELATIVE, SAMPLE_PACK_FOLDER))
-    return source
-
-
-def install_noscatter(copy):
-    source = os.path.join(mods_root(), "no-scatter-punish", "bin", "NoScatterPunish.dll")
-    if not os.path.isfile(source):
-        raise FileNotFoundError(source)
-    folder = os.path.join(copy, PLUGINS_RELATIVE, NO_SCATTER_FOLDER)
-    os.makedirs(folder, exist_ok=True)
-    shutil.copy2(source, folder)
-    return source
-
-
-PLUGIN_INSTALLERS = {"size": install_size, "loader": install_loader, "avali": install_avali, "samplepack": install_sample_pack, "noscatter": install_noscatter}
-PLUGIN_DEBUG_GUIDS = {"size": SIZE_GUID, "loader": LOADER_GUID}
+def plugin_debug_guids():
+    return {name: spec["debug_guid"] for name, spec in buildregistry.plugin_sets().items() if spec.get("debug_guid")}
 
 
 LINK_FOLDER = "CasualtiesLink"
@@ -160,38 +132,11 @@ def install_stock_together(copy):
     return source
 
 
-def fork_zip():
-    explicit = os.environ.get(FORK_ZIP_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(os.path.expanduser("~"), "Downloads", "CasualtiesTogether-5.4.1-dune.3.zip")
-
-
-def install_fork_together(copy):
-    archive_path = fork_zip()
-    if not os.path.isfile(archive_path):
-        raise FileNotFoundError(archive_path)
-    target = os.path.join(copy, PLUGINS_RELATIVE, TOGETHER_FOLDER)
-    if os.path.isdir(target):
-        shutil.rmtree(target)
-    os.makedirs(target)
-    with zipfile.ZipFile(archive_path) as archive:
-        for name in archive.namelist():
-            if name.startswith(TOGETHER_IN_ZIP) and not name.endswith("/"):
-                destination = os.path.join(target, name[len(TOGETHER_IN_ZIP):])
-                os.makedirs(os.path.dirname(destination), exist_ok=True)
-                with open(destination, "wb") as handle:
-                    handle.write(archive.read(name))
-    if not os.path.isfile(os.path.join(target, "CasualtiesMP.dll")):
-        raise FileNotFoundError("no CasualtiesMP.dll under " + TOGETHER_IN_ZIP + " in " + archive_path)
-    return archive_path
-
-
 def flavour_zip():
     explicit = os.environ.get(FLAVOUR_ZIP_ENVIRONMENT_VARIABLE)
     if explicit:
         return explicit
-    return os.path.join(os.path.expanduser("~"), "Downloads", "CasualtiesTogether-5.4.1+4.zip")
+    raise FileNotFoundError("set %s to the flavour package zip" % FLAVOUR_ZIP_ENVIRONMENT_VARIABLE)
 
 
 def flavour_name(together):
@@ -231,38 +176,30 @@ def install_flavour_package(copy):
     return archive_path
 
 
-def fullbuild_stage_directory(variable, folder):
-    explicit = os.environ.get(variable)
+def stage_directory(spec):
+    """Where a stage build lives: the environment variable the spec names, else its path under the mods root. A spec with only a variable and no path names the variable in the result so the preflight can say what to set."""
+    variable = spec.get("directory_env")
+    explicit = os.environ.get(variable) if variable else None
     if explicit:
         return explicit
-    return os.path.join(mods_root(), FULLBUILD_PROJECT_FOLDER, "build", folder)
+    if spec.get("directory"):
+        return buildregistry.under_mods_root(spec["directory"])
+    return os.path.join(mods_root(), "UNSET_set_%s" % variable)
 
 
-def pr24_tip_fix_stage_directory():
-    return fullbuild_stage_directory(PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix")
-
-
-def pr24_tip_fix2_stage_directory():
-    return fullbuild_stage_directory(PR24_TIP_FIX2_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix2")
-
-
-def pr24_tip_plain_stage_directory():
-    return fullbuild_stage_directory(PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_plain")
-
-
-def swingburst_package_stage_directory():
-    """The BepInEx folder of the extracted friend package (it holds plugins/Together and plugins/CUCoreLib); there is no default, the variable has to name the extraction. Unset, the path
-    names the variable so the DLL preflight reports what to set."""
-    explicit = os.environ.get(SWINGBURST_PACKAGE_STAGE_ENVIRONMENT_VARIABLE)
-    return explicit if explicit else os.path.join(mods_root(), "UNSET_set_%s" % SWINGBURST_PACKAGE_STAGE_ENVIRONMENT_VARIABLE)
+def stage_choice(name):
+    return name + "-stage"
 
 
 def stage_directory_by_build():
-    return {"pr24-3d060fe-corpse-fix": pr24_tip_fix_stage_directory, "pr24-3d060fe-plain": pr24_tip_plain_stage_directory, "pr24-3d060fe-corpse-fix2": pr24_tip_fix2_stage_directory,
-            "swingburst-package": swingburst_package_stage_directory}
+    return {name: (lambda spec=spec: stage_directory(spec)) for name, spec in buildregistry.builds().items() if spec["kind"] == "stage"}
 
 
-def install_stage_together(copy, directory):
+def builds_needing_library_folders():
+    return {name: spec["library_folders"] for name, spec in buildregistry.builds().items() if spec["kind"] == "stage" and spec.get("library_folders")}
+
+
+def install_stage_together(copy, directory, library_folders=()):
     source = os.path.join(directory, "plugins", TOGETHER_FOLDER)
     if not os.path.isfile(os.path.join(source, "CasualtiesMP.dll")):
         raise FileNotFoundError(os.path.join(source, "CasualtiesMP.dll"))
@@ -270,20 +207,35 @@ def install_stage_together(copy, directory):
     if os.path.isdir(target):
         shutil.rmtree(target)
     shutil.copytree(source, target, ignore=shutil.ignore_patterns(*STOCK_EXCLUDED_FILES))
-    install_stage_cucorelib(copy, directory)
+    for folder in library_folders:
+        install_stage_library(copy, directory, folder)
     return source
 
 
-def install_stage_cucorelib(copy, directory):
-    """A stage built against CUCoreLib carries the library as a second plugin folder, plugins/CUCoreLib, which has to sit next to plugins/Together."""
-    source = os.path.join(directory, "plugins", CUCORELIB_FOLDER)
+def install_stage_library(copy, directory, folder):
+    """A stage built against a library carries it as a second plugin folder next to plugins/Together."""
+    source = os.path.join(directory, "plugins", folder)
     if not os.path.isdir(source):
         return None
-    target = os.path.join(copy, PLUGINS_RELATIVE, CUCORELIB_FOLDER)
+    target = os.path.join(copy, PLUGINS_RELATIVE, folder)
     if os.path.isdir(target):
         shutil.rmtree(target)
     shutil.copytree(source, target)
     return source
+
+
+def choice_spec(together):
+    """The registry build a together choice names: the build name itself, or its stage choice."""
+    builds = buildregistry.builds()
+    for name, spec in builds.items():
+        if together == name or (spec["kind"] == "stage" and together == stage_choice(name)):
+            return name, spec
+    return None, None
+
+
+def install_python_build(spec, copy, debug):
+    module_name, _, function_name = spec["install"].partition(":")
+    return getattr(importlib.import_module(module_name), function_name)(copy, debug)
 
 
 def remove_flavour_switch(copy):
@@ -296,21 +248,24 @@ def remove_flavour_switch(copy):
 
 
 def write_probe_config(copy):
+    probe = buildregistry.probe_config()
+    if not probe:
+        return
     folder = os.path.join(copy, CONFIG_RELATIVE)
     os.makedirs(folder, exist_ok=True)
-    with open(os.path.join(folder, TOGETHER_CONFIG_NAME), "w") as handle:
-        handle.write(PROBE_CONFIG_TEXT)
+    with open(os.path.join(folder, probe["file"]), "w") as handle:
+        handle.write(probe["text"])
 
 
 def clear_managed_plugins(copy):
     together_config = os.path.join(copy, CONFIG_RELATIVE, TOGETHER_CONFIG_NAME)
     if os.path.exists(together_config):
         os.remove(together_config)
-    for name in MANAGED_FOLDERS:
+    for name in managed_folders():
         folder = os.path.join(copy, PLUGINS_RELATIVE, name)
         if os.path.isdir(folder):
             shutil.rmtree(folder)
-    for guid in PLUGIN_DEBUG_GUIDS.values():
+    for guid in plugin_debug_guids().values():
         config = os.path.join(copy, CONFIG_RELATIVE, guid + ".cfg")
         if os.path.exists(config):
             os.remove(config)
@@ -324,37 +279,30 @@ def write_debug_config(copy, guid):
 
 
 def configure_instance(copy, plugins, together="stock", debug=True):
-    unknown = [name for name in plugins if name not in PLUGIN_INSTALLERS]
+    installers = plugin_installers()
+    unknown = [name for name in plugins if name not in installers]
     if unknown:
-        raise ValueError("unknown plugin sets %s; known: %s" % (unknown, sorted(PLUGIN_INSTALLERS)))
+        raise ValueError("unknown plugin sets %s; known: %s" % (unknown, sorted(installers)))
     clear_managed_plugins(copy)
     installed = {"link": install_link(copy)}
     if together != "keep" and not flavour_name(together):
         remove_flavour_switch(copy)
+    build_name, spec = choice_spec(together)
     if together == "stock":
         installed["together"] = install_stock_together(copy)
-    elif together == "fork":
-        installed["together"] = install_fork_together(copy)
-    elif together == PR24_TIP_FIX_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_tip_fix_stage_directory())
-    elif together == PR24_TIP_PLAIN_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_tip_plain_stage_directory())
-    elif together == PR24_TIP_FIX2_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_tip_fix2_stage_directory())
-    elif together == SWINGBURST_PACKAGE_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, swingburst_package_stage_directory())
-    elif together == FRIENDS_ZIP_CHOICE:
-        installed["together"] = friendszip.extract_into_copy(friendszip.default_zip_path(), copy, remove_extras=True)
-        if debug:
-            write_debug_config(copy, LOADER_GUID)
+    elif spec is not None and spec["kind"] == "stage":
+        installed["together"] = install_stage_together(copy, stage_directory(spec), spec.get("library_folders", ()))
+    elif spec is not None and spec["kind"] == "python":
+        installed["together"] = install_python_build(spec, copy, debug)
     elif flavour_name(together):
         installed["together"] = install_flavour_package(copy)
     elif together != "keep":
-        raise ValueError("together must be stock, fork, a stage choice, keep or flavour:<name>, not %r" % together)
+        raise ValueError("together must be stock, a registered build or its stage choice, keep or flavour:<name>, not %r" % together)
+    guids = plugin_debug_guids()
     for name in plugins:
-        installed[name] = PLUGIN_INSTALLERS[name](copy)
-        if debug and name in PLUGIN_DEBUG_GUIDS:
-            write_debug_config(copy, PLUGIN_DEBUG_GUIDS[name])
+        installed[name] = installers[name](copy)
+        if debug and name in guids:
+            write_debug_config(copy, guids[name])
     return installed
 
 

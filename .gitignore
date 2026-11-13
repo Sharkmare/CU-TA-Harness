@@ -8,3 +8,6 @@ client/.test_state.json
 client/reports/
 plugin-tests/bin/
 plugin-tests/obj/
+
+# our own scenarios, builds, profiles and evidence: not part of the public tree
+local/

@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from casualtieslink.reports import miningsummary
 
@@ -48,9 +49,9 @@ class RowTests(unittest.TestCase):
         self.assertEqual(miningsummary.summarise_report(data)["startPositions"]["separation"], 5.0)
 
     def test_a_directory_is_read_in_repetition_order(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ, {miningsummary.REPORT_PATTERN_ENVIRONMENT_VARIABLE: ""}):
             for repetition in (3, 1, 2):
-                with open(os.path.join(directory, "v2check_dig_cracks__x_r%d__1.json" % repetition), "w", encoding="utf-8") as handle:
+                with open(os.path.join(directory, "dig_cracks_check__x_r%d__1.json" % repetition), "w", encoding="utf-8") as handle:
                     json.dump(report(repetition=repetition), handle)
             rows = miningsummary.summarise_directory(directory)
         self.assertEqual([row["repetition"] for row in rows], [1, 2, 3])
@@ -58,7 +59,7 @@ class RowTests(unittest.TestCase):
     def test_the_end_time_comes_from_the_file_name_and_the_duration_from_the_last_sample(self):
         data = report()
         data["samples"] = [{"t": 0.0}, {"t": 12.5}]
-        row = miningsummary.summarise_report(data, "x/v2check_dig_cracks__a__d100-j0_r3__083532.json")
+        row = miningsummary.summarise_report(data, "x/dig_cracks_check__a__d100-j0_r3__083532.json")
         self.assertEqual((row["endLocalSeconds"], row["durationSeconds"]), (8 * 3600 + 35 * 60 + 32, 12.5))
 
     def test_a_path_without_a_time_stamp_gives_none(self):

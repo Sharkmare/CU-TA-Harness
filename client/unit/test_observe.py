@@ -37,16 +37,16 @@ class SentSummaryTests(unittest.TestCase):
 
 class FlavourLogTests(unittest.TestCase):
     LOG = (
-        "[Info   :CT_FlavourSwitch] flavour=stock-5.4.0 why=command line action=Swapped active=stock-5.4.0 installed=fork,stock-5.4.0\n"
+        "[Info   :CT_FlavourSwitch] flavour=example-flavour-b why=command line action=Swapped active=example-flavour-b installed=fork,example-flavour-b\n"
         "[Info   :  Together] Plugin CasualtiesMP version 5.4.0 is loaded!\n"
     )
 
     def test_the_switch_line_is_parsed_into_fields(self):
         lines = observe.flavour_switch_lines(self.LOG)
         self.assertEqual(len(lines), 1)
-        self.assertEqual(lines[0]["flavour"], "stock-5.4.0")
+        self.assertEqual(lines[0]["flavour"], "example-flavour-b")
         self.assertEqual(lines[0]["action"], "Swapped")
-        self.assertEqual(lines[0]["installed"], "fork,stock-5.4.0")
+        self.assertEqual(lines[0]["installed"], "fork,example-flavour-b")
 
     def test_a_log_without_the_switch_has_no_lines(self):
         self.assertEqual(observe.flavour_switch_lines("nothing here"), [])

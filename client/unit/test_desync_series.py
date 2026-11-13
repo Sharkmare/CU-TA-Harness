@@ -107,11 +107,11 @@ class SeriesReportTests(unittest.TestCase):
         scenario = desync.SeriesScenario("hand_mining_cracks", "bare hands", lambda host, client: {}, block.hit, block.read,
                                          cadence_seconds=0.02, max_hits=5, interval_seconds=0.01, tail_seconds=0.05)
         observation = desync.observe_series(scenario, "host", "client")
-        return desync.describe_series(observation, "pr24-3d060fe-plain", "cd" * 32, "1.0", delay, 20.0)
+        return desync.describe_series(observation, "example-build-a", "cd" * 32, "1.0", delay, 20.0)
 
     def test_the_report_names_build_hash_delay_and_both_sides(self):
         text = desync.format_series_report(self.report())
-        self.assertIn("[pr24-3d060fe-plain] sha256 " + "cd" * 32, text)
+        self.assertIn("[example-build-a] sha256 " + "cd" * 32, text)
         self.assertIn("100 ms one way (+ jitter up to 20 ms)", text)
         self.assertIn("game version 1.0, action performed by the client", text)
         self.assertIn("host: broke at", text)
@@ -125,7 +125,7 @@ class SeriesReportTests(unittest.TestCase):
         report = self.report()
         with tempfile.TemporaryDirectory() as directory:
             path = desync.save_series_report(report, directory)
-            self.assertRegex(os.path.basename(path), r"__pr24-3d060fe-plain_cdcdcdcd__delay100_jitter20_r1__\d{6}\.json$")
+            self.assertRegex(os.path.basename(path), r"__example-build-a_cdcdcdcd__delay100_jitter20_r1__\d{6}\.json$")
             with open(path, encoding="utf-8") as handle:
                 loaded = json.load(handle)
         self.assertEqual(loaded["delayMs"], 100.0)
@@ -267,7 +267,7 @@ class TileHitTests(unittest.TestCase):
     def test_the_report_names_hits_on_other_tiles(self):
         block = FakeBlock(hits_to_break=2)
         scenario = desync.SeriesScenario("hold", "d", lambda host, client: {"aimPattern": "circle"}, block.hit, block.read, cadence_seconds=0.01, max_hits=5, interval_seconds=0.01, tail_seconds=0.05)
-        report = desync.describe_series(desync.observe_series(scenario, "host", "client"), "fork", "ab" * 32)
+        report = desync.describe_series(desync.observe_series(scenario, "host", "client"), "example-build", "ab" * 32)
         report["tileHits"] = {"client": {"0,0": 3}, "host": {"0,0": 2, "1,0": 1}}
         text = desync.format_series_report(report)
         self.assertIn("increases on tiles other than the target: client 0, host 1", text)
@@ -296,27 +296,7 @@ class CleanupTests(unittest.TestCase):
                                          interval_seconds=0.01, tail_seconds=0.02, cleanup=failing_cleanup)
         observation = desync.observe_series(scenario, "host", "client")
         self.assertEqual(observation.context["cleanupError"], "no host")
-        self.assertEqual(desync.describe_series(observation, "fork", "ab" * 32)["cleanupError"], "no host")
-
-
-class TranspilerLineTests(unittest.TestCase):
-    def test_lines_naming_the_transpiler_are_collected(self):
-        log = "[Info] fine\n[Warning:  Together] Body.Attack TRANSPILER: hit-loop markers not found, leaving stock IL\n[Info] TRANSPILER: Body.Attack TRANSPILER SUCCESS :) \n"
-        found = desync.transpiler_lines(log)
-        self.assertEqual(len(found), 2)
-        self.assertTrue(found[0].startswith("[Warning:  Together] Body.Attack TRANSPILER: hit-loop markers not found"))
-
-    def test_a_log_without_them_gives_none(self):
-        self.assertEqual(desync.transpiler_lines("nothing"), [])
-
-    def test_the_report_shows_the_lines_per_machine(self):
-        block = FakeBlock(hits_to_break=1)
-        scenario = desync.SeriesScenario("hold", "d", lambda host, client: {}, block.hit, block.read, cadence_seconds=0.01, max_hits=3, interval_seconds=0.01, tail_seconds=0.02)
-        report = desync.describe_series(desync.observe_series(scenario, "host", "client"), "fork", "ab" * 32)
-        report["transpilerLines"] = {"host": ["TRANSPILER: hit-loop markers not found"], "client": []}
-        text = desync.format_series_report(report)
-        self.assertIn("host Body.Attack transpiler lines: ['TRANSPILER: hit-loop markers not found']", text)
-        self.assertIn("client Body.Attack transpiler lines: none", text)
+        self.assertEqual(desync.describe_series(observation, "example-build", "ab" * 32)["cleanupError"], "no host")
 
 
 class CrackStepTests(unittest.TestCase):
@@ -328,7 +308,7 @@ class CrackStepTests(unittest.TestCase):
     def test_a_report_carries_the_steps_of_both_sides(self):
         block = FakeBlock(hits_to_break=2)
         scenario = desync.SeriesScenario("hold", "d", lambda host, client: {}, block.hit, block.read, cadence_seconds=0.01, max_hits=5, interval_seconds=0.01, tail_seconds=0.05)
-        report = desync.describe_series(desync.observe_series(scenario, "host", "client"), "fork", "ab" * 32)
+        report = desync.describe_series(desync.observe_series(scenario, "host", "client"), "example-build", "ab" * 32)
         self.assertEqual(set(report["crackSteps"]), {"client", "host"})
         self.assertIn("crack steps per sample, client", desync.format_series_report(report))
 
@@ -405,10 +385,10 @@ class EnvironmentTests(unittest.TestCase):
         block = FakeBlock(hits_to_break=2)
         scenario = desync.SeriesScenario("hold", "d", lambda host, client: {}, block.hit, block.read, cadence_seconds=0.01, max_hits=5, interval_seconds=0.01, tail_seconds=0.05)
         observation = desync.observe_series(scenario, "host", "client")
-        report = desync.describe_series(observation, "fork", "ab" * 32, "1.0", 100.0, 60.0, None, "L2-fork-hand-mining", 3,
+        report = desync.describe_series(observation, "example-build", "ab" * 32, "1.0", 100.0, 60.0, None, "L2-example-build-hand-mining", 3,
                                         {"delay_ms": 100.0, "jitter_ms": 60.0, "loss": 0.0, "reorder": 0.0}, 4242)
         text = desync.format_series_report(report)
-        self.assertIn("launch L2-fork-hand-mining, repetition 3", text)
+        self.assertIn("launch L2-example-build-hand-mining, repetition 3", text)
         self.assertIn("100 ms one way, jitter up to 60 ms, loss 0, reorder 0, seed 4242", text)
         with tempfile.TemporaryDirectory() as directory:
             path = desync.save_series_report(report, directory)

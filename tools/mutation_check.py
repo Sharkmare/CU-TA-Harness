@@ -11,6 +11,9 @@ REPO = os.path.dirname(TOOLS)
 MUTANTS_PATH = os.path.join(TOOLS, "mutants.json")
 COPIED_FOLDERS = ("plugin", "plugin-tests", "client", "tools", "docs")
 COPIED_FILES = ("README.md",)
+LOCAL_FOLDER = "local"
+LOCAL_MUTANTS_PATH = os.path.join(REPO, LOCAL_FOLDER, "mutants.json")
+include_local = [False]
 IGNORED = ("bin", "obj", "__pycache__", "*.dll", ".test_state.json")
 CLIENT_REPORTS_FOLDER = "reports"
 MUTANT_TIMEOUT_SECONDS = 90
@@ -69,7 +72,7 @@ def ignored_names(directory, names):
 
 
 def copy_tree(root):
-    for folder in COPIED_FOLDERS:
+    for folder in COPIED_FOLDERS + ((LOCAL_FOLDER,) if include_local[0] else ()):
         shutil.copytree(os.path.join(REPO, folder), os.path.join(root, folder), ignore=ignored_names)
     for name in COPIED_FILES:
         shutil.copy(os.path.join(REPO, name), os.path.join(root, name))
@@ -103,9 +106,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Break the code on purpose in scratch copies and check that the offline tests notice.")
     parser.add_argument("--suite", choices=("plugin", "python"), default=None)
     parser.add_argument("--match", default=None, help="only mutants whose label contains this text")
+    parser.add_argument("--with-local", action="store_true", help="also copy local/ and add the mutants of local/mutants.json: the suite then includes your local tests")
     arguments = parser.parse_args(argv)
     with open(MUTANTS_PATH, encoding="utf-8") as handle:
         mutants = json.load(handle)
+    include_local[0] = arguments.with_local
+    if arguments.with_local and os.path.isfile(LOCAL_MUTANTS_PATH):
+        with open(LOCAL_MUTANTS_PATH, encoding="utf-8") as handle:
+            mutants += json.load(handle)
     mutants = [m for m in mutants if (arguments.suite is None or m["suite"] == arguments.suite) and (arguments.match is None or arguments.match in m["label"])]
     scratch = tempfile.mkdtemp(prefix="mutants_")
     problems = 0

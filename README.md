@@ -2,9 +2,7 @@
 
 Test automation (TA) for the Steam game Casualties: Unknown. A small BepInEx plugin, CasualtiesLink, runs inside the game and answers HTTP requests on the local machine. A Python client (standard library only) starts the game, sends it commands and runs the tests.
 
-Repository: https://github.com/Sharkmare/CU-TA-Harness
-
-The multiplayer tests use the Together mod: https://github.com/Sharkmare/casualties-together
+The multiplayer scenarios drive the Together mod through its `--mp-*` start flags; nothing here depends on one build of it.
 
 ## Layout
 
@@ -36,12 +34,16 @@ One entry point runs everything, `client/run_tests.py`. It only reruns what chan
 ```bash
 python client/run_tests.py --offline        # offline Python tests and the plugin tests; never starts a game
 python client/run_tests.py --offline --all  # the same, forced to run everything
-python client/run_tests.py --pair --only desync --together stock-5.5.0   # live scenarios on two games
+python client/run_tests.py --pair --only <group> --together <build>      # live scenarios on two games, builds from local/builds.json
 ```
 
 Live groups need a free machine with the game installed; `docs/TESTING.md` lists every group, flag and what a run does to the game folder and profile. The scenarios that start two games are in `docs/SCENARIOS.md`.
 
 A few offline tests read folders next to this repository (the `mods` folder that holds it). When the repository sits elsewhere, for example in a git worktree, set `CU_MODS_ROOT` to that `mods` folder.
+
+## Local content
+
+A folder `local/` at the repository root is ignored by git and extends the tracked tree with scenarios, builds, profiles and tests of your own. The tracked tree runs and passes without it; `docs/ARCHITECTURE.md` lists the extension points.
 
 ## Documents
 
@@ -51,7 +53,7 @@ A few offline tests read folders next to this repository (the `mods` folder that
 | `docs/PROTOCOL.md` | the plugin's off switch, security, commands, events, game quirks |
 | `docs/CLIENT.md` | the command line client, game lock, host and client pair |
 | `docs/TESTING.md` | the runner, test groups, change selection, result tables for a PR, mutation check |
-| `docs/SCENARIOS.md` | gate, desync, friends zip, paged select and swing scenarios, and the programs around them |
+| `docs/SCENARIOS.md` | the scenario engine, the build registry, the proxy, position control and the swing gates |
 
 ## Contributing
 

@@ -22,7 +22,6 @@ DEFAULT_REASONS = (
     (r"first swing changed nothing", "first swing hit nothing"),
     (r"client seat did not verify", "client seat unverified"),
     (r"no swing recorded", "no swing recorded"),
-    (r"does not face the corpse", "client not facing corpse"),
 )
 REQUIRED_PROFILE_KEYS = ("name", "topic", "sources", "tables")
 ROLES = ("MAIN", "REGRESSION")
@@ -126,7 +125,7 @@ def format_number(value):
     return "%.1f" % value
 
 
-def corpse_readings(report):
+def pair_readings(report):
     """Every health reading of both copies, in order, with None where the copy was gone, and the swing at which a copy first went unreadable."""
     host, client = [], []
     broke = None
@@ -142,8 +141,8 @@ def corpse_readings(report):
     return host, client, broke, after_chain
 
 
-def corpse_cells(report):
-    host, client, broke, after_chain = corpse_readings(report)
+def pair_cells(report):
+    host, client, broke, after_chain = pair_readings(report)
 
     def cell(series):
         values = [value for value in series if value is not None]
@@ -387,7 +386,7 @@ def pair_table(table, rows_spec, all_runs, root, deviations, stats):
         for build in table["builds"]:
             runs = runs_for(all_runs, pair["scenario"], build["build"], pair.get("sources"), root)
             valid = [run for run in runs if run["_status"] == "valid"]
-            cells = [corpse_cells(run) for run in valid]
+            cells = [pair_cells(run) for run in valid]
             row = [pair["label"], build["label"]] + [distinct_join([cell[column["id"]] for cell in cells]) if cells else MISSING_CELL for column in columns]
             rows.append(row)
             add_runs(stats, runs, pair.get("planned_runs"))

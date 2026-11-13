@@ -58,7 +58,7 @@ class SnapshotTests(unittest.TestCase):
 
 class BudgetTests(unittest.TestCase):
     def test_mining_runs_get_the_long_budget(self):
-        self.assertEqual(run_tests.scenario_budget(["v2check", "launch_log_checks"], 15), run_tests.LONG_SCENARIO_BUDGET_SECONDS_PER_RUN * 15 + run_tests.LAUNCH_STARTUP_SECONDS)
+        self.assertEqual(run_tests.scenario_budget(["digcheck", "launch_log_checks"], 15), run_tests.LONG_SCENARIO_BUDGET_SECONDS_PER_RUN * 15 + run_tests.LAUNCH_STARTUP_SECONDS)
 
     def test_other_scenarios_keep_the_short_budget(self):
         self.assertEqual(run_tests.scenario_budget(["pvp_banded"], 8), run_tests.SCENARIO_BUDGET_SECONDS_PER_RUN * 8 + run_tests.LAUNCH_STARTUP_SECONDS)

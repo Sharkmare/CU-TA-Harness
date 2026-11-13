@@ -53,6 +53,22 @@ class ControlRunTests(unittest.TestCase):
         self.assertEqual(mutation_check.ignored_names(os.path.join("x", "client"), ["reports", "casualtieslink"]), {"reports"})
         self.assertEqual(mutation_check.ignored_names(os.path.join("x", "client", "casualtieslink"), ["reports", "games"]), set())
 
+    def test_local_content_is_copied_only_when_asked(self):
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as target:
+            for folder in mutation_check.COPIED_FOLDERS + (mutation_check.LOCAL_FOLDER,):
+                os.makedirs(os.path.join(repository, folder))
+            for name in mutation_check.COPIED_FILES:
+                with open(os.path.join(repository, name), "w") as handle:
+                    handle.write("x")
+            with mock.patch.object(mutation_check, "REPO", repository):
+                for flag in (False, True):
+                    destination = os.path.join(target, str(flag))
+                    os.makedirs(destination)
+                    with mock.patch.object(mutation_check, "include_local", [flag]):
+                        mutation_check.copy_tree(destination)
+                    self.assertEqual(os.path.isdir(os.path.join(destination, mutation_check.LOCAL_FOLDER)), flag)
+                    self.assertTrue(os.path.isdir(os.path.join(destination, "client")))
+
     def test_the_suite_gets_the_mods_root_of_the_real_repository(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop(mutation_check.MODS_ROOT_ENVIRONMENT_VARIABLE, None)

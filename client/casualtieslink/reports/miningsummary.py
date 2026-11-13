@@ -4,7 +4,12 @@ import math
 import os
 import re
 
-REPORT_PATTERN = "v2check_dig_cracks__*.json"
+REPORT_PATTERN_ENVIRONMENT_VARIABLE = "CU_MINING_REPORT_PATTERN"
+DEFAULT_REPORT_PATTERN = "dig_cracks_check__*.json"
+
+
+def report_pattern():
+    return os.environ.get(REPORT_PATTERN_ENVIRONMENT_VARIABLE) or DEFAULT_REPORT_PATTERN
 NEVER_BROKE = "never-broke"
 
 
@@ -63,7 +68,7 @@ def summarise_report(report, path=None):
 
 def summarise_directory(directory):
     rows = []
-    for path in sorted(glob.glob(os.path.join(directory, REPORT_PATTERN))):
+    for path in sorted(glob.glob(os.path.join(directory, report_pattern()))):
         with open(path, encoding="utf-8") as handle:
             rows.append(summarise_report(json.load(handle), path))
     rows.sort(key=lambda row: row["repetition"] or 0)

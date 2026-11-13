@@ -1,0 +1,322 @@
+{
+  "name": "example",
+  "topic": "TARGET",
+  "sources": [
+    ".state/target_run*/*.json",
+    ".state/target_alpha/*.json",
+    ".state/target_beta/*.json",
+    ".state/plain3*_reports/*.json",
+    ".state/target_c2*/*.json",
+    ".state/c2mining_reports/*.json",
+    ".state/c2hits2_reports/*.json",
+    ".state/c2hits3_reports/*.json",
+    ".state/tiphits2_reports/*.json",
+    ".state/plainhits_reports/*.json",
+    ".state/tipcrates2_reports/*.json",
+    ".state/plaincrates2_reports/*.json",
+    ".state/tipmining_reports/*.json",
+    ".state/plainmining_reports/*.json"
+  ],
+  "params": {
+    "real_rate_median_max": 0.3
+  },
+  "superseded_confounders": [
+    "^host hold at"
+  ],
+  "header": [
+    {
+      "id": "game_version"
+    },
+    {
+      "id": "swings",
+      "text": "{n} bare swings"
+    },
+    {
+      "id": "median_interval"
+    },
+    {
+      "id": "distance",
+      "text": "target"
+    },
+    {
+      "id": "held"
+    }
+  ],
+  "builds": {
+    "example-build-c": {
+      "stageDll": "../example-project/build/stage_example_c/plugins/Together/CasualtiesMP.dll"
+    },
+    "example-build-b": {
+      "stageDll": "../example-project/build/stage_example_b/plugins/Together/CasualtiesMP.dll"
+    },
+    "example-build-a": {
+      "stageDll": "../example-project/build/stage_example_a/plugins/Together/CasualtiesMP.dll"
+    }
+  },
+  "tables": [
+    {
+      "kind": "pair_rows",
+      "title": null,
+      "builds": [
+        {
+          "label": "plain abc1234",
+          "build": "example-build-a"
+        },
+        {
+          "label": "abc1234 + fix",
+          "build": "example-build-c"
+        }
+      ],
+      "columns": [
+        {
+          "id": "host_hp",
+          "label": "host hp"
+        },
+        {
+          "id": "client_min",
+          "label": "client hp (min)"
+        },
+        {
+          "id": "broke",
+          "label": "broke"
+        }
+      ],
+      "rows": [
+        {
+          "label": "Beta/Alpha",
+          "scenario": "chain_probe_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "abc1234 + fix": {
+              "broke": "sw11"
+            }
+          }
+        },
+        {
+          "label": "Alpha/Alpha",
+          "scenario": "chain_probe_a_a_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "abc1234 + fix": {
+              "broke": "sw11"
+            }
+          }
+        },
+        {
+          "label": "Beta/Beta",
+          "scenario": "chain_probe_b_b_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "abc1234 + fix": {
+              "broke": "never"
+            }
+          }
+        },
+        {
+          "label": "Alpha/Beta",
+          "scenario": "chain_probe_a_b_by_client",
+          "planned_runs": 1,
+          "role": "MAIN",
+          "expect": {
+            "abc1234 + fix": {
+              "broke": "never"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "kind": "metric_rows",
+      "title": "mining and startup, plain abc1234 vs abc1234 + fix (transpiler form)",
+      "row_label": "test",
+      "builds": [
+        {
+          "label": "plain abc1234",
+          "build": "example-build-a",
+          "sources": [
+            ".state/plainmining_reports/*.json"
+          ]
+        },
+        {
+          "label": "abc1234 + fix",
+          "build": "example-build-c",
+          "sources": [
+            ".state/c2mining_reports/*.json"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "label": "mining persisted",
+          "scenario": "dig_cracks_check",
+          "metric": "verdict_count",
+          "verdict": "persisted",
+          "planned_runs": 15,
+          "role": "REGRESSION",
+          "expect": {
+            "abc1234 + fix": "all"
+          }
+        },
+        {
+          "label": "Body.Attack hook",
+          "metric": "attack_hook",
+          "role": "REGRESSION"
+        }
+      ]
+    },
+    {
+      "kind": "metric_rows",
+      "title": "abc1234 + fix (transpiler form), gated swings, two launches (gate rest pose / gate reach)",
+      "row_label": "test",
+      "builds": [
+        {
+          "label": "fix launch 1",
+          "build": "example-build-c",
+          "sources": [
+            ".state/c2hits2_reports/*.json"
+          ]
+        },
+        {
+          "label": "fix launch 2",
+          "build": "example-build-c",
+          "sources": [
+            ".state/c2hits3_reports/*.json"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "label": "PvP punches landed",
+          "scenario": "pvp_banded_by_client",
+          "metric": "swings_landed",
+          "planned_runs": 6,
+          "role": "REGRESSION"
+        },
+        {
+          "label": "crate swings",
+          "scenario": "spawned_crate_hit_by_client",
+          "metric": "swings_landed",
+          "planned_runs": 6,
+          "role": "REGRESSION"
+        },
+        {
+          "label": "static copy",
+          "scenario": "staticcrate_hit_by_client",
+          "metric": "swings_landed",
+          "planned_runs": 6,
+          "role": "REGRESSION",
+          "note": "launch 1 reached the static test and its setup failed 3 times (the spawned crate only 34 to 36 from the client, 40 needed), no report; launch 2 did not include it"
+        }
+      ]
+    },
+    {
+      "kind": "metric_rows",
+      "title": "earlier fix stage fea4725f (flag form), plain abc1234 vs abc1234 + fix (flag form)",
+      "row_label": "test",
+      "builds": [
+        {
+          "label": "plain abc1234",
+          "build": "example-build-a"
+        },
+        {
+          "label": "abc1234 + fix (flag form)",
+          "build": "example-build-b"
+        }
+      ],
+      "rows": [
+        {
+          "label": "PvP punches landed",
+          "scenario": "pvp_banded_by_client",
+          "metric": "swings_landed",
+          "sources": [
+            ".state/tiphits2_reports/pvp_banded*.json",
+            ".state/plainhits_reports/pvp_banded*.json"
+          ],
+          "role": "REGRESSION",
+          "expect": {
+            "abc1234 + fix (flag form)": "all"
+          },
+          "note": "earlier stage: 3 runs of 5 punches, 15 of 15 punches landed"
+        },
+        {
+          "label": "crate swings",
+          "scenario": "spawned_crate_hit_by_client",
+          "metric": "swings_landed",
+          "sources": [
+            ".state/tipcrates2_reports/spawned_crate*.json",
+            ".state/plaincrates2_reports/spawned_crate*.json"
+          ],
+          "role": "REGRESSION",
+          "expect": {
+            "abc1234 + fix (flag form)": "all"
+          },
+          "note": "earlier stage: 6 runs of 5 swings, 30 of 30 swings landed"
+        },
+        {
+          "label": "static copy",
+          "scenario": "staticcrate_hit_by_client",
+          "metric": "swings_landed",
+          "miss_cause": {
+            "field": "geometry.limb1Distance",
+            "above": 4.0,
+            "label": "limb lag"
+          },
+          "sources": [
+            ".state/tipcrates2_reports/staticcrate*.json",
+            ".state/plainhits_reports/staticcrate*.json"
+          ],
+          "role": "REGRESSION",
+          "note": "earlier stage: 12 of 20 swings landed (counted by swing before the all-or-nothing rule), misses are limb lag"
+        },
+        {
+          "label": "mining persisted",
+          "scenario": "dig_cracks_check",
+          "metric": "verdict_count",
+          "verdict": "persisted",
+          "sources": [
+            ".state/tipmining_reports/digcheck*.json",
+            ".state/plainmining_reports/digcheck*.json"
+          ],
+          "role": "REGRESSION",
+          "expect": {
+            "abc1234 + fix (flag form)": "all"
+          }
+        },
+        {
+          "label": "Body.Attack hook",
+          "metric": "attack_hook",
+          "sources": [
+            ".state/tipmining_reports/launch_checks*.json",
+            ".state/plainmining_reports/launch_checks*.json"
+          ],
+          "role": "REGRESSION"
+        }
+      ]
+    }
+  ],
+  "reasons": [
+    [
+      "gate facing",
+      "facing wrong before swing 1"
+    ],
+    [
+      "not fired, gate limb",
+      "swing refused, limb off its rest pose"
+    ],
+    [
+      "not fired, gate seat",
+      "swing refused, holder view off the seat"
+    ],
+    [
+      "limbs did not settle",
+      "limbs did not settle after the seat"
+    ],
+    [
+      "does not face the target",
+      "client not facing target"
+    ]
+  ]
+}

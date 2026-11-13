@@ -6,53 +6,12 @@ import threading
 import time
 import zipfile
 
+from casualtieslink.games import buildregistry
 from casualtieslink.scenarioengine import launchplan
 
 SAMPLE_OFFSETS_SECONDS = (0.0, 2.0, 10.0)
-FLAVOUR_BUILDS = ("stock-5.5.0", "stock-5.4.0", "fork")
-PR24_TIP_FIX_BUILD = "pr24-3d060fe-corpse-fix"
-PR24_TIP_PLAIN_BUILD = "pr24-3d060fe-plain"
-PR24_TIP_FIX2_BUILD = "pr24-3d060fe-corpse-fix2"
-SWINGBURST_PACKAGE_BUILD = "swingburst-package"
-STAGE_CHOICES = {PR24_TIP_FIX_BUILD: "pr24-3d060fe-corpse-fix-stage", PR24_TIP_PLAIN_BUILD: "pr24-3d060fe-plain-stage", PR24_TIP_FIX2_BUILD: "pr24-3d060fe-corpse-fix2-stage",
-                 SWINGBURST_PACKAGE_BUILD: "swingburst-package-stage"}
-KNOWN_BUILDS = FLAVOUR_BUILDS + (PR24_TIP_FIX_BUILD, PR24_TIP_PLAIN_BUILD, PR24_TIP_FIX2_BUILD, SWINGBURST_PACKAGE_BUILD)
-TRANSPILER_MARKER = "TRANSPILER"
-PATCH_PROBLEM_MARKERS = ("Failed to patch", "IL Compile Error", "Ambiguous match")
-
-
-TRANSPILER_SUCCESS = "Body.Attack TRANSPILER SUCCESS"
-TRANSPILER_MISSING_MARKERS = "loop markers not found"
-FAILED_ATTACK_PATCH = "Failed to patch: Body_Attack_MultiplayerPatch"
-NO_SCATTER_LINE = "NoScatterPunish:"
-NO_SCATTER_COMPLETE = "(2 of 2 Together checks replaced)"
+REPORT_LINE_EXTENDERS = []
 EXCEPTION_PATTERN = re.compile(r"Exception|\[Error")
-
-
-def launch_log_checks(host_log, client_log, expect_no_scatter=True, expect_success=True, record_only=False):
-    checks = {}
-    for which, text in (("host", host_log), ("client", client_log)):
-        checks[which + "TranspilerSuccess"] = sum(1 for line in text.splitlines() if TRANSPILER_SUCCESS in line)
-        checks[which + "MarkersNotFound"] = sum(1 for line in text.splitlines() if TRANSPILER_MISSING_MARKERS in line)
-        checks[which + "FailedAttackPatch"] = [line.strip() for line in text.splitlines() if FAILED_ATTACK_PATCH in line]
-        checks[which + "PatchProblems"] = [line.strip()[:240] for line in text.splitlines() if any(marker in line for marker in PATCH_PROBLEM_MARKERS)]
-    scatter = [line.strip() for line in host_log.splitlines() if NO_SCATTER_LINE in line]
-    checks["noScatterLines"] = scatter
-    issues = []
-    for which in ("host", "client"):
-        if expect_success and checks[which + "TranspilerSuccess"] < 1:
-            issues.append("no 'Body.Attack TRANSPILER SUCCESS' line in the %s log" % which)
-        if not expect_success and checks[which + "TranspilerSuccess"] > 0:
-            issues.append("'Body.Attack TRANSPILER SUCCESS' in the %s log of a build that should not have the repaired hook" % which)
-        if checks[which + "MarkersNotFound"]:
-            issues.append("'loop markers not found' in the %s log" % which)
-        if checks[which + "FailedAttackPatch"]:
-            issues.append("'%s' in the %s log: %s" % (FAILED_ATTACK_PATCH, which, checks[which + "FailedAttackPatch"][0][:120]))
-    if expect_no_scatter and not any(NO_SCATTER_COMPLETE in line for line in scatter):
-        issues.append("no 'NoScatterPunish ... (2 of 2 Together checks replaced)' line in the host log")
-    checks["issues"] = [] if record_only else issues
-    checks["recordOnly"] = record_only
-    return checks
 
 
 def save_game_logs(games, directory, launch_id, class_name):
@@ -82,9 +41,6 @@ def new_exception_lines(before_text, after_text):
     return [line.strip() for line in after_text.splitlines() if EXCEPTION_PATTERN.search(line) and line not in before]
 
 
-def transpiler_lines(log_text):
-    return [line.strip() for line in log_text.splitlines() if TRANSPILER_MARKER in line]
-DEFAULT_BUILD = "stock-5.5.0"
 BUILD_ENVIRONMENT_VARIABLE = "CU_DESYNC_TOGETHER"
 SKIP_ACTION_MUTATION = "skip-client-action"
 HASH_PREFIX_LENGTH = 8
@@ -97,15 +53,20 @@ VERDICT_NEVER_CHANGED = "never-changed"
 VERDICT_LOST = "not-there-from-the-start"
 
 
+def known_builds():
+    return buildregistry.desync_builds()
+
+
 def parse_build(text):
-    name = (text or DEFAULT_BUILD).strip().lower()
-    if name not in KNOWN_BUILDS:
-        raise ValueError("unknown Together build %r; choose one of %s" % (text, ", ".join(KNOWN_BUILDS)))
+    name = (text or buildregistry.default_build() or "").strip().lower()
+    if name not in known_builds():
+        raise ValueError("unknown build %r; choose one of %s (the registry is local/builds.json)" % (text, ", ".join(known_builds()) or "none registered"))
     return name
 
 
 def together_choice(build):
-    return STAGE_CHOICES.get(build) or "flavour:" + build
+    spec = buildregistry.builds().get(build)
+    return build + "-stage" if spec and spec["kind"] == "stage" else "flavour:" + build
 
 
 def sha256_of_bytes(content):
@@ -675,9 +636,8 @@ def format_series_report(report):
         other_host = sum(count for cell, count in hits["host"].items() if cell != TARGET_CELL_KEY)
         other_client = sum(count for cell, count in hits["client"].items() if cell != TARGET_CELL_KEY)
         lines.append("  increases on tiles other than the target: client %d, host %d" % (other_client, other_host))
-    if report.get("transpilerLines"):
-        for which in ("host", "client"):
-            lines.append("  %s Body.Attack transpiler lines: %s" % (which, report["transpilerLines"][which] or "none"))
+    for extender in REPORT_LINE_EXTENDERS:
+        lines.extend(extender(report))
     if report.get("cleanupError"):
         lines.append("  cleanup error: %s" % report["cleanupError"])
     if report.get("crackSteps"):

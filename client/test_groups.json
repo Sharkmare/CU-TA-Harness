@@ -11,43 +11,6 @@
       "uses_installed_game": true
     },
     {
-      "id": "pair",
-      "modules": [
-        "live.test_pair",
-        "live.test_pair_visuals"
-      ],
-      "needs_game": false,
-      "owns_game": true,
-      "watch_plugin": true
-    },
-    {
-      "id": "gates",
-      "modules": [
-        "live.test_gates"
-      ],
-      "needs_game": false,
-      "owns_game": true,
-      "watch_plugin": true
-    },
-    {
-      "id": "friends-zip",
-      "modules": [
-        "live.test_friends_zip"
-      ],
-      "needs_game": false,
-      "owns_game": true,
-      "watch_plugin": true
-    },
-    {
-      "id": "desync",
-      "modules": [
-        "live.test_desync"
-      ],
-      "needs_game": false,
-      "owns_game": true,
-      "watch_plugin": true
-    },
-    {
       "id": "link",
       "modules": [
         "live.test_link"
@@ -88,34 +51,19 @@
         "unit.test_instances",
         "unit.test_observe",
         "unit.test_desync",
-        "unit.test_desync_scenarios",
         "unit.test_run_arguments",
         "unit.test_udpproxy",
         "unit.test_desync_series",
         "unit.test_launchplan",
         "unit.test_launchsummary",
-        "unit.test_hook_scenarios",
-        "unit.test_regression_scenarios",
-        "unit.test_evidence_scenarios",
-        "unit.test_world_building",
-        "unit.test_spawned_crates",
-        "unit.test_hook_evidence_mining",
-        "unit.test_pvp_banded",
-        "unit.test_corpse_banded",
-        "unit.test_fullbuild_stages",
-        "unit.test_static_copy",
         "unit.test_installed_launch_guard",
-        "unit.test_console_leak",
-        "unit.test_spectator_cam",
-        "unit.test_friends_zip",
-        "unit.test_pagedselect",
-        "unit.test_pagedverify",
         "unit.test_miningsummary",
-        "unit.test_pr24log",
         "unit.test_recovery",
         "unit.test_positioncontrol",
-        "unit.test_position_wiring",
-        "unit.test_corpse_chain", "unit.test_prtable", "unit.test_swinggate", "unit.test_wood_mining", "unit.test_steam_selfjoin", "unit.test_package_log_check", "unit.test_docs_paths"
+        "unit.test_prtable",
+        "unit.test_swinggate",
+        "unit.test_docs_paths",
+        "unit.test_swing_and_band"
       ],
       "needs_game": false
     },

@@ -11,10 +11,10 @@ from casualtieslink.reports import prtable
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "prtable")
 PROFILES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "profiles")
-VERBOSE = "pr24-corpse-verbose"
-FIXED = "pr24-corpse-fix"
-PLAIN = "pr24-3d060fe-plain"
-TIP_FIX = "pr24-3d060fe-corpse-fix"
+VERBOSE = "example-build-verbose"
+FIXED = "base-example"
+PLAIN = "example-build-a"
+TIP_FIX = "example-build-b"
 
 
 def load(relative):
@@ -25,17 +25,17 @@ def status_of(relative, profile=None):
     return prtable.run_status(load(relative), profile or {})
 
 
-def corpse_profile(**changes):
+def example_profile(**changes):
     profile = {
-        "name": "test", "topic": "CORPSE", "sources": ["corpse/*.json"], "params": {"real_rate_median_max": 0.3}, "superseded_confounders": ["^host hold at"],
-        "header": [{"id": "game_version"}, {"id": "swings", "text": "{n} bare swings"}, {"id": "median_interval"}, {"id": "distance", "text": "corpse"}, {"id": "held"}],
+        "name": "test", "topic": "TARGET", "sources": ["target/*.json"], "params": {"real_rate_median_max": 0.3}, "superseded_confounders": ["^host hold at"],
+        "header": [{"id": "game_version"}, {"id": "swings", "text": "{n} bare swings"}, {"id": "median_interval"}, {"id": "distance", "text": "target"}, {"id": "held"}],
         "builds": {},
-        "tables": [{"kind": "pair_rows", "title": None, "builds": [{"label": "PR24", "build": VERBOSE}, {"label": "PR24+fix", "build": FIXED}],
+        "tables": [{"kind": "pair_rows", "title": None, "builds": [{"label": "BASE", "build": VERBOSE}, {"label": "BASE+patch", "build": FIXED}],
                     "columns": [{"id": "host_hp", "label": "host hp"}, {"id": "client_min", "label": "client hp (min)"}, {"id": "broke", "label": "broke"}],
-                    "rows": [{"label": "Milky/Dune", "scenario": "corpse_chain_by_client", "role": "MAIN", "expect": {"PR24+fix": {"broke": "sw11"}}},
-                             {"label": "Dune/Dune", "scenario": "corpse_chain_dune_dune_by_client", "role": "MAIN", "expect": {"PR24+fix": {"broke": "sw11"}}},
-                             {"label": "Milky/Milky", "scenario": "corpse_chain_milky_milky_by_client", "role": "MAIN", "expect": {"PR24+fix": {"broke": "never"}}},
-                             {"label": "Dune/Milky", "scenario": "corpse_chain_dune_milky_by_client", "role": "MAIN", "expect": {"PR24+fix": {"broke": "never"}}}]}]}
+                    "rows": [{"label": "Beta/Alpha", "scenario": "chain_probe_by_client", "role": "MAIN", "expect": {"BASE+patch": {"broke": "sw11"}}},
+                             {"label": "Alpha/Alpha", "scenario": "chain_probe_a_a_by_client", "role": "MAIN", "expect": {"BASE+patch": {"broke": "sw11"}}},
+                             {"label": "Beta/Beta", "scenario": "chain_probe_b_b_by_client", "role": "MAIN", "expect": {"BASE+patch": {"broke": "never"}}},
+                             {"label": "Alpha/Beta", "scenario": "chain_probe_a_b_by_client", "role": "MAIN", "expect": {"BASE+patch": {"broke": "never"}}}]}]}
     profile.update(changes)
     return profile
 
@@ -50,12 +50,12 @@ def hits_profile(rows, builds=None, sources=None):
 
 
 def mixed_profile():
-    """The corpse table as MAIN and the hit counts as REGRESSION in one profile, from the fixtures."""
-    profile = corpse_profile(sources=["corpse/*.json", "hits/*.json"])
+    """The target table as MAIN and the hit counts as REGRESSION in one profile, from the fixtures."""
+    profile = example_profile(sources=["target/*.json", "hits/*.json"])
     profile["tables"].append(hits_profile([hits_row("PvP punches", "pvp_banded_by_client", sources=["hits/pvp*.json"], expect={"fix": "all"}),
                                            hits_row("crate swings", "spawned_crate_hit_by_client", sources=["hits/crate*.json"]),
                                            hits_row("static copy", "staticcrate_hit_by_client", sources=["hits/static*.json"], miss_cause={"field": "geometry.limb1Distance", "above": 4.0, "label": "limb lag"}),
-                                           {"label": "mining persisted", "scenario": "v2check_dig_cracks", "metric": "verdict_count", "verdict": "persisted", "role": "REGRESSION", "sources": ["hits/mining*.json"],
+                                           {"label": "mining persisted", "scenario": "dig_cracks_check", "metric": "verdict_count", "verdict": "persisted", "role": "REGRESSION", "sources": ["hits/mining*.json"],
                                             "expect": {"fix": "all"}}])["tables"][0])
     return profile
 
@@ -64,48 +64,48 @@ def rows_of(result, label):
     return [row for table in result["tables"] for row in table["rows"] if row[0] == label]
 
 
-class CorpseCellTests(unittest.TestCase):
+class PairCellTests(unittest.TestCase):
     def cells(self, relative):
-        cells = prtable.corpse_cells(load(relative))
+        cells = prtable.pair_cells(load(relative))
         return cells["host_hp"], cells["client_min"], cells["broke"]
 
     def test_the_mixed_pair_on_the_control_build_never_breaks_and_the_client_copy_goes_to_minus_366(self):
-        self.assertEqual(self.cells("corpse/mixed_pr24.json"), ("250", "-366.7", "never"))
+        self.assertEqual(self.cells("target/mixed_base.json"), ("250", "-366.7", "never"))
 
     def test_the_mixed_pair_on_the_fix_build_breaks_at_swing_11_after_a_single_negative_reading(self):
-        self.assertEqual(self.cells("corpse/mixed_fix.json"), ("3.2->gone", "-21.4->gone", "sw11"))
+        self.assertEqual(self.cells("target/mixed_fix.json"), ("3.2->gone", "-21.4->gone", "sw11"))
 
-    def test_dune_and_dune_breaks_at_swing_11_on_the_control_and_on_the_fix(self):
-        self.assertEqual(self.cells("corpse/dune_pr24.json"), ("3.2->gone", "3.2->gone", "sw11"))
-        self.assertEqual(self.cells("corpse/dune_fix_confounded.json"), ("3.2->gone", "3.2->gone", "sw11"))
+    def test_alpha_and_alpha_breaks_at_swing_11_on_the_control_and_on_the_fix(self):
+        self.assertEqual(self.cells("target/alpha_base.json"), ("3.2->gone", "3.2->gone", "sw11"))
+        self.assertEqual(self.cells("target/alpha_fix_confounded.json"), ("3.2->gone", "3.2->gone", "sw11"))
 
-    def test_milky_and_milky_and_dune_host_milky_client_take_no_damage(self):
-        for fixture in ("corpse/milky_pr24.json", "corpse/milky_fix.json", "corpse/dunemilky_fix.json"):
+    def test_beta_and_beta_and_alpha_host_beta_client_take_no_damage(self):
+        for fixture in ("target/beta_base.json", "target/beta_fix.json", "target/alphabeta_fix.json"):
             with self.subTest(fixture=fixture):
                 self.assertEqual(self.cells(fixture), ("250", "250", "never"))
 
     def test_a_copy_that_is_gone_before_any_reading_reads_as_gone_only(self):
-        report = copy.deepcopy(load("corpse/mixed_fix.json"))
+        report = copy.deepcopy(load("target/mixed_fix.json"))
         report["measurements"] = [{"swing": 1, "hostHp": [None, None], "clientHp": [None, None]}]
         report["target"]["samples"] = []
-        self.assertEqual(prtable.corpse_cells(report), {"host_hp": "->gone", "client_min": "->gone", "broke": "sw1"})
+        self.assertEqual(prtable.pair_cells(report), {"host_hp": "->gone", "client_min": "->gone", "broke": "sw1"})
 
     def test_a_copy_that_vanishes_only_after_the_chain_is_not_reported_as_breaking_in_it(self):
-        report = copy.deepcopy(load("corpse/milky_pr24.json"))
+        report = copy.deepcopy(load("target/beta_base.json"))
         report["target"]["samples"] = [{"host": 250.0, "client": 250.0}, {"host": None, "client": None}]
-        self.assertEqual(prtable.corpse_cells(report)["broke"], "after sw25")
+        self.assertEqual(prtable.pair_cells(report)["broke"], "after sw25")
 
     def test_the_numbers_come_from_the_readings_not_from_a_cached_summary_field(self):
-        report = copy.deepcopy(load("corpse/mixed_pr24.json"))
+        report = copy.deepcopy(load("target/mixed_base.json"))
         report["target"]["prediction"]["clientMinHp"] = 999.0
-        self.assertEqual(prtable.corpse_cells(report)["client_min"], "-366.7")
+        self.assertEqual(prtable.pair_cells(report)["client_min"], "-366.7")
         report["measurements"][3]["clientHp"][1] = -500.0
-        self.assertEqual(prtable.corpse_cells(report)["client_min"], "-500")
+        self.assertEqual(prtable.pair_cells(report)["client_min"], "-500")
 
 
 class StatusTests(unittest.TestCase):
     def test_clean_runs_are_valid(self):
-        self.assertEqual(status_of("corpse/mixed_pr24.json")[0], "valid")
+        self.assertEqual(status_of("target/mixed_base.json")[0], "valid")
         self.assertEqual(status_of("hits/pvp_fix_r1.json")[0], "valid")
 
     def test_a_run_with_missed_swings_but_no_marker_is_valid_at_report_level_and_reclassified_by_its_row(self):
@@ -122,13 +122,13 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(prtable.run_status({"issues": ["FAIL: x", "INVALID: y"]}, {})[0], "invalid")
 
     def test_a_slow_run_is_excluded_only_when_the_profile_sets_a_rate_limit(self):
-        self.assertEqual(status_of("corpse/mixed_pr24_slow.json", {"params": {"real_rate_median_max": 0.3}}), ("excluded", "slow swings 0.42 s"))
-        self.assertEqual(status_of("corpse/mixed_pr24_slow.json", {})[0], "valid")
+        self.assertEqual(status_of("target/mixed_base_slow.json", {"params": {"real_rate_median_max": 0.3}}), ("excluded", "slow swings 0.42 s"))
+        self.assertEqual(status_of("target/mixed_base_slow.json", {})[0], "valid")
 
     def test_a_confounded_run_stays_confounded_unless_the_profile_lists_the_cause_as_superseded(self):
-        self.assertEqual(status_of("corpse/dune_fix_confounded.json", {})[0], "confounded")
-        self.assertEqual(status_of("corpse/dune_fix_confounded.json", {"superseded_confounders": ["^host hold at"]})[0], "valid")
-        report = copy.deepcopy(load("corpse/dune_fix_confounded.json"))
+        self.assertEqual(status_of("target/alpha_fix_confounded.json", {})[0], "confounded")
+        self.assertEqual(status_of("target/alpha_fix_confounded.json", {"superseded_confounders": ["^host hold at"]})[0], "valid")
+        report = copy.deepcopy(load("target/alpha_fix_confounded.json"))
         report["target"]["prediction"]["confoundedBy"].append("the parked host was 4.00 from the swing at swing 3, below 6.0")
         self.assertEqual(prtable.run_status(report, {"superseded_confounders": ["^host hold at"]})[0], "confounded")
 
@@ -207,7 +207,7 @@ class AllOrNothingTests(unittest.TestCase):
         self.assertEqual(result["deviations"], ["crate swings fix: 2 invalid (position preflight failed x2)"])
 
     def test_mining_counts_the_runs_with_the_wanted_verdict_and_a_different_verdict_is_a_fail(self):
-        row = {"label": "mining", "scenario": "v2check_dig_cracks", "metric": "verdict_count", "verdict": "persisted", "role": "REGRESSION"}
+        row = {"label": "mining", "scenario": "dig_cracks_check", "metric": "verdict_count", "verdict": "persisted", "role": "REGRESSION"}
         self.assertEqual(self.cell(row, "fix")[0], "2/2")
         self.assertEqual(self.cell(row, "plain")[0], "1/1")
         with tempfile.TemporaryDirectory() as root:
@@ -257,16 +257,16 @@ class AllOrNothingTests(unittest.TestCase):
 
 class RolesAndVerdictTests(unittest.TestCase):
     def test_a_test_without_a_role_fails_profile_validation(self):
-        profile = corpse_profile()
+        profile = example_profile()
         del profile["tables"][0]["rows"][1]["role"]
         with self.assertRaises(prtable.ProfileError) as caught:
             prtable.validate_profile(profile)
-        self.assertIn("Dune/Dune", str(caught.exception))
+        self.assertIn("Alpha/Alpha", str(caught.exception))
         with self.assertRaises(prtable.ProfileError):
             prtable.build_result(profile, FIXTURES)
 
     def test_a_role_that_is_neither_main_nor_regression_fails_validation(self):
-        profile = corpse_profile()
+        profile = example_profile()
         profile["tables"][0]["rows"][0]["role"] = "SMOKE"
         with self.assertRaises(prtable.ProfileError):
             prtable.validate_profile(profile)
@@ -274,7 +274,7 @@ class RolesAndVerdictTests(unittest.TestCase):
     def test_the_main_block_comes_first_then_the_regression_block_each_with_its_own_tables_and_verdict(self):
         result = prtable.build_result(mixed_profile(), FIXTURES)
         self.assertEqual([block["role"] for block in result["blocks"]], ["MAIN", "REGRESSION"])
-        self.assertEqual([row[0] for row in result["blocks"][0]["tables"][0]["rows"]], ["Milky/Dune", "Milky/Dune", "Dune/Dune", "Dune/Dune", "Milky/Milky", "Milky/Milky", "Dune/Milky", "Dune/Milky"])
+        self.assertEqual([row[0] for row in result["blocks"][0]["tables"][0]["rows"]], ["Beta/Alpha", "Beta/Alpha", "Alpha/Alpha", "Alpha/Alpha", "Beta/Beta", "Beta/Beta", "Alpha/Beta", "Alpha/Beta"])
         self.assertEqual([row[0] for row in result["blocks"][1]["tables"][0]["rows"]], ["PvP punches", "crate swings", "static copy", "mining persisted"])
         for block in result["blocks"]:
             self.assertTrue(block["verdict"])
@@ -294,24 +294,24 @@ class RolesAndVerdictTests(unittest.TestCase):
         self.assertEqual([block["role"] for block in result["blocks"]], ["REGRESSION"])
 
     def test_a_table_with_both_roles_is_split_into_both_blocks(self):
-        profile = corpse_profile()
+        profile = example_profile()
         profile["tables"][0]["rows"][3]["role"] = "REGRESSION"
         result = prtable.build_result(profile, FIXTURES)
         self.assertEqual([block["role"] for block in result["blocks"]], ["MAIN", "REGRESSION"])
-        self.assertEqual({row[0] for row in result["blocks"][1]["tables"][0]["rows"]}, {"Dune/Milky"})
+        self.assertEqual({row[0] for row in result["blocks"][1]["tables"][0]["rows"]}, {"Alpha/Beta"})
 
     def test_the_main_verdict_says_every_valid_run_was_as_expected_and_counts_the_invalid_and_not_run(self):
-        profile = corpse_profile()
+        profile = example_profile()
         for row in profile["tables"][0]["rows"]:
             row["planned_runs"] = 1
         result = prtable.build_result(profile, FIXTURES)
         self.assertEqual(result["blocks"][0]["verdict"], "all 7 valid runs as expected, 1 excluded, 1 not run")
 
     def test_an_expectation_that_the_valid_runs_do_not_meet_makes_the_block_a_fail(self):
-        profile = corpse_profile()
-        profile["tables"][0]["rows"][0]["expect"] = {"PR24+fix": {"broke": "never"}}
+        profile = example_profile()
+        profile["tables"][0]["rows"][0]["expect"] = {"BASE+patch": {"broke": "never"}}
         result = prtable.build_result(profile, FIXTURES)
-        self.assertEqual(result["blocks"][0]["verdict"], "FAIL (expected not met: Milky/Dune PR24+fix broke sw11 not never), 1 excluded")
+        self.assertEqual(result["blocks"][0]["verdict"], "FAIL (expected not met: Beta/Alpha BASE+patch broke sw11 not never), 1 excluded")
 
     def test_the_regression_verdict_fails_when_a_count_that_must_be_all_valid_is_not(self):
         result = prtable.build_result(mixed_profile(), FIXTURES)
@@ -334,29 +334,19 @@ class RolesAndVerdictTests(unittest.TestCase):
         self.assertLess(markdown.index("### Main tests"), markdown.index("### Regression tests"))
 
     def test_the_shipped_profiles_give_every_test_a_role(self):
-        for name in ("corpse-fix.json", "hit-fix.json"):
+        for name in ("example.json", "example-hits.json"):
             with self.subTest(profile=name):
                 profile = prtable.load_profile(os.path.join(PROFILES, name))
                 roles = {row["role"] for table in profile["tables"] for row in table["rows"]}
                 self.assertTrue(roles <= {"MAIN", "REGRESSION"})
-        corpse = prtable.load_profile(os.path.join(PROFILES, "corpse-fix.json"))
-        main = {row["scenario"] for table in corpse["tables"] for row in table["rows"] if row["role"] == "MAIN"}
-        regression = {row.get("scenario") for table in corpse["tables"] for row in table["rows"] if row["role"] == "REGRESSION"}
-        self.assertTrue(all(name.startswith("corpse_chain") for name in main))
+        target = prtable.load_profile(os.path.join(PROFILES, "example.json"))
+        main = {row["scenario"] for table in target["tables"] for row in table["rows"] if row["role"] == "MAIN"}
+        regression = {row.get("scenario") for table in target["tables"] for row in table["rows"] if row["role"] == "REGRESSION"}
+        self.assertTrue(all(name.startswith("chain_probe") for name in main))
         self.assertIn("pvp_banded_by_client", regression)
 
 
-class RegistryTests(unittest.TestCase):
-    def test_every_scenario_a_shipped_profile_names_exists_in_the_scenario_registry(self):
-        from scenarios import desync_scenarios
-        known = set(desync_scenarios.matching_scenario_names([]))
-        for name in ("corpse-fix.json", "hit-fix.json"):
-            profile = prtable.load_profile(os.path.join(PROFILES, name))
-            for table in profile["tables"]:
-                for row in table["rows"]:
-                    if row.get("scenario"):
-                        self.assertIn(row["scenario"], known, "%s: %s" % (name, row["label"]))
-
+class CommandLineTests(unittest.TestCase):
     def test_the_cli_prints_the_fenced_variant_and_both(self):
         import subprocess
         import sys
@@ -364,7 +354,7 @@ class RegistryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             profile_path = os.path.join(folder, "profile.json")
             with open(profile_path, "w", encoding="utf-8") as handle:
-                json.dump(corpse_profile(), handle)
+                json.dump(example_profile(), handle)
             fenced = subprocess.run([sys.executable, "-I", tool, profile_path, "--format", "fenced", "--root", FIXTURES], capture_output=True)
             both = subprocess.run([sys.executable, "-I", tool, profile_path, "--format", "both", "--root", FIXTURES], capture_output=True)
         self.assertEqual(fenced.returncode, 0, fenced.stderr)
@@ -374,67 +364,67 @@ class RegistryTests(unittest.TestCase):
         self.assertNotIn(b"\r", fenced.stdout + both.stdout)
 
 
-class CorpseTableTests(unittest.TestCase):
+class PairTableTests(unittest.TestCase):
     def setUp(self):
-        self.result = prtable.build_result(corpse_profile(), FIXTURES)
+        self.result = prtable.build_result(example_profile(), FIXTURES)
 
     def rows(self):
         return {(row[0], row[1]): row[2:] for row in self.result["tables"][0]["rows"]}
 
     def test_every_pair_and_build_has_one_row_in_the_profile_order(self):
         keys = [(row[0], row[1]) for row in self.result["tables"][0]["rows"]]
-        self.assertEqual(keys, [("Milky/Dune", "PR24"), ("Milky/Dune", "PR24+fix"), ("Dune/Dune", "PR24"), ("Dune/Dune", "PR24+fix"), ("Milky/Milky", "PR24"),
-                                ("Milky/Milky", "PR24+fix"), ("Dune/Milky", "PR24"), ("Dune/Milky", "PR24+fix")])
+        self.assertEqual(keys, [("Beta/Alpha", "BASE"), ("Beta/Alpha", "BASE+patch"), ("Alpha/Alpha", "BASE"), ("Alpha/Alpha", "BASE+patch"), ("Beta/Beta", "BASE"),
+                                ("Beta/Beta", "BASE+patch"), ("Alpha/Beta", "BASE"), ("Alpha/Beta", "BASE+patch")])
 
     def test_the_cells_are_the_extracted_numbers(self):
         rows = self.rows()
-        self.assertEqual(rows[("Milky/Dune", "PR24")], ["250", "-366.7", "never"])
-        self.assertEqual(rows[("Milky/Dune", "PR24+fix")], ["3.2->gone", "-21.4->gone", "sw11"])
-        self.assertEqual(rows[("Dune/Dune", "PR24")], ["3.2->gone", "3.2->gone", "sw11"])
-        self.assertEqual(rows[("Dune/Dune", "PR24+fix")], ["3.2->gone", "3.2->gone", "sw11"])
-        self.assertEqual(rows[("Milky/Milky", "PR24")], ["250", "250", "never"])
-        self.assertEqual(rows[("Milky/Milky", "PR24+fix")], ["250", "250", "never"])
-        self.assertEqual(rows[("Dune/Milky", "PR24+fix")], ["250", "250", "never"])
+        self.assertEqual(rows[("Beta/Alpha", "BASE")], ["250", "-366.7", "never"])
+        self.assertEqual(rows[("Beta/Alpha", "BASE+patch")], ["3.2->gone", "-21.4->gone", "sw11"])
+        self.assertEqual(rows[("Alpha/Alpha", "BASE")], ["3.2->gone", "3.2->gone", "sw11"])
+        self.assertEqual(rows[("Alpha/Alpha", "BASE+patch")], ["3.2->gone", "3.2->gone", "sw11"])
+        self.assertEqual(rows[("Beta/Beta", "BASE")], ["250", "250", "never"])
+        self.assertEqual(rows[("Beta/Beta", "BASE+patch")], ["250", "250", "never"])
+        self.assertEqual(rows[("Alpha/Beta", "BASE+patch")], ["250", "250", "never"])
 
     def test_a_pair_that_was_not_run_on_a_build_prints_dashes_and_one_not_run_line(self):
-        self.assertEqual(self.rows()[("Dune/Milky", "PR24")], ["-", "-", "-"])
-        profile = corpse_profile()
+        self.assertEqual(self.rows()[("Alpha/Beta", "BASE")], ["-", "-", "-"])
+        profile = example_profile()
         for row in profile["tables"][0]["rows"]:
             row["planned_runs"] = 1
-        self.assertIn("Dune/Milky PR24: 1 of 1 runs not run", prtable.build_result(profile, FIXTURES)["deviations"])
+        self.assertIn("Alpha/Beta BASE: 1 of 1 runs not run", prtable.build_result(profile, FIXTURES)["deviations"])
 
     def test_the_header_states_the_topic_game_version_and_the_parameters_that_define_the_test(self):
-        self.assertEqual(self.result["header"], "CORPSE  game 1.0.1  25 bare swings, median 0.23 s, corpse 2.5 u, bodies held")
+        self.assertEqual(self.result["header"], "TARGET  game 1.0.1  25 bare swings, median 0.23 s, target 2.5 u, bodies held")
 
     def test_the_slow_run_is_excluded_from_the_numbers_and_flagged(self):
-        self.assertIn("Milky/Dune PR24: 1 excluded (slow swings 0.42 s)", self.result["deviations"])
-        self.assertEqual(self.rows()[("Milky/Dune", "PR24")][1], "-366.7")
+        self.assertIn("Beta/Alpha BASE: 1 excluded (slow swings 0.42 s)", self.result["deviations"])
+        self.assertEqual(self.rows()[("Beta/Alpha", "BASE")][1], "-366.7")
 
     def test_without_a_rate_limit_the_slow_run_joins_the_cell(self):
-        result = prtable.build_result(corpse_profile(params={}), FIXTURES)
-        row = [row for row in result["tables"][0]["rows"] if row[:2] == ["Milky/Dune", "PR24"]][0]
+        result = prtable.build_result(example_profile(params={}), FIXTURES)
+        row = [row for row in result["tables"][0]["rows"] if row[:2] == ["Beta/Alpha", "BASE"]][0]
         self.assertEqual(row[3], "-366.7 / 200.6")
 
     def test_only_deviations_are_printed_below_the_tables(self):
-        self.assertEqual(self.result["deviations"], ["Milky/Dune PR24: 1 excluded (slow swings 0.42 s)"])
+        self.assertEqual(self.result["deviations"], ["Beta/Alpha BASE: 1 excluded (slow swings 0.42 s)"])
 
 
 class ProfileDrivesTheOutputTests(unittest.TestCase):
     def test_dropping_a_column_removes_it_from_the_headers_and_the_rows(self):
-        profile = corpse_profile()
+        profile = example_profile()
         profile["tables"][0]["columns"] = [profile["tables"][0]["columns"][2]]
         table = prtable.build_result(profile, FIXTURES)["tables"][0]
         self.assertEqual(table["headers"], ["host/client", "build", "broke"])
-        self.assertEqual(table["rows"][0], ["Milky/Dune", "PR24", "never"])
+        self.assertEqual(table["rows"][0], ["Beta/Alpha", "BASE", "never"])
 
     def test_renaming_labels_and_reordering_rows_changes_the_output(self):
-        profile = corpse_profile()
+        profile = example_profile()
         profile["tables"][0]["columns"][0]["label"] = "host"
         profile["tables"][0]["builds"][0]["label"] = "control"
         profile["tables"][0]["rows"].reverse()
         table = prtable.build_result(profile, FIXTURES)["tables"][0]
         self.assertEqual(table["headers"][2], "host")
-        self.assertEqual(table["rows"][0][:2], ["Dune/Milky", "control"])
+        self.assertEqual(table["rows"][0][:2], ["Alpha/Beta", "control"])
 
     def test_a_second_build_column_appears_when_the_profile_lists_it(self):
         rows = [hits_row("PvP", "pvp_banded_by_client")]
@@ -445,8 +435,8 @@ class ProfileDrivesTheOutputTests(unittest.TestCase):
         self.assertEqual(three["rows"][0], ["PvP", "1/1", "3/3", "-"])
 
     def test_the_header_fields_come_from_the_profile(self):
-        profile = corpse_profile(header=[{"id": "game_version"}, {"id": "text", "text": "real rate"}])
-        self.assertEqual(prtable.build_result(profile, FIXTURES)["header"], "CORPSE  game 1.0.1  real rate")
+        profile = example_profile(header=[{"id": "game_version"}, {"id": "text", "text": "real rate"}])
+        self.assertEqual(prtable.build_result(profile, FIXTURES)["header"], "TARGET  game 1.0.1  real rate")
 
     def test_a_profile_without_its_required_keys_or_with_an_unknown_table_kind_is_refused(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -460,9 +450,9 @@ class ProfileDrivesTheOutputTests(unittest.TestCase):
             with self.assertRaises(prtable.ProfileError):
                 prtable.load_profile(path)
 
-    def test_the_shipped_corpse_profile_compares_the_control_with_the_final_fix_build(self):
-        profile = prtable.load_profile(os.path.join(PROFILES, "corpse-fix.json"))
-        self.assertEqual([build["build"] for build in profile["tables"][0]["builds"]], ["pr24-3d060fe-plain", "pr24-3d060fe-corpse-fix2"])
+    def test_the_shipped_example_profile_compares_the_control_with_the_final_fix_build(self):
+        profile = prtable.load_profile(os.path.join(PROFILES, "example.json"))
+        self.assertEqual([build["build"] for build in profile["tables"][0]["builds"]], ["example-build-a", "example-build-c"])
         self.assertEqual([column["label"] for column in profile["tables"][0]["columns"]], ["host hp", "client hp (min)", "broke"])
 
 
@@ -488,7 +478,7 @@ class BuildSourcesAndNotesTests(unittest.TestCase):
 
 class BuildIdentityTests(unittest.TestCase):
     def test_without_a_stage_file_the_identity_is_the_start_of_the_reports_dll_hash(self):
-        report = load("corpse/mixed_pr24.json")
+        report = load("target/mixed_base.json")
         identity = prtable.build_identity({"builds": {}}, VERBOSE, FIXTURES, [report])
         self.assertEqual(identity, report["dllSha256"][:8])
         self.assertEqual(len(identity), 8)
@@ -506,9 +496,9 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertEqual(prtable.build_identity({"builds": {}}, "nope", FIXTURES, []), "-")
 
     def test_the_builds_are_printed_once_in_the_header_block(self):
-        result = prtable.build_result(corpse_profile(), FIXTURES)
+        result = prtable.build_result(example_profile(), FIXTURES)
         self.assertEqual(len(result["builds"]), 2)
-        self.assertEqual(result["builds"][0][0], "PR24")
+        self.assertEqual(result["builds"][0][0], "BASE")
 
 
 UNESCAPED_PIPE = re.compile(r"(?<!\\)\|")
@@ -537,7 +527,7 @@ class RenderingTests(unittest.TestCase):
         self.assertEqual(lines[0], self.result["header"])
         block = lines[lines.index("MAIN") + 1:lines.index("verdict  " + self.result["blocks"][0]["verdict"])]
         self.assertEqual(len(block), 1 + len(self.result["blocks"][0]["tables"][0]["rows"]))
-        columns = [line.index("build") if line.startswith("host/client") else line.index("PR24") for line in block]
+        columns = [line.index("build") if line.startswith("host/client") else line.index("BASE") for line in block]
         self.assertEqual(len(set(columns)), 1)
 
     def test_both_renderings_carry_every_verdict_and_deviation_and_nothing_else_below_the_tables(self):
@@ -610,7 +600,7 @@ class GitHubMarkdownTests(unittest.TestCase):
         headings = [line for line in self.markdown.splitlines() if line.startswith("#")]
         self.assertEqual(headings[:2], ["### Main tests", "### Regression tests"])
         self.assertEqual(headings[2:], ["### Deviations"] if self.result["deviations"] else [])
-        clean = prtable.build_result(corpse_profile(params={}, sources=["corpse/milky_pr24.json"]), FIXTURES)
+        clean = prtable.build_result(example_profile(params={}, sources=["target/beta_base.json"]), FIXTURES)
         self.assertNotIn("### Deviations", prtable.render_markdown(clean))
 
     def test_backticks_surround_only_build_identities(self):
@@ -634,11 +624,11 @@ class GitHubMarkdownTests(unittest.TestCase):
                     self.assertLessEqual(len(cell), 40, cell)
 
     def test_the_markdown_matches_the_golden_file(self):
-        self.assertEqual(self.markdown, golden("golden_corpse.md"))
+        self.assertEqual(self.markdown, golden("golden_example.md"))
 
     def test_the_text_and_fenced_renderings_match_their_golden_files(self):
-        self.assertEqual(prtable.render_text(self.result), golden("golden_corpse.txt"))
-        self.assertEqual(prtable.render_fenced(self.result), "```text\n" + golden("golden_corpse.txt") + "```\n")
+        self.assertEqual(prtable.render_text(self.result), golden("golden_example.txt"))
+        self.assertEqual(prtable.render_fenced(self.result), "```text\n" + golden("golden_example.txt") + "```\n")
 
 
 def golden(name):
