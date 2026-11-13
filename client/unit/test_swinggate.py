@@ -219,8 +219,39 @@ class GateTests(unittest.TestCase):
     def test_every_check_reads_the_body_and_the_target_fresh(self):
         gate, reads = self.make(good_state())
         gate.check(mock.Mock())
+        first = dict(reads)
         gate.check(mock.Mock())
-        self.assertEqual(reads, {"pose": 2, "target": 2})
+        self.assertEqual(first["pose"], 1)
+        self.assertEqual(reads["pose"], 2)
+        self.assertGreater(reads["target"], first["target"])
+
+    def test_every_check_puts_the_injected_mouse_on_the_target_and_settling_waits_for_the_body_to_turn(self):
+        gate, _ = self.make(good_state())
+        client = mock.Mock()
+        gate.check(client)
+        client.call.assert_called_with("mouse", wx=2.85, wy=0.0)
+        slept = []
+        client = mock.Mock()
+        with mock.patch.object(swinggate, "settle_limbs", lambda *a, **k: {"ok": True, "rest": copy.deepcopy(REST), "rows": []}):
+            gate.settle(client, sleep=slept.append)
+        client.call.assert_called_with("mouse", wx=2.85, wy=0.0)
+        self.assertEqual(slept, [swinggate.AIM_SETTLE_SECONDS])
+
+    def test_release_clears_the_mouse_and_never_raises(self):
+        gate, _ = self.make(good_state())
+        client = mock.Mock()
+        gate.release(client)
+        client.call.assert_called_once_with("mouse", clear=True)
+        client.call.side_effect = RuntimeError("link lost")
+        gate.release(client)
+
+    def test_a_target_with_no_position_is_not_aimed_at(self):
+        state = good_state()
+        state["target"]["position"] = None
+        gate, _ = self.make(state)
+        client = mock.Mock()
+        self.assertFalse(gate.aim(client))
+        client.call.assert_not_called()
 
     def test_a_limb_that_drifts_between_two_swings_fails_the_second_check_only(self):
         state = good_state()

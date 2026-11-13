@@ -92,6 +92,9 @@ class PassingGate:
     def settle(self, client, **options):
         return {"ok": True, "rest": {}, "rows": []}
 
+    def release(self, client):
+        pass
+
     def check(self, client):
         self.checks += 1
         return {"passed": True, "failures": [], "values": {}}

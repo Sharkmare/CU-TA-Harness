@@ -225,6 +225,7 @@ def seat_and_gate(client, context):
 
 def act(client, context):
     try:
+        positioncontrol.release_quietly(client)
         approach(context["host"], client, context)
         if seat_and_gate(client, context):
             world.act(client, context, before_swing=crates.before_swing)
@@ -234,6 +235,8 @@ def act(client, context):
         if copy_at_swing is False:
             STATE["static_at_swing"] += 1
     finally:
+        if context.get("gate") is not None:
+            context["gate"].release(client)
         if not context["target"].get("adopted"):
             crates_destroy(context["host"], context["hostHandle"])
         return_to_anchor(client, context)

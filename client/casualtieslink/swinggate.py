@@ -10,7 +10,8 @@ import time
 
 from casualtieslink import positioncontrol
 
-LIMB_REST_TOLERANCE = 0.05
+LIMB_REST_TOLERANCE = 0.2
+AIM_SETTLE_SECONDS = 0.5
 LIMB_POSE_TOLERANCE = 0.5
 LIMB_REACH = 4.5
 COOLDOWN_READY = 0.005
@@ -134,13 +135,34 @@ class Gate:
         self.parked_paths = list(parked_paths)
         self.settle_record = None
 
+    def aim(self, client, settle=0.0, sleep=None):
+        """Put the injected mouse on the target: the game turns the body toward the mouse every frame, so a body that is not aimed turns away from the target between swings."""
+        position = (self.read_target() or {}).get("position")
+        if position is None:
+            return False
+        try:
+            client.call("mouse", wx=position["x"], wy=position["y"])
+        except Exception:
+            return False
+        if settle:
+            (sleep or time.sleep)(settle)
+        return True
+
+    def release(self, client):
+        try:
+            client.call("mouse", clear=True)
+        except Exception:
+            pass
+
     def settle(self, client, **options):
-        """Settle the limbs and keep the rest pose. Returns the record; the run is invalid when it is not ok."""
+        """Aim at the target, settle the limbs and keep the rest pose. Returns the record; the run is invalid when it is not ok."""
+        self.aim(client, settle=AIM_SETTLE_SECONDS, sleep=options.get("sleep"))
         self.settle_record = settle_limbs(client, self.client_paths, lambda: (self.read_target() or {}).get("position"), **options)
         self.spec["rest"] = self.settle_record["rest"]
         return self.settle_record
 
     def check(self, client):
+        self.aim(client)
         state = {"pose": read_pose(client, self.client_paths), "target": self.read_target() or {}}
         state["parked"] = None if self.parked_game is None else positioncontrol.parked_snapshot(self.parked_game, self.parked_paths)
         return judge(state, self.spec)

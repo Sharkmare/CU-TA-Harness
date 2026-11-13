@@ -158,6 +158,8 @@ def act(client, context, accept_range=None):
     try:
         run_punches(host, client, context, entries, accept_range)
     finally:
+        if context.get("gate") is not None:
+            context["gate"].release(client)
         release_holds(host, client)
 
 
@@ -194,6 +196,7 @@ def run_punches(host, client, context, entries, accept_range):
                 context["positionFailure"] = context["positionControl"]
                 break
             gate = make_gate(host, client, context, band.get("seat") or base.player_position(client))
+            context["gate"] = gate
             settle = gate.settle(client)
             context["limbSettle"] = settle
             if not settle["ok"]:

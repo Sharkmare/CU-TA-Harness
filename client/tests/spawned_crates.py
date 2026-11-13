@@ -509,6 +509,8 @@ def act(client, context):
             context["host"].set(context["hostHandle"], "health", 0)
         except Exception:
             pass
+        if context.get("gate") is not None:
+            context["gate"].release(client)
         positioncontrol.release_quietly(client)
         positioncontrol.release_quietly(context["host"])
 
