@@ -34,6 +34,13 @@ PR24_CORPSE_STAGE_CHOICE = "pr24-corpse-verbose-stage"
 PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CORPSE_STAGE"
 PR24_CORPSE_FIX_STAGE_CHOICE = "pr24-corpse-fix-stage"
 PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CORPSE_FIX_STAGE"
+PR24_TIP_FIX_STAGE_CHOICE = "pr24-3d060fe-corpse-fix-stage"
+PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_CORPSE_FIX_STAGE"
+PR24_TIP_PLAIN_STAGE_CHOICE = "pr24-3d060fe-plain-stage"
+PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_PLAIN_STAGE"
+CUCORELIB_FOLDER = "CUCoreLib"
+CUCORELIB_DLL = "CUCoreLib.dll"
+BUILDS_NEEDING_CUCORELIB = ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-plain")
 PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_VERBOSE_STAGE"
 PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_VERBOSE_STAGE"
 PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_STAGE"
@@ -285,6 +292,14 @@ def pr24_corpse_fix_stage_directory():
     return fullbuild_stage_directory(PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_fix")
 
 
+def pr24_tip_fix_stage_directory():
+    return fullbuild_stage_directory(PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix")
+
+
+def pr24_tip_plain_stage_directory():
+    return fullbuild_stage_directory(PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_plain")
+
+
 def spectator_fix_stage_directory():
     return fullbuild_stage_directory(SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_spectator_fix")
 
@@ -293,7 +308,8 @@ def stage_directory_by_build():
     return {"official-5.5.0": official_stage_directory, "fullbuild-control": fullbuild_control_stage_directory, "fullbuild-fixed": fullbuild_fixed_stage_directory,
             "spectator-fix": spectator_fix_stage_directory, "pr24-control": pr24_control_stage_directory, "pr24-fixed": pr24_fixed_stage_directory,
             "pr24-fixed-verbose": pr24_verbose_stage_directory, "pr24-control-verbose": pr24_control_verbose_stage_directory,
-            "pr24-corpse-verbose": pr24_corpse_stage_directory, "pr24-corpse-fix": pr24_corpse_fix_stage_directory}
+            "pr24-corpse-verbose": pr24_corpse_stage_directory, "pr24-corpse-fix": pr24_corpse_fix_stage_directory,
+            "pr24-3d060fe-corpse-fix": pr24_tip_fix_stage_directory, "pr24-3d060fe-plain": pr24_tip_plain_stage_directory}
 
 
 def install_stage_together(copy, directory):
@@ -304,6 +320,19 @@ def install_stage_together(copy, directory):
     if os.path.isdir(target):
         shutil.rmtree(target)
     shutil.copytree(source, target, ignore=shutil.ignore_patterns(*STOCK_EXCLUDED_FILES))
+    install_stage_cucorelib(copy, directory)
+    return source
+
+
+def install_stage_cucorelib(copy, directory):
+    """A stage built against CUCoreLib carries the library as a second plugin folder, plugins/CUCoreLib, which has to sit next to plugins/Together."""
+    source = os.path.join(directory, "plugins", CUCORELIB_FOLDER)
+    if not os.path.isdir(source):
+        return None
+    target = os.path.join(copy, PLUGINS_RELATIVE, CUCORELIB_FOLDER)
+    if os.path.isdir(target):
+        shutil.rmtree(target)
+    shutil.copytree(source, target)
     return source
 
 
@@ -370,6 +399,10 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, pr24_corpse_stage_directory())
     elif together == PR24_CORPSE_FIX_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_corpse_fix_stage_directory())
+    elif together == PR24_TIP_FIX_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, pr24_tip_fix_stage_directory())
+    elif together == PR24_TIP_PLAIN_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, pr24_tip_plain_stage_directory())
     elif together == PR24_CONTROL_VERBOSE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_control_verbose_stage_directory())
     elif together == PR24_VERBOSE_STAGE_CHOICE:

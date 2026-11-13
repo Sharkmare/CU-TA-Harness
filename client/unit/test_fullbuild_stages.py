@@ -1,3 +1,4 @@
+import hashlib
 import os
 import tempfile
 import unittest
@@ -14,11 +15,15 @@ BUILDS = (("fullbuild-control", "fullbuild-control-stage", instances.FULLBUILD_C
           ("pr24-fixed-verbose", "pr24-fixed-verbose-stage", instances.PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose2"),
           ("pr24-control-verbose", "pr24-control-verbose-stage", instances.PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control_verbose"),
           ("pr24-corpse-verbose", "pr24-corpse-verbose-stage", instances.PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_verbose"),
-          ("pr24-corpse-fix", "pr24-corpse-fix-stage", instances.PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_fix"))
+          ("pr24-corpse-fix", "pr24-corpse-fix-stage", instances.PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_fix"),
+          ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-corpse-fix-stage", instances.PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix"),
+          ("pr24-3d060fe-plain", "pr24-3d060fe-plain-stage", instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_plain"))
 PINNED_MD5 = {"fullbuild-control": "5f44699a7e034bdcbdb8ba66969d04de", "fullbuild-fixed": "2eda43381ed4445d367e27af5edefedb",
               "pr24-control": "f209be8eb9d37eda5a4aafa407deda0f", "pr24-fixed": "aac74832f4e3dd8a2c13d12cba785e3a",
               "pr24-fixed-verbose": "ce681dc17f3c76d448e107275a9b76f5", "pr24-control-verbose": "04b8ecd02fbb347b70309abe9ee07cc1", "pr24-corpse-verbose": "435da880cbee2060fd259116bff43f5d",
-              "pr24-corpse-fix": "6e57bc2d90f04736c3eec8a5fce4cab8"}
+              "pr24-corpse-fix": "6e57bc2d90f04736c3eec8a5fce4cab8", "pr24-3d060fe-corpse-fix": "fea4725f5d7466c9ecebbca7553d4740",
+              "pr24-3d060fe-plain": "424f961ea469e10dd697029f04adc367"}
+CUCORELIB_MD5 = "d696c8a1ccce7cb934c85a0e8cb21091"
 
 
 class StageTests(unittest.TestCase):
@@ -40,6 +45,63 @@ class StageTests(unittest.TestCase):
                     instances.configure_instance(copy, [], together=choice)
                     with open(os.path.join(copy, "BepInEx", "plugins", "Together", "CasualtiesMP.dll")) as handle:
                         self.assertEqual(handle.read(), build)
+
+    def test_a_stage_with_a_cucorelib_folder_installs_both_plugin_folders_and_one_without_installs_only_together(self):
+        with tempfile.TemporaryDirectory() as stage, tempfile.TemporaryDirectory() as copy:
+            os.makedirs(os.path.join(stage, "plugins", "Together"))
+            os.makedirs(os.path.join(stage, "plugins", "CUCoreLib"))
+            for relative in (("Together", "CasualtiesMP.dll"), ("CUCoreLib", "CUCoreLib.dll")):
+                with open(os.path.join(stage, "plugins", *relative), "w") as handle:
+                    handle.write(relative[0])
+            instances.install_stage_together(copy, stage)
+            with open(os.path.join(copy, "BepInEx", "plugins", "CUCoreLib", "CUCoreLib.dll")) as handle:
+                self.assertEqual(handle.read(), "CUCoreLib")
+            self.assertTrue(os.path.isfile(os.path.join(copy, "BepInEx", "plugins", "Together", "CasualtiesMP.dll")))
+        with tempfile.TemporaryDirectory() as stage, tempfile.TemporaryDirectory() as copy:
+            os.makedirs(os.path.join(stage, "plugins", "Together"))
+            with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
+                handle.write("x")
+            instances.install_stage_together(copy, stage)
+            self.assertFalse(os.path.exists(os.path.join(copy, "BepInEx", "plugins", "CUCoreLib")))
+
+    def test_a_reinstall_replaces_a_stale_cucorelib_folder(self):
+        with tempfile.TemporaryDirectory() as stage, tempfile.TemporaryDirectory() as copy:
+            os.makedirs(os.path.join(stage, "plugins", "Together"))
+            os.makedirs(os.path.join(stage, "plugins", "CUCoreLib"))
+            with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
+                handle.write("x")
+            with open(os.path.join(stage, "plugins", "CUCoreLib", "CUCoreLib.dll"), "w") as handle:
+                handle.write("new")
+            stale = os.path.join(copy, "BepInEx", "plugins", "CUCoreLib")
+            os.makedirs(stale)
+            with open(os.path.join(stale, "old.dll"), "w") as handle:
+                handle.write("old")
+            instances.install_stage_together(copy, stage)
+            self.assertEqual(sorted(os.listdir(stale)), ["CUCoreLib.dll"])
+
+    def test_the_preflight_refuses_a_cucorelib_build_whose_library_is_missing_but_not_a_plain_pr24_build(self):
+        for build, variable in (("pr24-3d060fe-corpse-fix", instances.PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE), ("pr24-3d060fe-plain", instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE),
+                                ("pr24-corpse-fix", instances.PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE)):
+            with self.subTest(build=build), tempfile.TemporaryDirectory() as stage, mock.patch.dict(os.environ, {variable: stage}):
+                os.makedirs(os.path.join(stage, "plugins", "Together"))
+                with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
+                    handle.write("x")
+                problems = scenarios.preflight_problems(["spawned_crate"], 8, [build])
+                if build in instances.BUILDS_NEEDING_CUCORELIB:
+                    self.assertEqual(len(problems), 1, problems)
+                    self.assertIn("CUCoreLib", problems[0])
+                else:
+                    self.assertEqual(problems, [])
+
+    def test_the_cucorelib_builds_are_record_only_and_the_library_on_disk_has_the_pinned_md5(self):
+        self.assertIn("pr24-3d060fe-corpse-fix", test_desync.RECORD_ONLY_BUILDS)
+        self.assertIn("pr24-3d060fe-plain", test_desync.RECORD_ONLY_BUILDS)
+        for build in instances.BUILDS_NEEDING_CUCORELIB:
+            library = os.path.join(instances.stage_directory_by_build()[build](), "plugins", "CUCoreLib", "CUCoreLib.dll")
+            if not os.path.isfile(library):
+                self.skipTest("stage not on this machine: " + library)
+            with open(library, "rb") as handle:
+                self.assertEqual(hashlib.md5(handle.read()).hexdigest(), CUCORELIB_MD5, build)
 
     def test_the_preflight_refuses_each_build_whose_dll_is_missing(self):
         for build, choice, variable, folder in BUILDS:

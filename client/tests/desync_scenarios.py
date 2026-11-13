@@ -739,6 +739,10 @@ def stage_dll_preflight(fragments, attempts, builds):
             dll = os.path.join(directories[build](), "plugins", instances.TOGETHER_FOLDER, "CasualtiesMP.dll")
             if not os.path.isfile(dll):
                 problems.append("the Together DLL of build %s is missing: %s" % (build, dll))
+            elif build in instances.BUILDS_NEEDING_CUCORELIB:
+                library = os.path.join(directories[build](), "plugins", instances.CUCORELIB_FOLDER, instances.CUCORELIB_DLL)
+                if not os.path.isfile(library):
+                    problems.append("build %s needs the CUCoreLib plugin and %s is missing" % (build, library))
     return problems
 
 
