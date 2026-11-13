@@ -43,7 +43,7 @@ class SuiteTests(unittest.TestCase):
 
     def test_the_launch_plan_for_the_v2_command_is_one_launch(self):
         counts = scenarios.counts_by_group(["pvp_banded", "spawned_crate", "v2check", "launch_log_checks"])
-        launches = launchplan.plan_launches(["pr24-fixed"], sorted(counts), launchplan.parse_profiles(["100:0@5"]), 8, ["pvp_banded", "spawned_crate", "v2check", "launch_log_checks"])
+        launches = launchplan.plan_launches(["pr24-3d060fe-plain"], sorted(counts), launchplan.parse_profiles(["100:0@5"]), 8, ["pvp_banded", "spawned_crate", "v2check", "launch_log_checks"])
         self.assertEqual(len(launches), 1)
         self.assertEqual(launches[0].startup_group, "hook-evidence")
 

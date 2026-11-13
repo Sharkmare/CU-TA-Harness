@@ -148,19 +148,20 @@ class BuildAndGroupTests(unittest.TestCase):
 
     def test_the_preflight_refuses_a_planned_stage_build_whose_dll_is_missing(self):
         from tests import desync_scenarios as scenarios
-        with tempfile.TemporaryDirectory() as empty, mock.patch.dict(os.environ, {instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE: empty}):
-            problems = scenarios.preflight_problems(["spawned_crate"], 12, ["pr24-fixed"])
+        with tempfile.TemporaryDirectory() as empty, mock.patch.dict(os.environ, {instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE: empty}):
+            problems = scenarios.preflight_problems(["spawned_crate"], 12, ["pr24-3d060fe-plain"])
         self.assertEqual(len(problems), 1)
-        self.assertIn("pr24-fixed", problems[0])
+        self.assertIn("pr24-3d060fe-plain", problems[0])
 
     def test_the_preflight_accepts_a_stage_build_with_a_dll(self):
         from tests import desync_scenarios as scenarios
         with tempfile.TemporaryDirectory() as stage:
-            os.makedirs(os.path.join(stage, "plugins", "Together"))
-            with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
-                handle.write("x")
-            with mock.patch.dict(os.environ, {instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE: stage}):
-                self.assertEqual(scenarios.preflight_problems(["spawned_crate"], 12, ["pr24-fixed"]), [])
+            for folder, name in (("Together", "CasualtiesMP.dll"), ("CUCoreLib", "CUCoreLib.dll")):
+                os.makedirs(os.path.join(stage, "plugins", folder))
+                with open(os.path.join(stage, "plugins", folder, name), "w") as handle:
+                    handle.write("x")
+            with mock.patch.dict(os.environ, {instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE: stage}):
+                self.assertEqual(scenarios.preflight_problems(["spawned_crate"], 12, ["pr24-3d060fe-plain"]), [])
 
     def test_the_regression_group_turns_the_pvp_rule_on_for_both_games(self):
         from tests import test_desync

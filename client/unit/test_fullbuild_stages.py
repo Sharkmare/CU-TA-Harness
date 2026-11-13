@@ -8,26 +8,10 @@ from casualtieslink import desync, instances
 from tests import desync_scenarios as scenarios
 from tests import test_desync
 
-BUILDS = (("fullbuild-control", "fullbuild-control-stage", instances.FULLBUILD_CONTROL_STAGE_ENVIRONMENT_VARIABLE, "stage_fullbuild_control"),
-          ("fullbuild-fixed", "fullbuild-fixed-stage", instances.FULLBUILD_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_fullbuild_fixed"),
-          ("pr24-control", "pr24-control-stage", instances.PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control"),
-          ("pr24-fixed", "pr24-fixed-stage", instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed"),
-          ("pr24-fixed-verbose", "pr24-fixed-verbose-stage", instances.PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose2"),
-          ("pr24-control-verbose", "pr24-control-verbose-stage", instances.PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control_verbose"),
-          ("pr24-corpse-verbose", "pr24-corpse-verbose-stage", instances.PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_verbose"),
-          ("pr24-corpse-fix", "pr24-corpse-fix-stage", instances.PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_fix"),
-          ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-corpse-fix-stage", instances.PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix"),
+BUILDS = (("pr24-3d060fe-corpse-fix", "pr24-3d060fe-corpse-fix-stage", instances.PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix"),
           ("pr24-3d060fe-plain", "pr24-3d060fe-plain-stage", instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_plain"),
-          ("pr24-3d060fe-corpse-fix2", "pr24-3d060fe-corpse-fix2-stage", instances.PR24_TIP_FIX2_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix2"),
-          ("steamlike-plain-3d060fe", "steamlike-plain-3d060fe-stage", instances.STEAMLIKE_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_steamlike_plain_3d060fe"),
-          ("steamlike-burst-3d060fe", "steamlike-burst-3d060fe-stage", instances.STEAMLIKE_BURST_STAGE_ENVIRONMENT_VARIABLE, "stage_steamlike_burst_3d060fe"),
-          ("hunch-burst-guard-3d060fe", "hunch-burst-guard-3d060fe-stage", instances.BURST_GUARD_STAGE_ENVIRONMENT_VARIABLE, "stage_hunch_burst_guard_3d060fe"))
-PINNED_MD5 = {"fullbuild-control": "5f44699a7e034bdcbdb8ba66969d04de", "fullbuild-fixed": "2eda43381ed4445d367e27af5edefedb",
-              "pr24-control": "f209be8eb9d37eda5a4aafa407deda0f", "pr24-fixed": "aac74832f4e3dd8a2c13d12cba785e3a",
-              "pr24-fixed-verbose": "ce681dc17f3c76d448e107275a9b76f5", "pr24-control-verbose": "04b8ecd02fbb347b70309abe9ee07cc1", "pr24-corpse-verbose": "435da880cbee2060fd259116bff43f5d",
-              "pr24-corpse-fix": "6e57bc2d90f04736c3eec8a5fce4cab8", "pr24-3d060fe-corpse-fix": "fea4725f5d7466c9ecebbca7553d4740",
-              "pr24-3d060fe-plain": "424f961ea469e10dd697029f04adc367", "pr24-3d060fe-corpse-fix2": "0325037dceac4dbc5ae851315205d76d",
-              "steamlike-plain-3d060fe": "eaffef21a3513bf6ab3bbe0295ebc439", "steamlike-burst-3d060fe": "3d4655fd3c018f8e32f44a93f4de648c", "hunch-burst-guard-3d060fe": "baab0db8fea21103e7112b7ae9acc3df"}
+          ("pr24-3d060fe-corpse-fix2", "pr24-3d060fe-corpse-fix2-stage", instances.PR24_TIP_FIX2_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_corpse_fix2"))
+PINNED_MD5 = {"pr24-3d060fe-corpse-fix": "fea4725f5d7466c9ecebbca7553d4740", "pr24-3d060fe-plain": "424f961ea469e10dd697029f04adc367", "pr24-3d060fe-corpse-fix2": "0325037dceac4dbc5ae851315205d76d"}
 CUCORELIB_MD5 = "d696c8a1ccce7cb934c85a0e8cb21091"
 
 
@@ -110,9 +94,9 @@ class StageTests(unittest.TestCase):
             instances.install_stage_together(copy, stage)
             self.assertEqual(sorted(os.listdir(stale)), ["CUCoreLib.dll"])
 
-    def test_the_preflight_refuses_a_cucorelib_build_whose_library_is_missing_but_not_a_plain_pr24_build(self):
+    def test_the_preflight_refuses_a_cucorelib_build_whose_library_is_missing(self):
         for build, variable in (("pr24-3d060fe-corpse-fix", instances.PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE), ("pr24-3d060fe-plain", instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE),
-                                ("pr24-corpse-fix", instances.PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE)):
+                                ("pr24-3d060fe-corpse-fix2", instances.PR24_TIP_FIX2_STAGE_ENVIRONMENT_VARIABLE)):
             with self.subTest(build=build), tempfile.TemporaryDirectory() as stage, mock.patch.dict(os.environ, {variable: stage}):
                 os.makedirs(os.path.join(stage, "plugins", "Together"))
                 with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
@@ -141,18 +125,9 @@ class StageTests(unittest.TestCase):
             self.assertEqual(len(problems), 1)
             self.assertIn(build, problems[0])
 
-    def test_the_probe_stays_on_for_both_builds_and_only_the_control_records_the_launch_log_counts(self):
-        self.assertNotIn("fullbuild-control", test_desync.BUILDS_WITHOUT_PROBE)
-        self.assertNotIn("fullbuild-fixed", test_desync.BUILDS_WITHOUT_PROBE)
-        self.assertIn("fullbuild-control", test_desync.RECORD_ONLY_BUILDS)
-        self.assertNotIn("fullbuild-fixed", test_desync.RECORD_ONLY_BUILDS)
-        self.assertNotIn("pr24-control", test_desync.BUILDS_WITHOUT_PROBE)
-        self.assertNotIn("pr24-fixed", test_desync.BUILDS_WITHOUT_PROBE)
-        self.assertIn("pr24-control", test_desync.RECORD_ONLY_BUILDS)
-        self.assertNotIn("pr24-fixed", test_desync.RECORD_ONLY_BUILDS)
-        self.assertIn("pr24-control-verbose", test_desync.RECORD_ONLY_BUILDS)
-        self.assertIn("pr24-corpse-verbose", test_desync.RECORD_ONLY_BUILDS)
-        self.assertIn("pr24-corpse-fix", test_desync.RECORD_ONLY_BUILDS)
+    def test_every_staged_build_records_the_launch_log_counts(self):
+        for build in desync.STAGE_CHOICES:
+            self.assertIn(build, test_desync.RECORD_ONLY_BUILDS, build)
 
     def test_the_stages_on_disk_have_the_pinned_md5_when_they_are_present(self):
         for build, md5 in PINNED_MD5.items():

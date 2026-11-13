@@ -21,19 +21,7 @@ FORK_ZIP_ENVIRONMENT_VARIABLE = "CU_FORK_TOGETHER_ZIP"
 TOGETHER_IN_ZIP = "BepInEx/plugins/Together/"
 FLAVOUR_ZIP_ENVIRONMENT_VARIABLE = "CU_FLAVOUR_ZIP"
 FLAVOUR_PREFIX = "flavour:"
-OFFICIAL_STAGE_CHOICE = "official-stage"
-FULLBUILD_CONTROL_STAGE_CHOICE = "fullbuild-control-stage"
-FULLBUILD_FIXED_STAGE_CHOICE = "fullbuild-fixed-stage"
-SPECTATOR_FIX_STAGE_CHOICE = "spectator-fix-stage"
 FRIENDS_ZIP_CHOICE = "friends-zip"
-PR24_CONTROL_STAGE_CHOICE = "pr24-control-stage"
-PR24_FIXED_STAGE_CHOICE = "pr24-fixed-stage"
-PR24_VERBOSE_STAGE_CHOICE = "pr24-fixed-verbose-stage"
-PR24_CONTROL_VERBOSE_STAGE_CHOICE = "pr24-control-verbose-stage"
-PR24_CORPSE_STAGE_CHOICE = "pr24-corpse-verbose-stage"
-PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CORPSE_STAGE"
-PR24_CORPSE_FIX_STAGE_CHOICE = "pr24-corpse-fix-stage"
-PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CORPSE_FIX_STAGE"
 PR24_TIP_FIX_STAGE_CHOICE = "pr24-3d060fe-corpse-fix-stage"
 PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_CORPSE_FIX_STAGE"
 PR24_TIP_FIX2_STAGE_CHOICE = "pr24-3d060fe-corpse-fix2-stage"
@@ -41,25 +29,11 @@ PR24_TIP_FIX2_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_CORPSE_FIX2_STAGE"
 SWINGBURST_PACKAGE_STAGE_CHOICE = "swingburst-package-stage"
 SWINGBURST_PACKAGE_STAGE_ENVIRONMENT_VARIABLE = "CU_SWINGBURST_PACKAGE_STAGE"
 SWINGBURST_PACKAGE_MD5 = "f1f2214830d7aadaa8ff565f844ca882"
-BURST_GUARD_STAGE_CHOICE = "hunch-burst-guard-3d060fe-stage"
-BURST_GUARD_STAGE_ENVIRONMENT_VARIABLE = "CU_HUNCH_BURST_GUARD_3D060FE_STAGE"
-STEAMLIKE_PLAIN_STAGE_CHOICE = "steamlike-plain-3d060fe-stage"
-STEAMLIKE_PLAIN_STAGE_ENVIRONMENT_VARIABLE = "CU_STEAMLIKE_PLAIN_3D060FE_STAGE"
-STEAMLIKE_BURST_STAGE_CHOICE = "steamlike-burst-3d060fe-stage"
-STEAMLIKE_BURST_STAGE_ENVIRONMENT_VARIABLE = "CU_STEAMLIKE_BURST_3D060FE_STAGE"
 PR24_TIP_PLAIN_STAGE_CHOICE = "pr24-3d060fe-plain-stage"
 PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_PLAIN_STAGE"
 CUCORELIB_FOLDER = "CUCoreLib"
 CUCORELIB_DLL = "CUCoreLib.dll"
-BUILDS_NEEDING_CUCORELIB = ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-plain", "pr24-3d060fe-corpse-fix2", "steamlike-plain-3d060fe", "steamlike-burst-3d060fe", "hunch-burst-guard-3d060fe", "swingburst-package")
-PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_VERBOSE_STAGE"
-PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_VERBOSE_STAGE"
-PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_STAGE"
-PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_FIXED_STAGE"
-OFFICIAL_STAGE_ENVIRONMENT_VARIABLE = "CU_OFFICIAL_STAGE"
-FULLBUILD_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLBUILD_CONTROL_STAGE"
-FULLBUILD_FIXED_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLBUILD_FIXED_STAGE"
-SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE = "CU_SPECTATOR_FIX_STAGE"
+BUILDS_NEEDING_CUCORELIB = ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-plain", "pr24-3d060fe-corpse-fix2", "swingburst-package")
 FULLBUILD_PROJECT_FOLDER = "Private CU together"
 TOGETHER_CONFIG_NAME = "CasualtiesMP.cfg"
 PROBE_CONFIG_TEXT = "[Probe]\n\nFindTheBug = true\n"
@@ -257,50 +231,11 @@ def install_flavour_package(copy):
     return archive_path
 
 
-def official_stage_directory():
-    explicit = os.environ.get(OFFICIAL_STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(testcopy.REPO_ROOT, ".state", "stages", "official-5.5.0")
-
-
 def fullbuild_stage_directory(variable, folder):
     explicit = os.environ.get(variable)
     if explicit:
         return explicit
     return os.path.join(mods_root(), FULLBUILD_PROJECT_FOLDER, "build", folder)
-
-
-def fullbuild_control_stage_directory():
-    return fullbuild_stage_directory(FULLBUILD_CONTROL_STAGE_ENVIRONMENT_VARIABLE, "stage_fullbuild_control")
-
-
-def fullbuild_fixed_stage_directory():
-    return fullbuild_stage_directory(FULLBUILD_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_fullbuild_fixed")
-
-
-def pr24_control_stage_directory():
-    return fullbuild_stage_directory(PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control")
-
-
-def pr24_fixed_stage_directory():
-    return fullbuild_stage_directory(PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed")
-
-
-def pr24_verbose_stage_directory():
-    return fullbuild_stage_directory(PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose2")
-
-
-def pr24_control_verbose_stage_directory():
-    return fullbuild_stage_directory(PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control_verbose")
-
-
-def pr24_corpse_stage_directory():
-    return fullbuild_stage_directory(PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_verbose")
-
-
-def pr24_corpse_fix_stage_directory():
-    return fullbuild_stage_directory(PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_fix")
 
 
 def pr24_tip_fix_stage_directory():
@@ -322,29 +257,9 @@ def swingburst_package_stage_directory():
     return explicit if explicit else os.path.join(mods_root(), "UNSET_set_%s" % SWINGBURST_PACKAGE_STAGE_ENVIRONMENT_VARIABLE)
 
 
-def burst_guard_stage_directory():
-    return fullbuild_stage_directory(BURST_GUARD_STAGE_ENVIRONMENT_VARIABLE, "stage_hunch_burst_guard_3d060fe")
-
-
-def steamlike_plain_stage_directory():
-    return fullbuild_stage_directory(STEAMLIKE_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_steamlike_plain_3d060fe")
-
-
-def steamlike_burst_stage_directory():
-    return fullbuild_stage_directory(STEAMLIKE_BURST_STAGE_ENVIRONMENT_VARIABLE, "stage_steamlike_burst_3d060fe")
-
-
-def spectator_fix_stage_directory():
-    return fullbuild_stage_directory(SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_spectator_fix")
-
-
 def stage_directory_by_build():
-    return {"official-5.5.0": official_stage_directory, "fullbuild-control": fullbuild_control_stage_directory, "fullbuild-fixed": fullbuild_fixed_stage_directory,
-            "spectator-fix": spectator_fix_stage_directory, "pr24-control": pr24_control_stage_directory, "pr24-fixed": pr24_fixed_stage_directory,
-            "pr24-fixed-verbose": pr24_verbose_stage_directory, "pr24-control-verbose": pr24_control_verbose_stage_directory,
-            "pr24-corpse-verbose": pr24_corpse_stage_directory, "pr24-corpse-fix": pr24_corpse_fix_stage_directory,
-            "pr24-3d060fe-corpse-fix": pr24_tip_fix_stage_directory, "pr24-3d060fe-plain": pr24_tip_plain_stage_directory,
-            "pr24-3d060fe-corpse-fix2": pr24_tip_fix2_stage_directory, "steamlike-plain-3d060fe": steamlike_plain_stage_directory, "steamlike-burst-3d060fe": steamlike_burst_stage_directory, "hunch-burst-guard-3d060fe": burst_guard_stage_directory, "swingburst-package": swingburst_package_stage_directory}
+    return {"pr24-3d060fe-corpse-fix": pr24_tip_fix_stage_directory, "pr24-3d060fe-plain": pr24_tip_plain_stage_directory, "pr24-3d060fe-corpse-fix2": pr24_tip_fix2_stage_directory,
+            "swingburst-package": swingburst_package_stage_directory}
 
 
 def install_stage_together(copy, directory):
@@ -420,40 +335,14 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stock_together(copy)
     elif together == "fork":
         installed["together"] = install_fork_together(copy)
-    elif together == OFFICIAL_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, official_stage_directory())
-    elif together == FULLBUILD_CONTROL_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, fullbuild_control_stage_directory())
-    elif together == FULLBUILD_FIXED_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, fullbuild_fixed_stage_directory())
-    elif together == SPECTATOR_FIX_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, spectator_fix_stage_directory())
-    elif together == PR24_CONTROL_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_control_stage_directory())
-    elif together == PR24_CORPSE_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_corpse_stage_directory())
-    elif together == PR24_CORPSE_FIX_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_corpse_fix_stage_directory())
     elif together == PR24_TIP_FIX_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_tip_fix_stage_directory())
     elif together == PR24_TIP_PLAIN_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_tip_plain_stage_directory())
     elif together == PR24_TIP_FIX2_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_tip_fix2_stage_directory())
-    elif together == STEAMLIKE_PLAIN_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, steamlike_plain_stage_directory())
-    elif together == STEAMLIKE_BURST_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, steamlike_burst_stage_directory())
-    elif together == BURST_GUARD_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, burst_guard_stage_directory())
     elif together == SWINGBURST_PACKAGE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, swingburst_package_stage_directory())
-    elif together == PR24_CONTROL_VERBOSE_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_control_verbose_stage_directory())
-    elif together == PR24_VERBOSE_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_verbose_stage_directory())
-    elif together == PR24_FIXED_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, pr24_fixed_stage_directory())
     elif together == FRIENDS_ZIP_CHOICE:
         installed["together"] = friendszip.extract_into_copy(friendszip.default_zip_path(), copy, remove_extras=True)
         if debug:

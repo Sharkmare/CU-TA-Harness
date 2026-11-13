@@ -22,9 +22,8 @@ from tests import desync_scenarios as base
 WOOD_BLOCK_ID = 11
 WOOD_HEALTH = 150.0
 HOST_CHARACTER = 1
-CLIENT_CHARACTERS = {"wood-mining-dune": 2, "wood-mining-experiment": 0, "wood-mining-steamlike": 2}
+CLIENT_CHARACTERS = {"wood-mining-dune": 2, "wood-mining-experiment": 0}
 SWINGBURST_MARKER = "SWINGBURST"
-STEAMLIKE_MARKER = "steamlike"
 SWINGBURST_LINE_LIMIT = 60
 SWINGBURST_KINDS = (("dropped", "SWINGBURST dropped"), ("acceptedByCredit", "SWINGBURST accepted-by-credit"), ("summary", "SWINGBURST summary"))
 SCRAPS_ID = "woodscraps"
@@ -235,44 +234,8 @@ def swingburst_record(host_log_text):
     return {"lines": len(lines), "counts": counts, "first": [line[-220:] for line in lines[:SWINGBURST_LINE_LIMIT]]}
 
 
-RESYNCGUARD_MARKER = "RESYNCGUARD"
-RESYNCGUARD_KINDS = (("kept", "RESYNCGUARD kept"), ("summary", "RESYNCGUARD summary"))
 
 
-def resyncguard_record(client_log_text):
-    """The RESYNCGUARD lines of the client of the run: the cells kept through a host chunk resync, the summaries (local breaks, kept through resync, applied after the window)."""
-    lines = [line.strip() for line in client_log_text.splitlines() if RESYNCGUARD_MARKER in line]
-    counts = {name: len([line for line in lines if marker in line]) for name, marker in RESYNCGUARD_KINDS}
-    totals = {}
-    for line in lines:
-        if "RESYNCGUARD summary" in line:
-            for name, value in re.findall(r"([a-z-]+)=(\d+)", line):
-                totals[name] = totals.get(name, 0) + int(value)
-    return {"lines": len(lines), "counts": counts, "summaryTotals": totals, "first": [line[-220:] for line in lines[:SWINGBURST_LINE_LIMIT]]}
-
-
-def steamlike_lines(log_text):
-    """Log lines that name the steamlike transport, so the report shows whether both games started in that mode."""
-    return [line.strip()[-200:] for line in log_text.splitlines() if STEAMLIKE_MARKER in line.lower()][:10]
-
-
-STEAMLIKE_STARTUP_MARKER = "STEAMLIKE delivery on"
-STEAMLIKE_CONNECT_MARKER = "STEAMLIKE local delivery on"
-STEAMLIKE_OFF_MARKER = "STEAMLIKE delivery off"
-
-
-def steamlike_problems(full_logs):
-    """Both games must say at startup that the steamlike delivery is on and must have logged it for the connection; a game that says off, or says nothing, makes the run invalid."""
-    problems = []
-    for side in ("host", "client"):
-        text = full_logs.get(side) or ""
-        if STEAMLIKE_OFF_MARKER in text:
-            problems.append("the %s log says the steamlike delivery is off" % side)
-        elif STEAMLIKE_STARTUP_MARKER not in text:
-            problems.append("the %s log has no steamlike startup line" % side)
-        elif STEAMLIKE_CONNECT_MARKER not in text:
-            problems.append("the %s log has no steamlike line for the connection" % side)
-    return problems
 
 
 def baseline_problems(baseline):
@@ -362,8 +325,6 @@ def extend_report(report, observation, run_logs, packets):
     report["woodSwings"] = [dict(entry, arrivalEstimate=None if arrivals[index] is None else round(arrivals[index] - started, 3)) for index, entry in enumerate(swings)]
     report["liveValues"] = context.get("liveValues")
     report["swingBurst"] = swingburst_record(run_logs.get("host") or "")
-    report["resyncGuard"] = resyncguard_record(run_logs.get("client") or "")
-    report["steamlikeLines"] = {side: steamlike_lines(run_logs.get(side) or "") for side in ("host", "client")}
     stalls = report.get("stallTrace") or []
     report["woodRun"]["stalls"] = {"count": len(stalls), "packetsHeld": sum(entry["held"] for entry in stalls), "longest": max([round(entry["end"] - entry["start"], 3) for entry in stalls if entry.get("start") is not None] or [None])}
     if judged["verdict"] == "invalid":
@@ -379,8 +340,6 @@ def make_scenario(name, description, group):
                               interval_seconds=SAMPLE_INTERVAL_SECONDS, cleanup=base.remove_fresh_block)
     scenario.extend_report = extend_report
     scenario.client_character = CLIENT_CHARACTERS[group]
-    if group == "wood-mining-steamlike":
-        scenario.launch_problems = steamlike_problems
     return scenario
 
 
@@ -388,7 +347,6 @@ WOOD_SCENARIOS = [
     make_scenario("wood_mining_dune", "a Dune client mines a host-placed wood block (id 11, 150 hp) with bare hands at the cooldown's rate, Milky host; both machines are sampled every 0.05 s and the cell is watched for 10 s after the break",
                   "wood-mining-dune"),
     make_scenario("wood_mining_experiment", "the same with an Experiment client (species control)", "wood-mining-experiment"),
-    make_scenario("wood_mining_steamlike", "a Dune client mines a host-placed wood block with both games on the steamlike transport (--mp-steamlike) behind a stalling proxy", "wood-mining-steamlike"),
 ]
 
 base.SERIES_SCENARIOS.extend(WOOD_SCENARIOS)

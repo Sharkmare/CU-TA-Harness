@@ -136,16 +136,16 @@ class ConfigureInstanceTests(InstanceFixture):
         for name, content in (("CasualtiesMP.dll", "upstream"), ("Multiupdater.dll", "updater"), ("LiteNetLib.dll", "net")):
             with open(os.path.join(stage, "plugins", "Together", name), "w") as handle:
                 handle.write(content)
-        with mock.patch.dict(os.environ, {instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE: stage}):
-            instances.configure_instance(self.copy, [], together="pr24-fixed-stage")
+        with mock.patch.dict(os.environ, {instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE: stage}):
+            instances.configure_instance(self.copy, [], together="pr24-3d060fe-plain-stage")
         self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "upstream")
         self.assertFalse(os.path.exists(self.plugin_file("Together", "Multiupdater.dll")))
         self.assertFalse(os.path.exists(self.plugin_file("Together", "RefMagic.dll")), "old files must not survive")
 
     def test_a_stage_without_the_mod_dll_is_an_error(self):
-        with mock.patch.dict(os.environ, {instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE: self.directory.name}):
+        with mock.patch.dict(os.environ, {instances.PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE: self.directory.name}):
             with self.assertRaises(FileNotFoundError):
-                instances.configure_instance(self.copy, [], together="pr24-fixed-stage")
+                instances.configure_instance(self.copy, [], together="pr24-3d060fe-plain-stage")
 
     def test_a_non_flavour_build_removes_the_switch_that_an_earlier_flavour_left(self):
         with mock.patch.dict(os.environ, {instances.FLAVOUR_ZIP_ENVIRONMENT_VARIABLE: self.flavour_package()}):
@@ -161,8 +161,8 @@ class ConfigureInstanceTests(InstanceFixture):
 
     def test_the_stage_choice_follows_the_build_name(self):
         from casualtieslink import desync
-        self.assertEqual(desync.together_choice("pr24-fixed"), "pr24-fixed-stage")
-        self.assertEqual(desync.parse_build("pr24-fixed"), "pr24-fixed")
+        self.assertEqual(desync.together_choice("pr24-3d060fe-plain"), "pr24-3d060fe-plain-stage")
+        self.assertEqual(desync.parse_build("pr24-3d060fe-plain"), "pr24-3d060fe-plain")
 
     def test_the_probe_config_turns_the_evidence_loggers_on_and_is_cleared_for_the_next_launch(self):
         instances.write_probe_config(self.copy)

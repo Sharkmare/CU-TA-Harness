@@ -679,14 +679,14 @@ class PreflightTests(unittest.TestCase):
             self.assertTrue(any("checkpoints" in problem for problem in crates.preflight(["spawned_crate"], 12)))
 
     def test_the_launch_runner_refuses_before_any_game_starts(self):
-        arguments = run_tests.parse_args(["--pair", "--only", "desync", "--builds", "pr24-control", "--repeat", "4", "--match", "spawned_crate"])
+        arguments = run_tests.parse_args(["--pair", "--only", "desync", "--builds", "pr24-3d060fe-corpse-fix2", "--repeat", "4", "--match", "spawned_crate"])
         with mock.patch("sys.stdout", new_callable=io.StringIO) as output, mock.patch.object(run_tests.subprocess, "run", side_effect=AssertionError("a game was started")):
             code = run_tests.run_launch_plan(arguments)
         self.assertEqual(code, 2)
         self.assertIn("PREFLIGHT: the setup early stop 5 is not below the 4 planned attempts", output.getvalue())
 
     def test_the_launch_runner_reports_ok_for_the_planned_command(self):
-        arguments = run_tests.parse_args(["--list", "--only", "desync", "--builds", "pr24-control", "pr24-fixed", "--repeat", "12", "--match", "spawned_crate", "launch_log_checks"])
+        arguments = run_tests.parse_args(["--list", "--only", "desync", "--builds", "pr24-3d060fe-corpse-fix2", "pr24-3d060fe-plain", "--repeat", "12", "--match", "spawned_crate", "launch_log_checks"])
         with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
             code = run_tests.run_launch_plan(arguments)
         self.assertEqual(code, 0)

@@ -216,10 +216,6 @@ class WiringTests(unittest.TestCase):
         self.assertEqual(leak.preflight(["consoleleak"], 1), [])
         self.assertEqual(leak.preflight(["spawned_crate"], 1), [])
 
-    def test_the_official_build_runs_it_without_the_probe(self):
-        from tests import test_desync
-        self.assertIn("official-5.5.0", test_desync.BUILDS_WITHOUT_PROBE)
-
 
 if __name__ == "__main__":
     unittest.main()

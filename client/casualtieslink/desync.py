@@ -10,28 +10,13 @@ from . import launchplan
 
 SAMPLE_OFFSETS_SECONDS = (0.0, 2.0, 10.0)
 FLAVOUR_BUILDS = ("stock-5.5.0", "stock-5.4.0", "fork")
-OFFICIAL_BUILD = "official-5.5.0"
-FULLBUILD_CONTROL_BUILD = "fullbuild-control"
-FULLBUILD_FIXED_BUILD = "fullbuild-fixed"
-SPECTATOR_FIX_BUILD = "spectator-fix"
-PR24_CONTROL_BUILD = "pr24-control"
-PR24_FIXED_BUILD = "pr24-fixed"
-PR24_VERBOSE_BUILD = "pr24-fixed-verbose"
-PR24_CONTROL_VERBOSE_BUILD = "pr24-control-verbose"
-PR24_CORPSE_BUILD = "pr24-corpse-verbose"
-PR24_CORPSE_FIX_BUILD = "pr24-corpse-fix"
 PR24_TIP_FIX_BUILD = "pr24-3d060fe-corpse-fix"
 PR24_TIP_PLAIN_BUILD = "pr24-3d060fe-plain"
 PR24_TIP_FIX2_BUILD = "pr24-3d060fe-corpse-fix2"
-STEAMLIKE_PLAIN_BUILD = "steamlike-plain-3d060fe"
-STEAMLIKE_BURST_BUILD = "steamlike-burst-3d060fe"
-BURST_GUARD_BUILD = "hunch-burst-guard-3d060fe"
 SWINGBURST_PACKAGE_BUILD = "swingburst-package"
-STAGE_CHOICES = {OFFICIAL_BUILD: "official-stage", FULLBUILD_CONTROL_BUILD: "fullbuild-control-stage", FULLBUILD_FIXED_BUILD: "fullbuild-fixed-stage", SPECTATOR_FIX_BUILD: "spectator-fix-stage",
-                 PR24_CONTROL_BUILD: "pr24-control-stage", PR24_FIXED_BUILD: "pr24-fixed-stage", PR24_VERBOSE_BUILD: "pr24-fixed-verbose-stage", PR24_CONTROL_VERBOSE_BUILD: "pr24-control-verbose-stage", PR24_CORPSE_BUILD: "pr24-corpse-verbose-stage",
-                 PR24_CORPSE_FIX_BUILD: "pr24-corpse-fix-stage", PR24_TIP_FIX_BUILD: "pr24-3d060fe-corpse-fix-stage", PR24_TIP_PLAIN_BUILD: "pr24-3d060fe-plain-stage",
-                 PR24_TIP_FIX2_BUILD: "pr24-3d060fe-corpse-fix2-stage", STEAMLIKE_PLAIN_BUILD: "steamlike-plain-3d060fe-stage", STEAMLIKE_BURST_BUILD: "steamlike-burst-3d060fe-stage", BURST_GUARD_BUILD: "hunch-burst-guard-3d060fe-stage", SWINGBURST_PACKAGE_BUILD: "swingburst-package-stage"}
-KNOWN_BUILDS = FLAVOUR_BUILDS + (OFFICIAL_BUILD, FULLBUILD_CONTROL_BUILD, FULLBUILD_FIXED_BUILD, SPECTATOR_FIX_BUILD, PR24_CONTROL_BUILD, PR24_FIXED_BUILD, PR24_VERBOSE_BUILD, PR24_CONTROL_VERBOSE_BUILD, PR24_CORPSE_BUILD, PR24_CORPSE_FIX_BUILD, PR24_TIP_FIX_BUILD, PR24_TIP_PLAIN_BUILD, PR24_TIP_FIX2_BUILD, STEAMLIKE_PLAIN_BUILD, STEAMLIKE_BURST_BUILD, BURST_GUARD_BUILD, SWINGBURST_PACKAGE_BUILD)
+STAGE_CHOICES = {PR24_TIP_FIX_BUILD: "pr24-3d060fe-corpse-fix-stage", PR24_TIP_PLAIN_BUILD: "pr24-3d060fe-plain-stage", PR24_TIP_FIX2_BUILD: "pr24-3d060fe-corpse-fix2-stage",
+                 SWINGBURST_PACKAGE_BUILD: "swingburst-package-stage"}
+KNOWN_BUILDS = FLAVOUR_BUILDS + (PR24_TIP_FIX_BUILD, PR24_TIP_PLAIN_BUILD, PR24_TIP_FIX2_BUILD, SWINGBURST_PACKAGE_BUILD)
 TRANSPILER_MARKER = "TRANSPILER"
 PATCH_PROBLEM_MARKERS = ("Failed to patch", "IL Compile Error", "Ambiguous match")
 

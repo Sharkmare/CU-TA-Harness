@@ -241,38 +241,5 @@ class WiringTests(unittest.TestCase):
             self.assertTrue(cam.preflight(["spectatorcam"], 1))
 
 
-class StageTests(unittest.TestCase):
-    def test_the_spectator_fix_build_is_wired_like_the_other_stages(self):
-        self.assertEqual(desync.parse_build("spectator-fix"), "spectator-fix")
-        self.assertEqual(desync.together_choice("spectator-fix"), "spectator-fix-stage")
-        self.assertTrue(instances.stage_directory_by_build()["spectator-fix"]().replace("\\", "/").endswith("Private CU together/build/stage_spectator_fix"))
-        with tempfile.TemporaryDirectory() as stage:
-            os.makedirs(os.path.join(stage, "plugins", "Together"))
-            with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
-                handle.write("fix")
-            with tempfile.TemporaryDirectory() as copy, mock.patch.dict(os.environ, {instances.SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE: stage}):
-                instances.configure_instance(copy, [], together="spectator-fix-stage")
-                with open(os.path.join(copy, "BepInEx", "plugins", "Together", "CasualtiesMP.dll")) as handle:
-                    self.assertEqual(handle.read(), "fix")
-
-    def test_the_preflight_refuses_the_build_when_its_dll_is_missing(self):
-        with tempfile.TemporaryDirectory() as empty, mock.patch.dict(os.environ, {instances.SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE: empty}):
-            problems = scenarios.preflight_problems(["spectatorcam"], 1, ["spectator-fix"])
-        self.assertEqual(len(problems), 1)
-        self.assertIn("spectator-fix", problems[0])
-
-    def test_the_build_runs_without_the_probe_and_only_records_the_launch_log_counts(self):
-        self.assertIn("spectator-fix", test_desync.BUILDS_WITHOUT_PROBE)
-        self.assertIn("spectator-fix", test_desync.RECORD_ONLY_BUILDS)
-
-    def test_the_stage_on_disk_has_the_pinned_md5_when_it_is_present(self):
-        import hashlib
-        dll = os.path.join(instances.stage_directory_by_build()["spectator-fix"](), "plugins", "Together", "CasualtiesMP.dll")
-        if not os.path.isfile(dll):
-            self.skipTest("stage not present")
-        with open(dll, "rb") as handle:
-            self.assertEqual(hashlib.md5(handle.read()).hexdigest(), "01fdb0d74a4ade447d6515ca05d53ef5")
-
-
 if __name__ == "__main__":
     unittest.main()
