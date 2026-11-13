@@ -268,7 +268,7 @@
   {
     "suite": "python",
     "file": "client/casualtieslink/scenarioengine/positioncontrol.py",
-    "old": "    if client_drift > tolerance:",
+    "old": "    if client_drift_counts and client_drift > tolerance:",
     "new": "    if False:",
     "label": "client drift never detected"
   },
