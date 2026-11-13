@@ -14,7 +14,7 @@ client sent after the invoke plus the delay the proxy gave it.
 """
 import time
 
-from casualtieslink import desync
+from casualtieslink import desync, positioncontrol, swinggate
 from casualtieslink.desync import SeriesScenario
 from tests import desync_scenarios as base
 
@@ -96,7 +96,7 @@ def wood_prepare_for(client_wanted):
 
 
 def wood_prepare(host, client, client_wanted):
-    context = base.fresh_block_prepare_with("fixed", "side", block_id=WOOD_BLOCK_ID)(host, client)
+    context = base.fresh_block_prepare_with("fixed", "side", block_id=WOOD_BLOCK_ID, parked_policy=positioncontrol.PARKED_RECORDED)(host, client)
     context["identities"] = character_identities(host, client, context, client_wanted)
     context["woodSwings"] = []
     context["lastScrapRead"] = {}
@@ -209,6 +209,12 @@ def setup_problems(context, identities):
     control = context.get("positionControl")
     if not control or not control.get("ok"):
         problems.append("position control: %s" % "; ".join((control or {}).get("issues") or ["not applied"]))
+    if control and control.get("ok") and (control.get("parkedHost") or {}).get("policy") == positioncontrol.PARKED_RECORDED:
+        parked, seat = control["parkedHost"].get("position"), control.get("clientTarget")
+        if parked and seat:
+            gap = swinggate.distance(parked, seat)
+            if gap < swinggate.PARKED_MIN_DISTANCE:
+                problems.append("the parked host is only %.1f from the client's seat, below %.1f" % (gap, swinggate.PARKED_MIN_DISTANCE))
     if not context.get("placedByHost"):
         problems.append("the block was not placed by the host")
     if context.get("blockId") != WOOD_BLOCK_ID or context.get("blockHealth") != WOOD_HEALTH:

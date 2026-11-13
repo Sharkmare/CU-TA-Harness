@@ -85,6 +85,23 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(outcome["verdict"], "invalid")
 
 
+class ParkedHostTests(unittest.TestCase):
+    def control(self, parked):
+        return {"ok": True, "issues": [], "clientTarget": {"x": 0.0, "y": 0.0}, "parkedHost": {"policy": "recorded", "position": parked}}
+
+    def test_a_parked_host_far_enough_from_the_seat_is_fine_whatever_its_drift(self):
+        self.assertEqual(wood.setup_problems(good_context(positionControl=self.control({"x": 12.0, "y": 0.0})), GOOD_IDENTITIES), [])
+
+    def test_a_parked_host_closer_than_the_minimum_distance_makes_the_run_invalid(self):
+        problems = wood.setup_problems(good_context(positionControl=self.control({"x": 3.0, "y": 0.0})), GOOD_IDENTITIES)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("the parked host is only 3.0 from the client's seat", problems[0])
+
+    def test_the_wood_scenario_asks_for_the_recorded_parking_policy(self):
+        import inspect
+        self.assertIn("PARKED_RECORDED", inspect.getsource(wood.wood_prepare))
+
+
 class SwingProblemTests(unittest.TestCase):
     def test_swings_up_to_the_break_may_exceed_the_damaging_ones_by_the_breaking_swing_only(self):
         units = [(0.6, 1), (0.8, 1), (1.0, 1)]

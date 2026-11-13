@@ -608,24 +608,25 @@ POSITION_CONTROL_ENABLED = True
 PARK_DIRECTION = "left"
 
 
-def apply_position_control(host, client, context):
-    """Hold the client where it stands, park and hold the host body away from the swing line, and record the start positions and the preflight."""
+def apply_position_control(host, client, context, parked_policy=positioncontrol.PARKED_STRICT):
+    """Hold the client where it stands, park and hold the host body away from the swing line, and record the start positions and the preflight. With PARKED_RECORDED the host's drift
+    is recorded and never fails the seat; the caller judges the parked host by its distance."""
     context["startPositions"] = positioncontrol.start_positions(host, client)
     try:
-        context["positionControl"] = positioncontrol.seat_pair(host, client, positioncontrol.read_position(client), PARK_DIRECTION)
+        context["positionControl"] = positioncontrol.seat_pair(host, client, positioncontrol.read_position(client), PARK_DIRECTION, parked_policy=parked_policy)
     except Exception as failure:
         context["positionControl"] = {"ok": False, "issues": ["position control failed: %s: %s" % (type(failure).__name__, str(failure)[:160])]}
     return context
 
 
-def fresh_block_prepare_with(pattern, layout="side", walk=False, block_id=FRESH_BLOCK_ID):
+def fresh_block_prepare_with(pattern, layout="side", walk=False, block_id=FRESH_BLOCK_ID, parked_policy=positioncontrol.PARKED_STRICT):
     def prepare(host, client):
         empty_the_hand(client)
         cell, centre, block, health, placed = place_fresh_block(host, client, layout, block_id)
         context = {"position": centre, "blockId": block, "blockHealth": health, "cell": cell, "placedByHost": placed, "aimPattern": pattern, "layout": layout, "walk": walk,
                    "hostGame": host, "hostBodyHandle": body_handle_by_name(host, CLIENT_BODY_NAME), "swingLog": [], "firstCall": None, "lastWalk": 0.0, "walkIndex": 0}
         if POSITION_CONTROL_ENABLED:
-            apply_position_control(host, client, context)
+            apply_position_control(host, client, context, parked_policy)
         return context
     return prepare
 
