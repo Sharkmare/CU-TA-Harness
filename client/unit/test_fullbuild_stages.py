@@ -13,10 +13,12 @@ BUILDS = (("fullbuild-control", "fullbuild-control-stage", instances.FULLBUILD_C
           ("pr24-fixed", "pr24-fixed-stage", instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed"),
           ("pr24-fixed-verbose", "pr24-fixed-verbose-stage", instances.PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_fixed_verbose2"),
           ("pr24-control-verbose", "pr24-control-verbose-stage", instances.PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_control_verbose"),
-          ("pr24-corpse-verbose", "pr24-corpse-verbose-stage", instances.PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_verbose"))
+          ("pr24-corpse-verbose", "pr24-corpse-verbose-stage", instances.PR24_CORPSE_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_verbose"),
+          ("pr24-corpse-fix", "pr24-corpse-fix-stage", instances.PR24_CORPSE_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_corpse_fix"))
 PINNED_MD5 = {"fullbuild-control": "5f44699a7e034bdcbdb8ba66969d04de", "fullbuild-fixed": "2eda43381ed4445d367e27af5edefedb",
               "pr24-control": "f209be8eb9d37eda5a4aafa407deda0f", "pr24-fixed": "aac74832f4e3dd8a2c13d12cba785e3a",
-              "pr24-fixed-verbose": "ce681dc17f3c76d448e107275a9b76f5", "pr24-control-verbose": "04b8ecd02fbb347b70309abe9ee07cc1", "pr24-corpse-verbose": "435da880cbee2060fd259116bff43f5d"}
+              "pr24-fixed-verbose": "ce681dc17f3c76d448e107275a9b76f5", "pr24-control-verbose": "04b8ecd02fbb347b70309abe9ee07cc1", "pr24-corpse-verbose": "435da880cbee2060fd259116bff43f5d",
+              "pr24-corpse-fix": "6e57bc2d90f04736c3eec8a5fce4cab8"}
 
 
 class StageTests(unittest.TestCase):
@@ -57,6 +59,7 @@ class StageTests(unittest.TestCase):
         self.assertNotIn("pr24-fixed", test_desync.RECORD_ONLY_BUILDS)
         self.assertIn("pr24-control-verbose", test_desync.RECORD_ONLY_BUILDS)
         self.assertIn("pr24-corpse-verbose", test_desync.RECORD_ONLY_BUILDS)
+        self.assertIn("pr24-corpse-fix", test_desync.RECORD_ONLY_BUILDS)
 
     def test_the_stages_on_disk_have_the_pinned_md5_when_they_are_present(self):
         for build, md5 in PINNED_MD5.items():

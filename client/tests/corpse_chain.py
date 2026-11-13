@@ -16,7 +16,8 @@ NAME = "corpse_chain_by_client"
 HOST_CHARACTER = 1
 CLIENT_CHARACTER = 2
 CHARACTER_NAMES = {0: "Experiment", 1: "Milky", 2: "Dune"}
-CONTROLS = (("corpse_chain_dune_dune_by_client", "corpse-control-dune", 2, 2), ("corpse_chain_milky_milky_by_client", "corpse-control-milky", 1, 1))
+CONTROLS = (("corpse_chain_dune_dune_by_client", "corpse-control-dune", 2, 2), ("corpse_chain_milky_milky_by_client", "corpse-control-milky", 1, 1),
+            ("corpse_chain_dune_milky_by_client", "corpse-control-dune-milky", 2, 1))
 CORPSE_ID = "corpse"
 MIN_CORPSE_HEALTH = 1.0
 SWINGS = 25

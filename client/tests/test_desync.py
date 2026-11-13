@@ -29,7 +29,7 @@ BUILD = desync.parse_build(os.environ.get(desync.BUILD_ENVIRONMENT_VARIABLE))
 EXPECTED_HASH = expected_hash(BUILD)
 BUILDS_WITHOUT_PROBE = (desync.OFFICIAL_BUILD, desync.SPECTATOR_FIX_BUILD)
 BUILD_HAS_PROBE = BUILD not in BUILDS_WITHOUT_PROBE
-RECORD_ONLY_BUILDS = (desync.OFFICIAL_BUILD, desync.FULLBUILD_CONTROL_BUILD, desync.SPECTATOR_FIX_BUILD, desync.PR24_CONTROL_BUILD, desync.PR24_CONTROL_VERBOSE_BUILD, desync.PR24_CORPSE_BUILD)
+RECORD_ONLY_BUILDS = (desync.OFFICIAL_BUILD, desync.FULLBUILD_CONTROL_BUILD, desync.SPECTATOR_FIX_BUILD, desync.PR24_CONTROL_BUILD, desync.PR24_CONTROL_VERBOSE_BUILD, desync.PR24_CORPSE_BUILD, desync.PR24_CORPSE_FIX_BUILD)
 RECORD_ONLY_LAUNCH_CHECKS = BUILD in RECORD_ONLY_BUILDS
 PROFILES = desync.profiles_from_environment()
 REPEAT = desync.repeat_from_environment()
@@ -222,14 +222,14 @@ PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
                           "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                           "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"]}
+                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"], "corpse-control-dune-milky": ["--mp-verbose"]}
 GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                         "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"]}
-GROUP_CLIENT_CHARACTER = {"hook-dune": 2, "corpse-repro": 2, "corpse-control-dune": 2, "corpse-control-milky": 1}
-GROUP_HOST_CHARACTER = {"corpse-repro": 1, "corpse-control-dune": 2, "corpse-control-milky": 1}
+                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"], "corpse-control-dune-milky": ["--mp-verbose"]}
+GROUP_CLIENT_CHARACTER = {"hook-dune": 2, "corpse-repro": 2, "corpse-control-dune": 2, "corpse-control-milky": 1, "corpse-control-dune-milky": 1}
+GROUP_HOST_CHARACTER = {"corpse-repro": 1, "corpse-control-dune": 2, "corpse-control-milky": 1, "corpse-control-dune-milky": 2}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
-PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune", "corpse-repro", "corpse-control-dune", "corpse-control-milky")
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune", "corpse-repro", "corpse-control-dune", "corpse-control-milky", "corpse-control-dune-milky")
 EVIDENCE_GROUPS = ("hook-evidence", "hook-dune")
 
 

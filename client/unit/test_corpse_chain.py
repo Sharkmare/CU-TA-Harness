@@ -480,7 +480,7 @@ class CheckAndWiringTests(unittest.TestCase):
             self.assertIn(group, test_desync.PROBE_GROUPS)
             self.assertIn("--mp-verbose", test_desync.GROUP_HOST_ARGUMENTS[group])
             self.assertIn("--mp-verbose", test_desync.GROUP_CLIENT_ARGUMENTS[group])
-        self.assertEqual([(host, client) for _, _, host, client in chain.CONTROLS], [(2, 2), (1, 1)])
+        self.assertEqual([(host, client) for _, _, host, client in chain.CONTROLS], [(2, 2), (1, 1), (2, 1)])
 
     def test_a_control_verifies_its_own_characters_before_spawning_anything(self):
         prepare_milky_pair = chain.prepare_for(1, 1)
