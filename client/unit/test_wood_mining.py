@@ -150,6 +150,37 @@ class BunchingTests(unittest.TestCase):
         self.assertIsNone(wood.distribution([]))
 
 
+class SwingBurstRecordTests(unittest.TestCase):
+    LOG = "x\n[Info] SWINGBURST dropped client=1 gap=0.020 credit=0.100\n[Info] SWINGBURST accepted-by-credit client=1 gap=0.050 credit=0.400\nnoise\n[Info] SWINGBURST summary client=1 accepted-normally=5 accepted-by-credit=1 dropped=1\n"
+
+    def test_the_swingburst_lines_are_counted_by_kind_and_the_first_ones_kept(self):
+        record = wood.swingburst_record(self.LOG)
+        self.assertEqual(record["lines"], 3)
+        self.assertEqual(record["counts"], {"dropped": 1, "acceptedByCredit": 1, "summary": 1})
+        self.assertTrue(record["first"][0].endswith("credit=0.100"))
+
+    def test_a_log_without_swingburst_lines_gives_zero_counts(self):
+        self.assertEqual(wood.swingburst_record("nothing here\n")["counts"], {"dropped": 0, "acceptedByCredit": 0, "summary": 0})
+
+    def test_the_steamlike_lines_are_picked_by_name_whatever_the_case(self):
+        self.assertEqual(wood.steamlike_lines("a\nTransport: SteamLike on\nb\n"), ["Transport: SteamLike on"])
+        self.assertEqual(wood.steamlike_lines("a\n"), [])
+
+    def test_the_report_carries_the_stall_summary_and_the_swingburst_record(self):
+        observation = ReportTests.Observation(good_context(), series(climb(3), climb(3)))
+        observation.baseline = {"host": [11, 0.0], "client": [11, 0.0]}
+        context = observation.context
+        context["identities"] = dict(GOOD_IDENTITIES)
+        context["seriesStarted"] = 100.0
+        context["woodSwings"] = [{"swing": index + 1, "invokedAt": 100.0 + moment, "ignoredAttempts": 0, "interval": None} for index, moment in enumerate([0.5, 0.7, 0.9, 1.1])]
+        report = {"findings": {"client": finding(0.4), "host": finding(0.4)}, "network": {"delay_ms": 0.0}, "proxyObserved": {},
+                  "stallTrace": [{"start": 1.0, "end": 1.3, "held": 2}, {"start": 2.0, "end": 2.4, "held": 3}]}
+        wood.extend_report(report, observation, {"host": self.LOG, "client": "steamlike on"}, [])
+        self.assertEqual(report["woodRun"]["stalls"], {"count": 2, "packetsHeld": 5, "longest": 0.4})
+        self.assertEqual(report["swingBurst"]["counts"]["dropped"], 1)
+        self.assertEqual(report["steamlikeLines"]["client"], ["steamlike on"])
+
+
 class BaselineProblemTests(unittest.TestCase):
     def test_damage_left_on_the_cell_before_the_first_swing_is_a_problem_per_side(self):
         problems = wood.baseline_problems({"host": [11, 135.3], "client": [11, 0.0]})
@@ -258,8 +289,8 @@ class ReportTests(unittest.TestCase):
 class WiringTests(unittest.TestCase):
     def test_the_scenarios_run_a_milky_host_with_a_dune_or_an_experiment_client_in_their_own_groups(self):
         self.assertEqual(wood.HOST_CHARACTER, 1)
-        self.assertEqual(wood.CLIENT_CHARACTERS, {"wood-mining-dune": 2, "wood-mining-experiment": 0})
-        self.assertEqual([scenario.group for scenario in wood.WOOD_SCENARIOS], ["wood-mining-dune", "wood-mining-experiment"])
+        self.assertEqual(wood.CLIENT_CHARACTERS, {"wood-mining-dune": 2, "wood-mining-experiment": 0, "wood-mining-steamlike": 2})
+        self.assertEqual([scenario.group for scenario in wood.WOOD_SCENARIOS], ["wood-mining-dune", "wood-mining-experiment", "wood-mining-steamlike"])
 
     def test_every_scenario_extends_its_report_samples_fast_and_fires_without_a_pause_between_calls(self):
         for scenario in wood.WOOD_SCENARIOS:

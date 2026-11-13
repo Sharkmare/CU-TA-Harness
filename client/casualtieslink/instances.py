@@ -38,11 +38,15 @@ PR24_TIP_FIX_STAGE_CHOICE = "pr24-3d060fe-corpse-fix-stage"
 PR24_TIP_FIX_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_CORPSE_FIX_STAGE"
 PR24_TIP_FIX2_STAGE_CHOICE = "pr24-3d060fe-corpse-fix2-stage"
 PR24_TIP_FIX2_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_CORPSE_FIX2_STAGE"
+STEAMLIKE_PLAIN_STAGE_CHOICE = "steamlike-plain-3d060fe-stage"
+STEAMLIKE_PLAIN_STAGE_ENVIRONMENT_VARIABLE = "CU_STEAMLIKE_PLAIN_3D060FE_STAGE"
+STEAMLIKE_BURST_STAGE_CHOICE = "steamlike-burst-3d060fe-stage"
+STEAMLIKE_BURST_STAGE_ENVIRONMENT_VARIABLE = "CU_STEAMLIKE_BURST_3D060FE_STAGE"
 PR24_TIP_PLAIN_STAGE_CHOICE = "pr24-3d060fe-plain-stage"
 PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_3D060FE_PLAIN_STAGE"
 CUCORELIB_FOLDER = "CUCoreLib"
 CUCORELIB_DLL = "CUCoreLib.dll"
-BUILDS_NEEDING_CUCORELIB = ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-plain", "pr24-3d060fe-corpse-fix2")
+BUILDS_NEEDING_CUCORELIB = ("pr24-3d060fe-corpse-fix", "pr24-3d060fe-plain", "pr24-3d060fe-corpse-fix2", "steamlike-plain-3d060fe", "steamlike-burst-3d060fe")
 PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_VERBOSE_STAGE"
 PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_VERBOSE_STAGE"
 PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_STAGE"
@@ -306,6 +310,14 @@ def pr24_tip_plain_stage_directory():
     return fullbuild_stage_directory(PR24_TIP_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_pr24_3d060fe_plain")
 
 
+def steamlike_plain_stage_directory():
+    return fullbuild_stage_directory(STEAMLIKE_PLAIN_STAGE_ENVIRONMENT_VARIABLE, "stage_steamlike_plain_3d060fe")
+
+
+def steamlike_burst_stage_directory():
+    return fullbuild_stage_directory(STEAMLIKE_BURST_STAGE_ENVIRONMENT_VARIABLE, "stage_steamlike_burst_3d060fe")
+
+
 def spectator_fix_stage_directory():
     return fullbuild_stage_directory(SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_spectator_fix")
 
@@ -316,7 +328,7 @@ def stage_directory_by_build():
             "pr24-fixed-verbose": pr24_verbose_stage_directory, "pr24-control-verbose": pr24_control_verbose_stage_directory,
             "pr24-corpse-verbose": pr24_corpse_stage_directory, "pr24-corpse-fix": pr24_corpse_fix_stage_directory,
             "pr24-3d060fe-corpse-fix": pr24_tip_fix_stage_directory, "pr24-3d060fe-plain": pr24_tip_plain_stage_directory,
-            "pr24-3d060fe-corpse-fix2": pr24_tip_fix2_stage_directory}
+            "pr24-3d060fe-corpse-fix2": pr24_tip_fix2_stage_directory, "steamlike-plain-3d060fe": steamlike_plain_stage_directory, "steamlike-burst-3d060fe": steamlike_burst_stage_directory}
 
 
 def install_stage_together(copy, directory):
@@ -412,6 +424,10 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, pr24_tip_plain_stage_directory())
     elif together == PR24_TIP_FIX2_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_tip_fix2_stage_directory())
+    elif together == STEAMLIKE_PLAIN_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, steamlike_plain_stage_directory())
+    elif together == STEAMLIKE_BURST_STAGE_CHOICE:
+        installed["together"] = install_stage_together(copy, steamlike_burst_stage_directory())
     elif together == PR24_CONTROL_VERBOSE_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_control_verbose_stage_directory())
     elif together == PR24_VERBOSE_STAGE_CHOICE:

@@ -21,7 +21,11 @@ from tests import desync_scenarios as base
 WOOD_BLOCK_ID = 11
 WOOD_HEALTH = 150.0
 HOST_CHARACTER = 1
-CLIENT_CHARACTERS = {"wood-mining-dune": 2, "wood-mining-experiment": 0}
+CLIENT_CHARACTERS = {"wood-mining-dune": 2, "wood-mining-experiment": 0, "wood-mining-steamlike": 2}
+SWINGBURST_MARKER = "SWINGBURST"
+STEAMLIKE_MARKER = "steamlike"
+SWINGBURST_LINE_LIMIT = 60
+SWINGBURST_KINDS = (("dropped", "SWINGBURST dropped"), ("acceptedByCredit", "SWINGBURST accepted-by-credit"), ("summary", "SWINGBURST summary"))
 SCRAPS_ID = "woodscraps"
 SCRAPS_RADIUS = 2.5
 SCRAPS_READ_SECONDS = 0.25
@@ -217,6 +221,18 @@ def setup_problems(context, identities):
     return problems
 
 
+def swingburst_record(host_log_text):
+    """The SWINGBURST lines of the host (drops, accepts by credit, the minute summaries) of the run, counted by kind, with the first lines kept."""
+    lines = [line.strip() for line in host_log_text.splitlines() if SWINGBURST_MARKER in line]
+    counts = {name: len([line for line in lines if marker in line]) for name, marker in SWINGBURST_KINDS}
+    return {"lines": len(lines), "counts": counts, "first": [line[-220:] for line in lines[:SWINGBURST_LINE_LIMIT]]}
+
+
+def steamlike_lines(log_text):
+    """Log lines that name the steamlike transport, so the report shows whether both games started in that mode."""
+    return [line.strip()[-200:] for line in log_text.splitlines() if STEAMLIKE_MARKER in line.lower()][:10]
+
+
 def baseline_problems(baseline):
     """The cell must be undamaged on both games before the first swing: damage left over from an earlier run (a block that stayed broken on one side only) would shorten the run."""
     problems = []
@@ -302,6 +318,10 @@ def extend_report(report, observation, run_logs, packets):
                              identities=identities)
     report["woodSwings"] = [dict(entry, arrivalEstimate=None if arrivals[index] is None else round(arrivals[index] - started, 3)) for index, entry in enumerate(swings)]
     report["liveValues"] = context.get("liveValues")
+    report["swingBurst"] = swingburst_record(run_logs.get("host") or "")
+    report["steamlikeLines"] = {side: steamlike_lines(run_logs.get(side) or "") for side in ("host", "client")}
+    stalls = report.get("stallTrace") or []
+    report["woodRun"]["stalls"] = {"count": len(stalls), "packetsHeld": sum(entry["held"] for entry in stalls), "longest": max([round(entry["end"] - entry["start"], 3) for entry in stalls if entry.get("start") is not None] or [None])}
     if judged["verdict"] == "invalid":
         return ["INVALID: " + "; ".join(judged["reasons"])]
     if judged["verdict"] == "reversion":
@@ -322,6 +342,7 @@ WOOD_SCENARIOS = [
     make_scenario("wood_mining_dune", "a Dune client mines a host-placed wood block (id 11, 150 hp) with bare hands at the cooldown's rate, Milky host; both machines are sampled every 0.05 s and the cell is watched for 10 s after the break",
                   "wood-mining-dune"),
     make_scenario("wood_mining_experiment", "the same with an Experiment client (species control)", "wood-mining-experiment"),
+    make_scenario("wood_mining_steamlike", "a Dune client mines a host-placed wood block with both games on the steamlike transport (--mp-steamlike) behind a stalling proxy", "wood-mining-steamlike"),
 ]
 
 base.SERIES_SCENARIOS.extend(WOOD_SCENARIOS)
