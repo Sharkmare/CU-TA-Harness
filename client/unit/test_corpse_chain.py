@@ -107,6 +107,25 @@ class HoldTests(unittest.TestCase):
         self.assertEqual(chain.hold_rows(game), {"error": "RuntimeError: down"})
 
 
+class FireOneSwingTests(unittest.TestCase):
+    def test_ignored_invokes_are_counted_until_the_cooldown_rises(self):
+        rises_on_invoke = 3
+        state = {"invokes": 0, "cooldown": 0.0}
+        client = mock.Mock()
+
+        def invoke(*args, **kwargs):
+            state["invokes"] += 1
+            if state["invokes"] == rises_on_invoke:
+                state["cooldown"] = 0.2
+
+        client.call.side_effect = invoke
+        client.get.side_effect = lambda *args, **kwargs: state["cooldown"]
+        attempts = {}
+        with mock.patch.object(chain.hooks.time, "sleep", lambda seconds: None):
+            self.assertTrue(chain.hooks.fire_one_swing(client, {"x": 1.0, "y": 2.0}, pause=0.01, attempts=attempts))
+        self.assertEqual(attempts["ignored"], rises_on_invoke - 1)
+
+
 class PrepareTests(unittest.TestCase):
     def setUp(self):
         crates.reset_launch_state()
@@ -165,8 +184,11 @@ class ActTests(unittest.TestCase):
         target = {"positionControl": {"ok": seat_ok, "issues": [] if seat_ok else ["the bodies overlap"]}, "hostFlags": {"cantHit": True}, "clientFlags": {"cantHit": False}}
         return {"position": dict(CORPSE), "host": self.host, "hostHandle": "id:7", "clientHandle": "id:-7", "target": target, "measurements": [], "samples": []}
 
-    def fire(self, game, aim):
+    def fire(self, game, aim, pause=None, attempts=None):
         self.fired.append(aim)
+        self.clock[0] += 0.16
+        if attempts is not None:
+            attempts["ignored"] = attempts.get("ignored", 0) + 2
         self.client_hp = -20.0 if len(self.fired) >= 3 else self.client_hp - 80.0
         return True
 
@@ -190,14 +212,18 @@ class ActTests(unittest.TestCase):
             self.addCleanup(patch.stop)
         chain.act(self.client, context)
 
-    def test_it_fires_the_planned_swings_at_the_planned_cadence_and_samples_after_the_last(self):
+    def test_it_fires_the_planned_swings_as_fast_as_the_cooldown_allows_and_samples_after_the_last(self):
         context = self.context()
         self.run_act(context)
         self.assertEqual(len(context["measurements"]), chain.SWINGS)
         self.assertEqual(len(self.fired), chain.SWINGS)
-        times = [item["t"] for item in context["measurements"]]
-        self.assertAlmostEqual(times[1] - times[0], chain.CADENCE_SECONDS, places=2)
-        self.assertAlmostEqual(times[-1] - times[0], chain.CADENCE_SECONDS * (chain.SWINGS - 1), places=2)
+        intervals = [item["intervalSincePrevious"] for item in context["measurements"]]
+        self.assertIsNone(intervals[0])
+        self.assertTrue(all(abs(value - 0.16) < 0.01 for value in intervals[1:]), intervals)
+        self.assertTrue(all(item["ignoredAttempts"] == 2 for item in context["measurements"]))
+        rate = context["target"]["swingRate"]
+        self.assertEqual((rate["intervals"], rate["ignoredAttemptsTotal"]), (chain.SWINGS - 1, 2 * chain.SWINGS))
+        self.assertAlmostEqual(rate["medianSeconds"], 0.16, places=2)
         planned = round(chain.AFTER_LAST_SWING_SECONDS / chain.SAMPLE_INTERVAL_SECONDS)
         self.assertIn(len(context["samples"]), (planned, planned + 1))
         self.assertEqual(context["target"]["prediction"]["verdict"], "prediction holds")

@@ -17,7 +17,7 @@ CLIENT_CHARACTER = 2
 CORPSE_ID = "corpse"
 MIN_CORPSE_HEALTH = 1.0
 SWINGS = 25
-CADENCE_SECONDS = 0.35
+SWING_POLL_SECONDS = 0.01
 SEAT_DISTANCE = 2.5
 MAX_SWING_DISTANCE = 4.5
 AFTER_LAST_SWING_SECONDS = 2.0
@@ -137,9 +137,9 @@ def prepare(host, client):
     return {"position": corpse, "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"], "target": target, "measurements": [], "samples": []}
 
 
-def record_swing(index, started, fired, before, after, context, client):
+def record_swing(index, started, fired, before, after, context, client, fired_at=None):
     host = context["host"]
-    return {"swing": index, "t": round(time.time() - started, 3), "fired": fired, "hostHp": [before["host"], after["host"]], "clientHp": [before["client"], after["client"]],
+    return {"swing": index, "t": round((time.time() if fired_at is None else fired_at) - started, 3), "fired": fired, "hostHp": [before["host"], after["host"]], "clientHp": [before["client"], after["client"]],
             "hostCantHit": read_flag(host, context["hostHandle"]), "clientCantHit": read_flag(client, context["clientHandle"])}
 
 
@@ -178,14 +178,18 @@ def act(client, context):
         started = time.time()
         entries = context["measurements"]
         snapshots = target["holds"] = {"beforeFirstSwing": hold_snapshot(host, client)}
+        before = read_both(client, context)
+        previous_fired_at = None
         for index in range(1, SWINGS + 1):
-            slot = started + (index - 1) * CADENCE_SECONDS
-            wait = slot - time.time()
-            if wait > 0:
-                time.sleep(wait)
-            before = read_both(client, context)
-            fired = hooks.fire_one_swing(client, corpse_point(host, context))
-            entries.append(record_swing(index, started, fired, before, read_both(client, context), context, client))
+            attempts = {"ignored": 0}
+            fired = hooks.fire_one_swing(client, corpse_point(host, context), pause=SWING_POLL_SECONDS, attempts=attempts)
+            fired_at = time.time()
+            after = read_both(client, context)
+            entries.append(record_swing(index, started, fired, before, after, context, client, fired_at))
+            entries[-1]["ignoredAttempts"] = attempts["ignored"]
+            entries[-1]["intervalSincePrevious"] = None if previous_fired_at is None else round(fired_at - previous_fired_at, 3)
+            previous_fired_at = fired_at
+            before = after
             facing = facing_record(client, corpse_point(host, context))
             entries[-1]["facingCorpse"] = facing["facingCorpse"]
             if index == 1:
@@ -193,6 +197,7 @@ def act(client, context):
             if not facing["facingCorpse"]:
                 target["reaimedAfterSwing"] = target.get("reaimedAfterSwing", []) + [index]
                 point_mouse_at(client, corpse_point(host, context))
+        target["swingRate"] = swing_rate(entries)
         snapshots["afterLastSwing"] = hold_snapshot(host, client)
         context["samples"] = sample_after(client, context, started, AFTER_LAST_SWING_SECONDS)
         target["samples"] = context["samples"]
@@ -208,6 +213,14 @@ def act(client, context):
         release_mouse_quietly(client)
         positioncontrol.release_quietly(client)
         positioncontrol.release_quietly(host)
+
+
+def swing_rate(entries):
+    intervals = sorted(entry["intervalSincePrevious"] for entry in entries if entry.get("intervalSincePrevious") is not None)
+    if not intervals:
+        return {"intervals": 0}
+    return {"intervals": len(intervals), "minSeconds": intervals[0], "medianSeconds": intervals[len(intervals) // 2], "maxSeconds": intervals[-1],
+            "ignoredAttemptsTotal": sum(entry.get("ignoredAttempts") or 0 for entry in entries)}
 
 
 def start_health(entries, which):
@@ -228,7 +241,7 @@ def evaluate(entries, samples, host_flags, client_flags):
     last_client = next((s["client"] for s in reversed(samples) if isinstance(s["client"], (int, float))), None)
     summary = {"hostStartHp": host_start, "clientStartHp": client_start, "hostMinHp": min(host_values, default=None), "clientMinHp": min(client_values, default=None),
                "hostEverCantHitFalse": any(flag is False for flag in host_cant_hit), "clientFinalHp": last_client,
-               "clientCantHitFalseThroughout": all(flag is False for flag in [client_flags.get("cantHit")] + [entry["clientCantHit"] for entry in entries])}
+               "clientReadingsBelowZero": len([v for v in client_values if v < 0]), "clientCantHitFalseThroughout": all(flag is False for flag in [client_flags.get("cantHit")] + [entry["clientCantHit"] for entry in entries])}
     reasons = []
     if host_start is not None and summary["hostMinHp"] is not None and summary["hostMinHp"] < host_start - HEALTH_DROP_EPSILON:
         reasons.append("the host copy's health fell from %.1f to %.1f" % (host_start, summary["hostMinHp"]))
@@ -259,7 +272,7 @@ def check(context):
 def preflight(fragments, attempts, builds=()):
     if NAME not in base.matching_scenario_names(fragments):
         return []
-    checks = [(SWINGS >= 1, "the swing count is below one"), (CADENCE_SECONDS > 0, "the cadence is not positive"), (SEAT_DISTANCE < MAX_SWING_DISTANCE, "the seat distance is not inside the swing reach"),
+    checks = [(SWINGS >= 1, "the swing count is below one"), (SWING_POLL_SECONDS > 0, "the swing poll interval is not positive"), (SEAT_DISTANCE < MAX_SWING_DISTANCE, "the seat distance is not inside the swing reach"),
               (HOST_CHARACTER != CLIENT_CHARACTER, "host and client are the same character"), (AFTER_LAST_SWING_SECONDS >= 1.0, "the logging after the last swing is below one second")]
     return [message for holds, message in checks if not holds]
 
@@ -267,7 +280,7 @@ def preflight(fragments, attempts, builds=()):
 base.PREFLIGHTS.append(preflight)
 
 SCENARIOS = [
-    Scenario(NAME, "host Milky and client Dune, both held; the host spawns a world corpse next to the client, the client faces it and swings bare handed 25 times about every 0.35 s; health and cantHit of both copies per swing and every 0.1 s for two seconds after the last swing, against the Together session's prediction",
+    Scenario(NAME, "host Milky and client Dune, both held; the host spawns a world corpse next to the client, the client faces it and swings bare handed 25 times, each as soon as the attack cooldown allows (a player's rate); health and cantHit of both copies per swing and every 0.1 s for two seconds after the last swing, against the Together session's prediction",
              prepare, act, lambda game, context: 0, hooks.never_changes, group=GROUP, check=check, max_repeat=1),
 ]
 
