@@ -13,6 +13,9 @@ NAME = "staticcrate_hit_by_client"
 FAR_COLUMNS = (45.0, -45.0, 50.0, -50.0, 55.0, -55.0, 60.0, -60.0)
 MIN_FAR_DISTANCE = 40.0
 FAR_ATTEMPTS = 4
+OFFER_RADIUS = 60.0
+OFFER_LIMIT = 15
+OFFER_MATCH_DISTANCE = 0.5
 POCKET_ROWS = 4
 SPAWN_LIFT = 0.5
 WORLD_EDGE_MARGIN = 5
@@ -21,11 +24,11 @@ STOP_AFTER_SETUP_FAILURES = 3
 APPROACH_POLL_SECONDS = 0.1
 APPROACH_TIMEOUT_SECONDS = 3.0
 RETURN_SETTLE_SECONDS = 1.0
-STATE = {"valid": 0, "setup_failed": 0, "static_at_far": 0, "static_at_swing": 0}
+STATE = {"valid": 0, "setup_failed": 0, "static_at_far": 0, "static_at_swing": 0, "adopted": 0, "offers": None}
 
 
 def reset_launch_state():
-    STATE.update({"valid": 0, "setup_failed": 0, "static_at_far": 0, "static_at_swing": 0})
+    STATE.update({"valid": 0, "setup_failed": 0, "static_at_far": 0, "static_at_swing": 0, "adopted": 0, "offers": None})
 
 
 def pocket_is_open(host, x, y):
@@ -48,6 +51,47 @@ def find_far_pocket(host, origin, half_width, farther_than=0.0):
     return None
 
 
+def world_offer(host, client, anchor):
+    """What the world offers when there is no far pocket: the buildings nearest the client, each with its health and the physics state of the host copy and of the client copy."""
+    host_rows = [row for row in host.call("find", type="BuildingEntity", limit=world.HOST_LIST_LIMIT) if "position" in row and base.distance(row["position"], anchor) <= OFFER_RADIUS]
+    host_rows.sort(key=lambda row: base.distance(row["position"], anchor))
+    client_rows = [row for row in client.call("find", type="BuildingEntity", limit=world.HOST_LIST_LIMIT) if "position" in row]
+    offers = []
+    for row in host_rows[:OFFER_LIMIT]:
+        handle = "id:%d" % row["object"]["id"]
+        described = world.describe_candidate(host, row)
+        match = min(client_rows, key=lambda candidate: base.distance(candidate["position"], row["position"]), default=None)
+        matched = match is not None and base.distance(match["position"], row["position"]) <= OFFER_MATCH_DISTANCE
+        client_handle = "id:%d" % match["object"]["id"] if matched else None
+        offers.append({"kind": world.kind_of({"name": row["object"]["name"]}), "handle": handle, "clientHandle": client_handle, "position": row["position"],
+                       "distance": round(base.distance(row["position"], anchor), 1), "health": None if described is None else described["health"],
+                       "cantHit": None if described is None else described["cantHit"], "indestructible": None if described is None else described["indestructible"],
+                       "animal": None if described is None else described["animal"], "host": crates.crate_physics(host, handle),
+                       "client": None if client_handle is None else crates.crate_physics(client, client_handle), "described": described})
+    return offers
+
+
+def static_offer_usable(offer):
+    low, high = world.HEALTH_RANGE
+    described = offer["described"]
+    return (described is not None and offer["client"] is not None and offer["client"]["physicsActive"] is False and not described["animal"] and not described["cantHit"]
+            and not described["indestructible"] and "corpse" not in described["name"].lower() and low <= described["health"] <= high)
+
+
+def offer_summary(offers):
+    return [{key: offer[key] for key in ("kind", "handle", "distance", "health", "cantHit", "indestructible", "host", "client")} for offer in offers]
+
+
+def adopt_static_building(offer, anchor, states):
+    """A static building that already stands near the seat is the swing target. It is not ours to destroy, so the context marks it adopted."""
+    described = offer["described"]
+    target = dict(described, clientHandle=offer["clientHandle"], farDistance=offer["distance"], hostFarState=offer["host"], clientFarState=offer["client"], anchor=anchor, farAttempts=states,
+                  adopted=True, startHealth=described["health"], healthBefore=described["health"], distance=offer["distance"], spawnOffset=None, spawnedAt=None, spawnNumber=0,
+                  settleTrace=[], skippedPicks=[], timesUsedBefore=0)
+    return {"position": described["position"], "name": None, "host": None, "hostHandle": described["handle"], "clientHandle": offer["clientHandle"], "target": target, "measurements": [],
+            "anchor": anchor}
+
+
 def fail_setup(category, message):
     STATE["setup_failed"] += 1
     crates.record_failure(category, message)
@@ -67,9 +111,19 @@ def prepare(host, client):
     far_distance = 0.0
     for attempt in range(1, FAR_ATTEMPTS + 1):
         pocket = find_far_pocket(host, anchor, half_width, farther_than=far_distance)
+        if pocket is None and not states:
+            offers = world_offer(host, client, anchor)
+            usable_offers = [offer for offer in offers if static_offer_usable(offer)]
+            STATE["offers"] = offer_summary(offers)
+            print("\nSTATIC OFFER: no far pocket; %d buildings within %.0f of the client, %d usable static ones: %s" % (len(offers), OFFER_RADIUS, len(usable_offers), STATE["offers"]))
+            if usable_offers:
+                context = adopt_static_building(usable_offers[0], anchor, states)
+                context["host"] = host
+                STATE["adopted"] += 1
+                return context
         if pocket is None:
-            fail_setup("no-far-pocket", "no open pocket %s to %s tiles from the client at (%.1f, %.1f) in a world half width of %d, farther than %.0f; copy states so far %s" % (
-                FAR_COLUMNS[0], FAR_COLUMNS[-1], anchor["x"], anchor["y"], half_width, far_distance, states))
+            fail_setup("no-far-pocket", "no open pocket %s to %s tiles from the client at (%.1f, %.1f) in a world half width of %d, farther than %.0f; copy states so far %s; buildings the world offers within %.0f (none usable as a static target) %s" % (
+                FAR_COLUMNS[0], FAR_COLUMNS[-1], anchor["x"], anchor["y"], half_width, far_distance, states, OFFER_RADIUS, STATE["offers"]))
         try:
             target = crates.spawn_object(host, client, crates.CRATE_ID, crates.MIN_HEALTH, spot=pocket)
         except crates.SetupFailure as failure:
@@ -141,7 +195,8 @@ def act(client, context):
         if copy_at_swing is False:
             STATE["static_at_swing"] += 1
     finally:
-        crates_destroy(context["host"], context["hostHandle"])
+        if not context["target"].get("adopted"):
+            crates_destroy(context["host"], context["hostHandle"])
         return_to_anchor(client, context)
 
 

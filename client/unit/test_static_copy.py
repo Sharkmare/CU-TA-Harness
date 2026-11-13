@@ -99,6 +99,76 @@ class PrepareHarness(unittest.TestCase):
             self.addCleanup(patch.stop)
 
 
+class StaticOfferTests(PrepareHarness):
+    def rows(self):
+        return [{"object": {"id": 11, "name": "SyncInfo(building, id: 11, res: wallpanel)"}, "position": {"x": 14.0, "y": 100.0}},
+                {"object": {"id": 12, "name": "SyncInfo(building, id: 12, res: medcrate)"}, "position": {"x": 15.0, "y": 100.0}}]
+
+    def client_rows(self):
+        return [{"object": {"id": -11, "name": "x"}, "position": {"x": 14.0, "y": 100.0}}, {"object": {"id": -12, "name": "x"}, "position": {"x": 15.0, "y": 100.0}}]
+
+    def described(self, host, row):
+        return {"handle": "id:%d" % row["object"]["id"], "id": row["object"]["id"], "name": row["object"]["name"], "position": row["position"], "health": 500.0, "cantHit": False,
+                "indestructible": False, "animal": False, "startHealth": 500.0}
+
+    def patches(self, client_active):
+        self.host.call.side_effect = lambda command, **arguments: self.rows()
+        self.client.call.side_effect = lambda command, **arguments: self.client_rows()
+        states = {"id:-11": client_active, "id:-12": True}
+        return [mock.patch.object(static.world, "describe_candidate", self.described),
+                mock.patch.object(static.crates, "crate_physics", lambda game, handle: {"handle": handle, "bodyType": "Static" if game is self.client and states.get(handle) is False else "Dynamic",
+                                                                                   "physicsActive": states.get(handle, True) if game is self.client else True})]
+
+    def run_offer(self, client_active):
+        for patch in self.patches(client_active):
+            patch.start()
+            self.addCleanup(patch.stop)
+        return static.world_offer(self.host, self.client, {"x": 10.0, "y": 100.0})
+
+    def test_the_offer_lists_the_nearest_buildings_with_both_copies_states(self):
+        offers = self.run_offer(False)
+        self.assertEqual([offer["kind"] for offer in offers], ["wallpanel", "medcrate"])
+        self.assertEqual(offers[0]["clientHandle"], "id:-11")
+        self.assertEqual((offers[0]["host"]["physicsActive"], offers[0]["client"]["physicsActive"]), (True, False))
+        self.assertEqual(offers[0]["distance"], 4.0)
+
+    def test_only_a_building_whose_client_copy_is_static_and_that_can_be_hit_is_usable(self):
+        offers = self.run_offer(False)
+        self.assertTrue(static.static_offer_usable(offers[0]))
+        self.assertFalse(static.static_offer_usable(offers[1]))
+        offers = self.run_offer(True)
+        self.assertFalse(static.static_offer_usable(offers[0]))
+        indestructible = dict(offers[0], client={"physicsActive": False}, described=dict(offers[0]["described"], indestructible=True))
+        self.assertFalse(static.static_offer_usable(indestructible))
+
+    def test_without_a_far_pocket_a_usable_static_building_near_the_seat_is_adopted_and_its_state_recorded(self):
+        for patch in self.patches(False):
+            patch.start()
+            self.addCleanup(patch.stop)
+        with mock.patch.object(static, "find_far_pocket", lambda host, origin, half, farther_than=0.0: None):
+            context = static.prepare(self.host, self.client)
+        self.assertTrue(context["target"]["adopted"])
+        self.assertEqual(context["hostHandle"], "id:11")
+        self.assertEqual(context["target"]["clientFarState"]["physicsActive"], False)
+        self.assertEqual(static.STATE["adopted"], 1)
+        self.assertEqual(static.STATE["static_at_far"], 0)
+
+    def test_an_adopted_building_is_never_destroyed_by_the_cleanup(self):
+        context = {"host": self.host, "hostHandle": "id:11", "target": {"adopted": True}, "measurements": [], "anchor": None}
+        with mock.patch.object(static, "approach", lambda *a: None), mock.patch.object(static.world, "act", lambda *a, **k: None), mock.patch.object(static, "return_to_anchor", lambda *a: None):
+            static.act(self.client, context)
+        self.host.set.assert_not_called()
+
+    def test_with_no_usable_building_the_setup_failure_lists_what_the_world_offers(self):
+        for patch in self.patches(True):
+            patch.start()
+            self.addCleanup(patch.stop)
+        with mock.patch.object(static, "find_far_pocket", lambda host, origin, half, farther_than=0.0: None), self.assertRaises(crates.SetupFailure) as caught:
+            static.prepare(self.host, self.client)
+        self.assertEqual(caught.exception.category, "no-far-pocket")
+        self.assertIn("wallpanel", str(caught.exception))
+
+
 class PrepareTests(PrepareHarness):
     def test_a_far_crate_whose_client_copy_is_static_is_set_up_and_counted(self):
         context = static.prepare(self.host, self.client)
@@ -148,6 +218,8 @@ class PrepareTests(PrepareHarness):
         self.assertEqual(caught.exception.category, "crate-not-far")
 
     def test_no_pocket_is_a_setup_failure(self):
+        self.host.call.side_effect = lambda command, **arguments: []
+        self.client.call.side_effect = lambda command, **arguments: []
         with mock.patch.object(static, "find_far_pocket", lambda host, origin, half, farther_than=0.0: None), self.assertRaises(crates.SetupFailure) as caught:
             static.prepare(self.host, self.client)
         self.assertEqual(caught.exception.category, "no-far-pocket")
