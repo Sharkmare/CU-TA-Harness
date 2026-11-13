@@ -65,7 +65,7 @@ def load_report(path):
 def expand_sources(patterns, root):
     found = []
     for pattern in patterns:
-        found.extend(sorted(glob.glob(os.path.join(root, pattern))))
+        found.extend(sorted(os.path.normpath(path) for path in glob.glob(os.path.join(root, pattern))))
     seen = []
     for path in found:
         if path not in seen:
@@ -404,11 +404,12 @@ def metric_table(table, rows_spec, all_runs, root, deviations, stats):
     for row in rows_spec:
         cells = []
         for build in table["builds"]:
+            sources = row.get("sources") or build.get("sources")
             if row.get("metric") == "attack_hook":
-                checks = checks_for(all_runs, build["build"], row.get("sources"), root)
+                checks = checks_for(all_runs, build["build"], sources, root)
                 cells.append(attack_hook_cell(checks))
                 continue
-            runs = [run for run in runs_for(all_runs, row["scenario"], build["build"], row.get("sources"), root) if run["_status"] != "excluded"]
+            runs = [run for run in runs_for(all_runs, row["scenario"], build["build"], sources, root) if run["_status"] != "excluded"]
             reclassify(runs, row)
             text, counts = count_cell(runs, row, table)
             cells.append(text)
@@ -420,6 +421,8 @@ def metric_table(table, rows_spec, all_runs, root, deviations, stats):
                 stats["unmet"].append("%s %s %d of %d" % (row["label"], build["label"], counts[0], counts[1]))
             deviations.extend(deviations_for("%s %s" % (row["label"], build["label"]), runs, row.get("planned_runs")))
         rows.append([row["label"]] + cells)
+        if row.get("note"):
+            deviations.append("%s: %s" % (row["label"], row["note"]))
     return {"title": table.get("title"), "headers": [table.get("row_label", "test")] + [build["label"] for build in table["builds"]], "rows": rows}
 
 

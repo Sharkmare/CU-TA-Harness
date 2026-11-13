@@ -466,6 +466,26 @@ class ProfileDrivesTheOutputTests(unittest.TestCase):
         self.assertEqual([column["label"] for column in profile["tables"][0]["columns"]], ["host hp", "client hp (min)", "broke"])
 
 
+class BuildSourcesAndNotesTests(unittest.TestCase):
+    def result(self, rows, builds):
+        return prtable.build_result(hits_profile(rows, builds=builds, sources=["hits/*.json"]), FIXTURES)
+
+    def test_a_build_with_its_own_sources_counts_only_the_runs_those_sources_hold(self):
+        builds = [{"label": "first launch", "build": TIP_FIX, "sources": ["hits/pvp_fix_r1.json"]}, {"label": "second launch", "build": TIP_FIX, "sources": ["hits/pvp_fix_r2.json", "hits/pvp_fix_r3.json"]}]
+        result = self.result([hits_row("PvP punches", "pvp_banded_by_client")], builds)
+        self.assertEqual(rows_of(result, "PvP punches")[0][1:], ["1/1", "2/2"])
+
+    def test_a_row_with_its_own_sources_overrides_the_build_sources(self):
+        builds = [{"label": "fix", "build": TIP_FIX, "sources": ["hits/pvp_fix_r1.json"]}]
+        result = self.result([hits_row("PvP punches", "pvp_banded_by_client", sources=["hits/pvp_fix_r*.json"])], builds)
+        self.assertEqual(rows_of(result, "PvP punches")[0][1], "3/3")
+
+    def test_a_row_note_is_listed_once_with_the_row_label_and_a_row_without_one_adds_nothing(self):
+        builds = [{"label": "plain", "build": PLAIN}, {"label": "fix", "build": TIP_FIX}]
+        result = self.result([hits_row("static copy", "staticcrate_hit_by_client", note="no run, setup failed 3 times"), hits_row("PvP punches", "pvp_banded_by_client")], builds)
+        self.assertEqual([line for line in result["deviations"] if "setup failed" in line], ["static copy: no run, setup failed 3 times"])
+
+
 class BuildIdentityTests(unittest.TestCase):
     def test_without_a_stage_file_the_identity_is_the_start_of_the_reports_dll_hash(self):
         report = load("corpse/mixed_pr24.json")
