@@ -526,6 +526,15 @@ class SettledSetupTests(unittest.TestCase):
             crates.before_swing(self.client, context, 1, {"x": 45.0, "y": 470.0})
         self.assertEqual(seen, {"seat_y": 470.6})
 
+    def test_with_a_standing_height_the_reseat_closes_on_the_band_in_one_move_whatever_the_height_difference(self):
+        for height in (0.0, 0.6, 1.2):
+            with self.subTest(height=height):
+                seats = []
+                with mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}), mock.patch.object(crates.base, "player_position", lambda game: {"x": 10.0, "y": 5.0 + height}),                         mock.patch.object(crates, "seat_client", lambda game, seat: seats.append(seat)), mock.patch.object(crates.time, "sleep", lambda seconds: None):
+                    crates.ensure_band(None, mock.Mock(), "id:1", {"x": 20.0, "y": 5.0}, seat_y=5.0 + height)
+                seat = seats[0]
+                self.assertAlmostEqual(((20.0 - seat["x"]) ** 2 + (5.0 - seat["y"]) ** 2) ** 0.5, crates.BAND_TARGET, places=6)
+
     def test_the_first_swing_reseats_at_the_anchor_height(self):
         crates.STATE["anchor"] = {"x": 0.0, "y": 503.6}
         context = {"host": self.host, "hostHandle": "id:7", "position": {"x": 2.8, "y": 503.0}}

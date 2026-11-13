@@ -15,6 +15,7 @@ FAR_COLUMNS = (45.0, -45.0, 50.0, -50.0, 55.0, -55.0, 60.0, -60.0)
 MIN_FAR_DISTANCE = 40.0
 FAR_ATTEMPTS = 4
 OFFER_RADIUS = 60.0
+ADOPT_REACH_MARGIN = 0.5
 STATIC_HEALTH_HIGH = 20000.0
 OFFER_LIMIT = 15
 OFFER_MATCH_DISTANCE = 0.5
@@ -77,7 +78,7 @@ def static_offer_usable(offer):
     """A standing building is not a spawned crate, so its health may be far above the crate range: only a floor applies, so that one swing's damage shows."""
     low, high = world.HEALTH_RANGE[0], STATIC_HEALTH_HIGH
     described = offer["described"]
-    return (described is not None and offer["client"] is not None and offer["client"]["physicsActive"] is False and not described["animal"] and not described["cantHit"]
+    return (described is not None and offer["distance"] <= crates.BAND_HIGH + ADOPT_REACH_MARGIN and offer["client"] is not None and offer["client"]["physicsActive"] is False and not described["animal"] and not described["cantHit"]
             and not described["indestructible"] and "corpse" not in described["name"].lower() and low <= described["health"] <= high)
 
 

@@ -103,11 +103,11 @@ class PrepareHarness(unittest.TestCase):
 
 class StaticOfferTests(PrepareHarness):
     def rows(self):
-        return [{"object": {"id": 11, "name": "SyncInfo(building, id: 11, res: wallpanel)"}, "position": {"x": 14.0, "y": 100.0}},
+        return [{"object": {"id": 11, "name": "SyncInfo(building, id: 11, res: wallpanel)"}, "position": {"x": 12.8, "y": 100.0}},
                 {"object": {"id": 12, "name": "SyncInfo(building, id: 12, res: medcrate)"}, "position": {"x": 15.0, "y": 100.0}}]
 
     def client_rows(self):
-        return [{"object": {"id": -11, "name": "x"}, "position": {"x": 14.0, "y": 100.0}}, {"object": {"id": -12, "name": "x"}, "position": {"x": 15.0, "y": 100.0}}]
+        return [{"object": {"id": -11, "name": "x"}, "position": {"x": 12.8, "y": 100.0}}, {"object": {"id": -12, "name": "x"}, "position": {"x": 15.0, "y": 100.0}}]
 
     def described(self, host, row):
         return {"handle": "id:%d" % row["object"]["id"], "id": row["object"]["id"], "name": row["object"]["name"], "position": row["position"], "health": 500.0, "cantHit": False,
@@ -132,7 +132,7 @@ class StaticOfferTests(PrepareHarness):
         self.assertEqual([offer["kind"] for offer in offers], ["wallpanel", "medcrate"])
         self.assertEqual(offers[0]["clientHandle"], "id:-11")
         self.assertEqual((offers[0]["host"]["physicsActive"], offers[0]["client"]["physicsActive"]), (True, False))
-        self.assertEqual(offers[0]["distance"], 4.0)
+        self.assertEqual(offers[0]["distance"], 2.8)
 
     def test_only_a_building_whose_client_copy_is_static_and_that_can_be_hit_is_usable(self):
         offers = self.run_offer(False)
@@ -159,6 +159,13 @@ class StaticOfferTests(PrepareHarness):
         for patch in self.patches(client_active):
             patch.start()
             self.addCleanup(patch.stop)
+
+    def test_a_building_the_band_cannot_reach_is_never_adopted(self):
+        offers = self.run_offer(False)
+        far = dict(offers[0], distance=4.4)
+        self.assertFalse(static.static_offer_usable(far))
+        near = dict(offers[0], distance=3.6)
+        self.assertTrue(static.static_offer_usable(near))
 
     def test_a_standing_building_with_thousands_of_health_is_usable_as_a_static_target(self):
         offers = self.run_offer(False)

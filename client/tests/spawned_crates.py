@@ -270,7 +270,10 @@ def ensure_band(host, client, handle, fallback, side=-1, seat_y=None):
             return {"ok": True, "reseats": attempt, "distances": history, "offsets": offsets, "seat": seats[-1] if seats else None}
         if attempt == BAND_TRIES:
             break
-        if attempt > 0:
+        if seat_y is not None:
+            height = seat_y - crate["y"]
+            offset = math.sqrt(max(BAND_TARGET ** 2 - height ** 2, MIN_RESEAT_OFFSET ** 2))
+        elif attempt > 0:
             offset = max(MIN_RESEAT_OFFSET, offset + BAND_GAIN * (BAND_TARGET - distance))
         offsets.append(round(offset, 3))
         seat = {"x": crate["x"] + side * offset, "y": crate["y"] if seat_y is None else seat_y}
