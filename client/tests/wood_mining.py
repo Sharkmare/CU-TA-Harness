@@ -216,6 +216,16 @@ def setup_problems(context, identities):
     return problems
 
 
+def baseline_problems(baseline):
+    """The cell must be undamaged on both games before the first swing: damage left over from an earlier run (a block that stayed broken on one side only) would shorten the run."""
+    problems = []
+    for side in ("host", "client"):
+        reading = (baseline or {}).get(side)
+        if reading and reading[1] > 0:
+            problems.append("the %s already held %.1f damage for the cell before the first swing" % (side, reading[1]))
+    return problems
+
+
 def proxy_problems(report):
     """The proxy must show the delay that was asked for: the mean delay the client's packets got must be at least PROXY_DELAY_TOLERANCE of the planned one."""
     network = report.get("network") or {}
@@ -286,7 +296,7 @@ def extend_report(report, observation, run_logs, packets):
                 "hostCooldownSeconds": HOST_COOLDOWN_SECONDS, "ignoredAttempts": sum(entry["ignoredAttempts"] for entry in swings)}
     identities = context["identities"]
     client_units = damage_units(damage_steps(observation.samples, "client"), unit)
-    judged = judge_wood_run(context, report["findings"], identities, swings, client_units, proxy_problems(report))
+    judged = judge_wood_run(context, report["findings"], identities, swings, client_units, proxy_problems(report) + baseline_problems(getattr(observation, "baseline", None)))
     report["woodRun"] = dict(judged, swingsFired=len(swings), damage=record, bunching=bunching, scraps={"before": context.get("scrapsBefore"), "end": {side: final_scraps(observation.samples, side) for side in ("host", "client")}},
                              identities=identities)
     report["woodSwings"] = [dict(entry, arrivalEstimate=None if arrivals[index] is None else round(arrivals[index] - started, 3)) for index, entry in enumerate(swings)]

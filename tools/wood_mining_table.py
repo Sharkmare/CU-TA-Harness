@@ -16,12 +16,20 @@ RUN_HEADERS = ("run", "verdict", "swings", "client interval s (min / median / ma
 MISSING = "-"
 
 
+def pre_damaged(report):
+    return [side for side in ("host", "client") if report["baseline"][side][1] > 0]
+
+
 def load_runs(directory, network):
+    """The reports of one variant; a run whose cell held damage before the first swing is invalid whatever the report says (reports from before that rule are re-judged here)."""
     runs = []
     for path in sorted(glob.glob(os.path.join(directory, "wood_mining_*__%s_r*.json" % network))):
         with open(path, encoding="utf-8") as handle:
             report = json.load(handle)
         report["_name"] = os.path.basename(path)
+        left_over = pre_damaged(report)
+        if left_over and report["woodRun"]["verdict"] != "invalid":
+            report["woodRun"] = dict(report["woodRun"], verdict="invalid", reasons=list(report["woodRun"]["reasons"]) + ["the %s already held damage for the cell before the first swing" % " and ".join(left_over)])
         runs.append(report)
     return runs
 

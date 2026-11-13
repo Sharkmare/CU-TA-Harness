@@ -150,6 +150,28 @@ class BunchingTests(unittest.TestCase):
         self.assertIsNone(wood.distribution([]))
 
 
+class BaselineProblemTests(unittest.TestCase):
+    def test_damage_left_on_the_cell_before_the_first_swing_is_a_problem_per_side(self):
+        problems = wood.baseline_problems({"host": [11, 135.3], "client": [11, 0.0]})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("the host already held 135.3 damage", problems[0])
+
+    def test_an_undamaged_cell_or_no_baseline_is_fine(self):
+        self.assertEqual(wood.baseline_problems({"host": [11, 0.0], "client": [11, 0.0]}), [])
+        self.assertEqual(wood.baseline_problems(None), [])
+
+    def test_a_run_whose_cell_was_pre_damaged_is_invalid_in_the_report(self):
+        observation = ReportTests.Observation(good_context(), series(climb(3), climb(3)))
+        observation.baseline = {"host": [11, 135.3], "client": [11, 0.0]}
+        context = observation.context
+        context["identities"] = dict(GOOD_IDENTITIES)
+        context["seriesStarted"] = 100.0
+        context["woodSwings"] = [{"swing": index + 1, "invokedAt": 100.0 + moment, "ignoredAttempts": 0, "interval": None} for index, moment in enumerate([0.5, 0.7, 0.9, 1.1])]
+        report = {"findings": {"client": finding(0.4), "host": finding(0.4)}, "network": {"delay_ms": 0.0}, "proxyObserved": {}}
+        issues = wood.extend_report(report, observation, {"host": "", "client": ""}, [])
+        self.assertTrue(issues[0].startswith("INVALID: the host already held 135.3 damage"))
+
+
 class ProxyProblemTests(unittest.TestCase):
     def test_a_delay_the_proxy_did_not_give_is_a_problem(self):
         report = {"network": {"delay_ms": 100.0}, "proxyObserved": {"toHost": {"meanMs": 3.0}}}
