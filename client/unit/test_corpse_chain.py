@@ -166,8 +166,86 @@ class PrepareTests(unittest.TestCase):
         self.assertEqual(context["target"]["startPositions"], {"separation": 20.0})
 
 
+def reading(at, host, client, is_right=True, full=True):
+    result = {"at": at, "host": host, "client": client, "hostCantHit": True, "clientCantHit": False}
+    if full:
+        result["isRight"] = is_right
+        result["parked"] = {"linkRead": {"x": -2.0, "y": 5.0}, "holder": None, "paths": {}}
+    return result
+
+
+class BuildEntriesTests(unittest.TestCase):
+    def mark(self, swing, at, interval=None):
+        return {"swing": swing, "firedAt": at, "fired": True, "ignoredAttempts": 1, "interval": interval}
+
+    def test_the_health_before_is_the_last_reading_before_the_swing_and_after_the_first_at_or_after_it(self):
+        samples = [reading(1.0, 250.0, 250.0), reading(1.4, 250.0, 225.0), reading(1.9, 250.0, 250.0)]
+        entries = chain.build_entries([self.mark(1, 1.2), self.mark(2, 1.4, 0.2)], samples, 1.0, True)
+        self.assertEqual(entries[0]["clientHp"], [250.0, 225.0])
+        self.assertAlmostEqual(entries[0]["sampleLagSeconds"], 0.2)
+        self.assertEqual(entries[1]["clientHp"], [250.0, 225.0])
+        self.assertEqual((entries[0]["t"], entries[1]["intervalSincePrevious"], entries[1]["ignoredAttempts"]), (0.2, 0.2, 1))
+
+    def test_facing_and_the_parked_host_come_from_the_first_full_reading_after_the_swing(self):
+        samples = [reading(1.0, 250.0, 250.0), reading(1.3, 250.0, 250.0, full=False), reading(1.5, 250.0, 250.0, is_right=False)]
+        entry = chain.build_entries([self.mark(1, 1.1)], samples, 1.0, True)[0]
+        self.assertFalse(entry["facingCorpse"])
+        self.assertEqual(entry["parkedHost"]["linkRead"], {"x": -2.0, "y": 5.0})
+        entry_left = chain.build_entries([self.mark(1, 1.1)], samples, 1.0, False)[0]
+        self.assertTrue(entry_left["facingCorpse"])
+
+    def test_a_swing_after_the_last_reading_uses_the_last_reading(self):
+        entries = chain.build_entries([self.mark(1, 9.0)], [reading(1.0, 250.0, 250.0)], 0.0, True)
+        self.assertEqual(entries[0]["clientHp"], [250.0, 250.0])
+        self.assertIsNone(entries[0]["facingCorpse"])
+
+
+class SamplerThreadTests(unittest.TestCase):
+    def test_the_thread_collects_readings_until_stopped_and_counts_failures(self):
+        context = {"host": mock.Mock(), "hostHandle": "id:7", "clientHandle": "id:-7"}
+        with mock.patch.object(chain, "read_health", return_value=250.0), mock.patch.object(chain, "read_flag", return_value=True),                 mock.patch.object(chain.crates, "optional_read", return_value=True), mock.patch.object(chain.positioncontrol, "parked_snapshot", return_value={"linkRead": None, "holder": None, "paths": {}}):
+            sampler = chain.Sampler(mock.Mock(), context, [])
+            sampler.start()
+            deadline = chain.time.time() + 5.0
+            while len(sampler.samples) < 3 and chain.time.time() < deadline:
+                chain.time.sleep(0.005)
+            sampler.light = True
+            sampler.stop()
+        self.assertGreaterEqual(len(sampler.samples), 3)
+        self.assertIn("isRight", sampler.samples[0])
+        self.assertFalse(sampler.thread.is_alive())
+
+    def test_a_failing_read_is_counted_and_the_thread_keeps_going(self):
+        context = {"host": mock.Mock(), "hostHandle": "id:7", "clientHandle": "id:-7"}
+        with mock.patch.object(chain, "read_health", side_effect=RuntimeError("link")), mock.patch.object(chain, "SAMPLE_INTERVAL_SECONDS", 0.001):
+            sampler = chain.Sampler(mock.Mock(), context, [])
+            sampler.start()
+            deadline = chain.time.time() + 5.0
+            while sampler.failures < 2 and chain.time.time() < deadline:
+                chain.time.sleep(0.005)
+            sampler.stop()
+        self.assertGreaterEqual(sampler.failures, 2)
+        self.assertEqual(sampler.samples, [])
+
+    def test_the_sampling_summary_reports_the_gaps(self):
+        samples = [reading(0.0, 1.0, 1.0), reading(0.2, 1.0, 1.0), reading(0.7, 1.0, 1.0, full=False)]
+        summary = chain.sampling_summary(samples, mock.Mock(failures=0))
+        self.assertEqual((summary["samples"], summary["fullSamples"], summary["maxGapSeconds"]), (3, 2, 0.5))
+
+
+class StepSampler(chain.Sampler):
+    """The real sampler, stepped by the test instead of by a thread."""
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
 class ActTests(unittest.TestCase):
     def setUp(self):
+        self.sampler = None
         chain.reset_launch_state()
         crates.reset_launch_state()
         self.addCleanup(chain.reset_launch_state)
@@ -191,7 +269,16 @@ class ActTests(unittest.TestCase):
         position = {"x": self.parked_x[0] if self.parked_x else -2.0, "y": 5.0}
         return {"linkRead": position, "holder": position, "paths": {"rb.position": position}}
 
+    def make_sampler(self, client, context, paths):
+        self.sampler = StepSampler(client, context, paths)
+        return self.sampler
+
+    def sample(self):
+        if self.sampler is not None:
+            self.sampler.sample_once()
+
     def fire(self, game, aim, pause=None, attempts=None):
+        self.sample()
         self.fired.append(aim)
         self.clock[0] += 0.16
         if attempts is not None:
@@ -202,6 +289,7 @@ class ActTests(unittest.TestCase):
     def sleep(self, seconds):
         self.sleeps.append(seconds)
         self.clock[0] += seconds
+        self.sample()
 
     def patches(self, facing=True):
         look = {"x": CORPSE["x"], "y": CORPSE["y"]}
@@ -211,7 +299,7 @@ class ActTests(unittest.TestCase):
                 mock.patch.object(chain.hooks, "fire_one_swing", self.fire),
                 mock.patch.object(chain, "read_health", lambda game, handle: 250.0 if game is self.host else self.client_hp), mock.patch.object(chain, "read_flag", lambda game, handle: game is self.host),
                 mock.patch.object(chain.banded, "destroy"), mock.patch.object(chain.positioncontrol, "release_quietly"),
-                mock.patch.object(chain.positioncontrol, "parked_snapshot", self.parked_snapshot)]
+                mock.patch.object(chain.positioncontrol, "parked_snapshot", self.parked_snapshot), mock.patch.object(chain, "make_sampler", self.make_sampler)]
 
     def run_act(self, context, facing=True):
         patches = self.patches(facing)
@@ -284,8 +372,9 @@ class ActTests(unittest.TestCase):
         self.run_act(context)
         prediction = context["target"]["prediction"]
         self.assertTrue(prediction["verdict"].startswith("confounded"))
-        self.assertTrue(any("at swing %d" % close_at_swing in problem and "rb.position" in problem for problem in prediction["confoundedBy"]), prediction["confoundedBy"])
+        self.assertTrue(any("rb.position" in problem for problem in prediction["confoundedBy"]), prediction["confoundedBy"])
         self.assertEqual(len(prediction["confoundedBy"]), 1)
+        self.assertIn("at sample %d" % (close_at_swing + 1), prediction["confoundedBy"][0])
 
     def test_a_parked_host_with_no_readable_position_labels_the_result_confounded(self):
         context = self.context()
@@ -320,7 +409,7 @@ class ActTests(unittest.TestCase):
         target = context["target"]
         self.assertTrue(target["facingBefore"]["facingCorpse"])
         self.assertFalse(target["facingAfterFirstSwing"]["facingCorpse"])
-        self.assertEqual(target["reaimedAfterSwing"], list(range(1, chain.SWINGS + 1)))
+        self.assertEqual(target["reaimedAfterSwing"], list(range(2, chain.SWINGS + 1)))
         self.assertTrue(target["prediction"]["verdict"].startswith("confounded"))
         self.assertTrue(any("faced away" in problem for problem in target["holdProblems"]))
         self.assertEqual(chain.check(context), [])

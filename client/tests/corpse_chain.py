@@ -1,3 +1,4 @@
+import threading
 import time
 import unittest
 
@@ -24,6 +25,7 @@ MAX_SWING_DISTANCE = 4.5
 AFTER_LAST_SWING_SECONDS = 2.0
 FACING_SETTLE_SECONDS = 0.5
 SAMPLE_INTERVAL_SECONDS = 0.1
+SAMPLER_JOIN_SECONDS = 5.0
 RETURN_TOLERANCE_FRACTION = 0.05
 HEALTH_DROP_EPSILON = 0.5
 PARK_DIRECTION = "left"
@@ -103,10 +105,11 @@ def hold_problems(snapshots, entries):
     return problems
 
 
-def point_mouse_at(client, corpse):
+def point_mouse_at(client, corpse, settle=FACING_SETTLE_SECONDS):
     """The game turns the body toward the mouse every frame, so the injected mouse has to sit on the corpse for the body to face it."""
     client.call("mouse", wx=corpse["x"], wy=corpse["y"])
-    time.sleep(FACING_SETTLE_SECONDS)
+    if settle:
+        time.sleep(settle)
 
 
 def release_mouse_quietly(client):
@@ -139,29 +142,81 @@ def prepare(host, client):
     return {"position": corpse, "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"], "target": target, "measurements": [], "samples": []}
 
 
-def record_swing(index, started, fired, before, after, context, client, fired_at=None):
-    host = context["host"]
-    return {"swing": index, "t": round((time.time() if fired_at is None else fired_at) - started, 3), "fired": fired, "hostHp": [before["host"], after["host"]], "clientHp": [before["client"], after["client"]],
-            "hostCantHit": read_flag(host, context["hostHandle"]), "clientCantHit": read_flag(client, context["clientHandle"])}
+class Sampler:
+    """Reads the corpse copies, the facing and the parked host on its own thread, so the swing loop only fires swings and the swing rate stays the cooldown's rate."""
+
+    def __init__(self, client, context, parked_paths):
+        self.client = client
+        self.context = context
+        self.parked_paths = parked_paths
+        self.samples = []
+        self.light = False
+        self.failures = 0
+        self.stop_event = threading.Event()
+        self.thread = None
+
+    def sample_once(self):
+        host = self.context["host"]
+        reading = {"host": read_health(host, self.context["hostHandle"]), "client": read_health(self.client, self.context["clientHandle"]),
+                   "hostCantHit": read_flag(host, self.context["hostHandle"]), "clientCantHit": read_flag(self.client, self.context["clientHandle"])}
+        reading["at"] = time.time()
+        if not self.light:
+            reading["isRight"] = crates.optional_read(self.client, "isRight")
+            reading["parked"] = positioncontrol.parked_snapshot(host, self.parked_paths)
+        self.samples.append(reading)
+
+    def run(self):
+        while not self.stop_event.is_set():
+            try:
+                self.sample_once()
+            except Exception:
+                self.failures += 1
+                time.sleep(SAMPLE_INTERVAL_SECONDS)
+
+    def start(self):
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        self.stop_event.set()
+        if self.thread is not None:
+            self.thread.join(timeout=SAMPLER_JOIN_SECONDS)
+
+    def latest_full(self):
+        return next((reading for reading in reversed(self.samples) if "isRight" in reading), None)
 
 
-def read_both(client, context):
-    return {"host": read_health(context["host"], context["hostHandle"]), "client": read_health(client, context["clientHandle"])}
+def make_sampler(client, context, parked_paths):
+    return Sampler(client, context, parked_paths)
 
 
-def sample_after(client, context, started, seconds):
-    samples = []
-    deadline = time.time() + seconds
-    while time.time() < deadline:
-        samples.append({"t": round(time.time() - started, 3), **read_both(client, context),
-                        "hostCantHit": read_flag(context["host"], context["hostHandle"]), "clientCantHit": read_flag(client, context["clientHandle"])})
-        time.sleep(SAMPLE_INTERVAL_SECONDS)
-    return samples
+def build_entries(marks, samples, started, corpse_is_right):
+    """One entry per swing from the sampler's readings: the health before is the last reading before the swing, the health after is the first reading at or after it."""
+    entries = []
+    for mark in marks:
+        fired_at = mark["firedAt"]
+        before = next((reading for reading in reversed(samples) if reading["at"] < fired_at), None)
+        after = next((reading for reading in samples if reading["at"] >= fired_at), None)
+        before = before or after or samples[-1]
+        after = after or samples[-1]
+        full = next((reading for reading in samples if reading["at"] >= fired_at and "isRight" in reading), None)
+        entries.append({"swing": mark["swing"], "t": round(fired_at - started, 3), "fired": mark["fired"], "hostHp": [before["host"], after["host"]], "clientHp": [before["client"], after["client"]],
+                        "hostCantHit": after["hostCantHit"], "clientCantHit": after["clientCantHit"], "ignoredAttempts": mark["ignoredAttempts"], "intervalSincePrevious": mark["interval"],
+                        "sampleLagSeconds": round(after["at"] - fired_at, 3), "isRight": None if full is None else full["isRight"],
+                        "facingCorpse": None if full is None else full["isRight"] is corpse_is_right, "parkedHost": None if full is None else full["parked"]})
+    return entries
+
+
+def sampling_summary(samples, sampler):
+    gaps = sorted(round(later["at"] - earlier["at"], 3) for earlier, later in zip(samples, samples[1:]))
+    return {"samples": len(samples), "fullSamples": len([reading for reading in samples if "isRight" in reading]), "failures": sampler.failures,
+            "medianGapSeconds": gaps[len(gaps) // 2] if gaps else None, "maxGapSeconds": gaps[-1] if gaps else None}
 
 
 def act(client, context):
     host = context["host"]
     target = context["target"]
+    sampler = None
     try:
         if not target["positionControl"]["ok"]:
             context["positionFailure"] = target["positionControl"]
@@ -177,42 +232,48 @@ def act(client, context):
         if distance > MAX_SWING_DISTANCE:
             context["positionFailure"] = {"ok": False, "issues": ["the client is %.2f from the corpse, beyond %.1f" % (distance, MAX_SWING_DISTANCE)]}
             return
-        started = time.time()
-        entries = context["measurements"]
+        corpse_is_right = side_of(target["positionControl"]["clientTarget"], corpse) > 0
         snapshots = target["holds"] = {"beforeFirstSwing": hold_snapshot(host, client)}
-        before = read_both(client, context)
+        sampler = make_sampler(client, context, target["positionControl"]["parkedHost"]["paths"])
+        sampler.start()
+        started = time.time()
+        marks = []
         previous_fired_at = None
-        parked_paths = target["positionControl"]["parkedHost"]["paths"]
         for index in range(1, SWINGS + 1):
             attempts = {"ignored": 0}
-            fired = hooks.fire_one_swing(client, corpse_point(host, context), pause=SWING_POLL_SECONDS, attempts=attempts)
+            fired = hooks.fire_one_swing(client, corpse, pause=SWING_POLL_SECONDS, attempts=attempts)
             fired_at = time.time()
-            after = read_both(client, context)
-            entries.append(record_swing(index, started, fired, before, after, context, client, fired_at))
-            entries[-1]["ignoredAttempts"] = attempts["ignored"]
-            entries[-1]["parkedHost"] = positioncontrol.parked_snapshot(host, parked_paths)
-            entries[-1]["intervalSincePrevious"] = None if previous_fired_at is None else round(fired_at - previous_fired_at, 3)
+            marks.append({"swing": index, "firedAt": fired_at, "fired": fired, "ignoredAttempts": attempts["ignored"], "interval": None if previous_fired_at is None else round(fired_at - previous_fired_at, 3)})
             previous_fired_at = fired_at
-            before = after
-            facing = facing_record(client, corpse_point(host, context))
-            entries[-1]["facingCorpse"] = facing["facingCorpse"]
-            if index == 1:
-                target["facingAfterFirstSwing"] = facing
-            if not facing["facingCorpse"]:
+            latest = sampler.latest_full()
+            if latest is not None and latest["isRight"] is not corpse_is_right:
                 target["reaimedAfterSwing"] = target.get("reaimedAfterSwing", []) + [index]
-                point_mouse_at(client, corpse_point(host, context))
+                point_mouse_at(client, corpse, settle=0.0)
+        sampler.light = True
+        deadline = time.time() + AFTER_LAST_SWING_SECONDS
+        while time.time() < deadline:
+            time.sleep(SAMPLE_INTERVAL_SECONDS)
+        sampler.stop()
+        samples = list(sampler.samples)
+        entries = context["measurements"]
+        entries.extend(build_entries(marks, samples, started, corpse_is_right))
+        target["facingAfterFirstSwing"] = {"isRight": entries[0]["isRight"], "corpseIsRight": corpse_is_right, "facingCorpse": entries[0]["facingCorpse"]}
         target["swingRate"] = swing_rate(entries)
+        target["sampling"] = sampling_summary(samples, sampler)
         snapshots["afterLastSwing"] = hold_snapshot(host, client)
-        context["samples"] = sample_after(client, context, started, AFTER_LAST_SWING_SECONDS)
+        context["samples"] = [{"t": round(reading["at"] - started, 3), "host": reading["host"], "client": reading["client"], "hostCantHit": reading["hostCantHit"], "clientCantHit": reading["clientCantHit"]}
+                              for reading in samples if reading["at"] > marks[-1]["firedAt"]]
         target["samples"] = context["samples"]
         snapshots["end"] = hold_snapshot(host, client)
         prediction = evaluate(entries, context["samples"], target["hostFlags"], target["clientFlags"])
-        problems = hold_problems(snapshots, entries) + parked_problems(target, entries, target["positionControl"]["clientTarget"], corpse)
+        problems = hold_problems(snapshots, entries) + parked_problems(target, samples, target["positionControl"]["clientTarget"], corpse)
         target["holdProblems"] = problems
         if problems:
             prediction = dict(prediction, ifRead=prediction["verdict"], verdict="confounded: the corpse result is not read against the prediction", confoundedBy=problems)
         target["prediction"] = prediction
     finally:
+        if sampler is not None:
+            sampler.stop()
         banded.destroy(host, context["hostHandle"])
         release_mouse_quietly(client)
         positioncontrol.release_quietly(client)
@@ -227,12 +288,12 @@ def swing_rate(entries):
             "ignoredAttemptsTotal": sum(entry.get("ignoredAttempts") or 0 for entry in entries)}
 
 
-def parked_problems(target, entries, client_point, corpse):
+def parked_problems(target, samples, client_point, corpse):
     """The parked host is not held strictly, so what matters for the swing is that it never comes closer than MIN_PARKED_DISTANCE to the client or the corpse, by the nearest of
-    its position reads. Anything closer, or nothing readable, labels the corpse result confounded."""
+    its position reads, at the preflight and at every sampler reading during the chain. Anything closer, or nothing readable, labels the corpse result confounded."""
     parked = target["positionControl"]["parkedHost"]
     moments = [("preflight read %d" % number, snapshot) for number, snapshot in enumerate(parked["observations"], 1)] + [("after preflight", parked["afterPreflight"])]
-    moments += [("swing %d" % entry["swing"], entry.get("parkedHost")) for entry in entries]
+    moments += [("sample %d" % number, reading.get("parked")) for number, reading in enumerate(samples, 1) if "isRight" in reading]
     closest = []
     problems = []
     for moment, snapshot in moments:
