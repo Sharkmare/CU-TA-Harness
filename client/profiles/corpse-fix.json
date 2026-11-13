@@ -5,6 +5,7 @@
     ".state/corpse_run*/*.json",
     ".state/corpse_dune/*.json",
     ".state/corpse_milky/*.json",
+    ".state/plain3*_reports/*.json",
     ".state/corpse_fix2*/*.json",
     ".state/fix2mining_reports/*.json",
     ".state/fix2hits2_reports/*.json",
@@ -42,9 +43,6 @@
     }
   ],
   "builds": {
-    "pr24-corpse-verbose": {
-      "stageDll": "../Private CU together/build/stage_pr24_corpse_verbose/plugins/Together/CasualtiesMP.dll"
-    },
     "pr24-3d060fe-corpse-fix2": {
       "stageDll": "../Private CU together/build/stage_pr24_3d060fe_corpse_fix2/plugins/Together/CasualtiesMP.dll"
     },
@@ -61,11 +59,11 @@
       "title": null,
       "builds": [
         {
-          "label": "PR24",
-          "build": "pr24-corpse-verbose"
+          "label": "plain 3d060fe",
+          "build": "pr24-3d060fe-plain"
         },
         {
-          "label": "PR24+fix",
+          "label": "3d060fe + fix",
           "build": "pr24-3d060fe-corpse-fix2"
         }
       ],
@@ -90,7 +88,7 @@
           "planned_runs": 1,
           "role": "MAIN",
           "expect": {
-            "PR24+fix": {
+            "3d060fe + fix": {
               "broke": "sw11"
             }
           }
@@ -101,7 +99,7 @@
           "planned_runs": 1,
           "role": "MAIN",
           "expect": {
-            "PR24+fix": {
+            "3d060fe + fix": {
               "broke": "sw11"
             }
           }
@@ -112,7 +110,7 @@
           "planned_runs": 1,
           "role": "MAIN",
           "expect": {
-            "PR24+fix": {
+            "3d060fe + fix": {
               "broke": "never"
             }
           }
@@ -123,7 +121,7 @@
           "planned_runs": 1,
           "role": "MAIN",
           "expect": {
-            "PR24+fix": {
+            "3d060fe + fix": {
               "broke": "never"
             }
           }
@@ -132,18 +130,18 @@
     },
     {
       "kind": "metric_rows",
-      "title": "mining and startup, plain 3d060fe vs fix (transpiler form)",
+      "title": "mining and startup, plain 3d060fe vs 3d060fe + fix (transpiler form)",
       "row_label": "test",
       "builds": [
         {
-          "label": "plain",
+          "label": "plain 3d060fe",
           "build": "pr24-3d060fe-plain",
           "sources": [
             ".state/plainmining_reports/*.json"
           ]
         },
         {
-          "label": "fix",
+          "label": "3d060fe + fix",
           "build": "pr24-3d060fe-corpse-fix2",
           "sources": [
             ".state/fix2mining_reports/*.json"
@@ -159,7 +157,7 @@
           "planned_runs": 15,
           "role": "REGRESSION",
           "expect": {
-            "fix": "all"
+            "3d060fe + fix": "all"
           }
         },
         {
@@ -171,7 +169,7 @@
     },
     {
       "kind": "metric_rows",
-      "title": "fix (transpiler form), gated swings, two launches (gate rest pose / gate reach)",
+      "title": "3d060fe + fix (transpiler form), gated swings, two launches (gate rest pose / gate reach)",
       "row_label": "test",
       "builds": [
         {
@@ -216,15 +214,15 @@
     },
     {
       "kind": "metric_rows",
-      "title": "earlier fix stage fea4725f (flag form), plain 3d060fe vs fix",
+      "title": "earlier fix stage fea4725f (flag form), plain 3d060fe vs 3d060fe + fix (flag form)",
       "row_label": "test",
       "builds": [
         {
-          "label": "plain",
+          "label": "plain 3d060fe",
           "build": "pr24-3d060fe-plain"
         },
         {
-          "label": "fix (flag form)",
+          "label": "3d060fe + fix (flag form)",
           "build": "pr24-3d060fe-corpse-fix"
         }
       ],
@@ -239,7 +237,7 @@
           ],
           "role": "REGRESSION",
           "expect": {
-            "fix (flag form)": "all"
+            "3d060fe + fix (flag form)": "all"
           },
           "note": "earlier stage: 3 runs of 5 punches, 15 of 15 punches landed"
         },
@@ -253,7 +251,7 @@
           ],
           "role": "REGRESSION",
           "expect": {
-            "fix (flag form)": "all"
+            "3d060fe + fix (flag form)": "all"
           },
           "note": "earlier stage: 6 runs of 5 swings, 30 of 30 swings landed"
         },
@@ -284,7 +282,7 @@
           ],
           "role": "REGRESSION",
           "expect": {
-            "fix (flag form)": "all"
+            "3d060fe + fix (flag form)": "all"
           }
         },
         {
