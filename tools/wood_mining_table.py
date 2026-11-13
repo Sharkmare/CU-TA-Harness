@@ -10,9 +10,9 @@ import statistics
 import sys
 
 HEADERS = ("variant", "client", "network", "valid", "REVERSION", "swings per run", "client swing interval s (min / median / max)", "host arrival spacing s (min, estimated)",
-           "arrivals under 0.124 s", "host swings applied vs client", "scraps per break (client / host)")
+           "arrivals under 0.124 s", "host cooldown drops (host log) / predicted", "host swings applied vs client", "scraps per break (client / host)")
 RUN_HEADERS = ("run", "verdict", "swings", "client interval s (min / median / max)", "host arrival spacing s (min / median / max)", "arrivals under 0.124 s", "predicted host drops",
-               "client swings applied", "host swings applied", "reappeared (client)")
+               "host cooldown drops (host log)", "client broke s", "host broke s", "client block back at s (gone for)", "client swings applied", "host swings applied")
 MISSING = "-"
 
 
@@ -60,13 +60,15 @@ def summarize(label, runs, client_name, network):
     spacing_min = [run["woodRun"]["bunching"]["hostArrivalSpacings"]["min"] for run in valid if run["woodRun"]["bunching"]["hostArrivalSpacings"]]
     under = sum(run["woodRun"]["bunching"]["arrivalsUnderCooldown"] for run in valid)
     estimated = sum(run["woodRun"]["bunching"]["arrivalsEstimated"] for run in valid)
+    log_drops = sum((run.get("hostLog") or {}).get("cooldownDrops", 0) for run in valid)
+    predicted = sum(run["woodRun"]["bunching"]["predictedHostDrops"] for run in valid)
     applied_client = sum(run["woodRun"]["damage"]["clientSwingsApplied"] for run in valid)
     applied_host = sum(run["woodRun"]["damage"]["hostSwingsApplied"] for run in valid)
     made = [scraps_made(run) for run in valid]
     return [label, client_name, network, "%d/%d%s" % (len(valid), len(runs), "" if not invalid else " (%d invalid)" % invalid),
             ("%d%s" % (len(reversions), " (%s)" % timing if timing else "")) if valid else MISSING,
             join_unique(run["woodRun"]["swingsFired"] for run in valid), interval_extremes(valid),
-            MISSING if not spacing_min else "%.3f" % min(spacing_min), "%d of %d" % (under, estimated), "%d vs %d" % (applied_host, applied_client),
+            MISSING if not spacing_min else "%.3f" % min(spacing_min), "%d of %d" % (under, estimated), "%d / %d" % (log_drops, predicted), "%d vs %d" % (applied_host, applied_client),
             join_unique("%s / %s" % (item["client"], item["host"]) for item in made)]
 
 
@@ -77,8 +79,9 @@ def run_rows(runs):
         bunching = wood["bunching"]
         reappeared = wood.get("clientReappeared") or []
         rows.append([run["_name"].split("__")[-1][:-5], wood["verdict"] + ("" if not wood["reasons"] else ": " + "; ".join(wood["reasons"])), wood["swingsFired"], triple(bunching["clientIntervals"]),
-                     triple(bunching["hostArrivalSpacings"]), bunching["arrivalsUnderCooldown"], bunching["predictedHostDrops"], wood["damage"]["clientSwingsApplied"],
-                     wood["damage"]["hostSwingsApplied"], MISSING if not reappeared else "%.2f s" % reappeared[0]["goneFor"]])
+                     triple(bunching["hostArrivalSpacings"]), bunching["arrivalsUnderCooldown"], bunching["predictedHostDrops"], (run.get("hostLog") or {}).get("cooldownDrops", MISSING),
+                     wood.get("clientBrokeAt", MISSING), wood.get("hostBrokeAt", MISSING),
+                     MISSING if not reappeared else "%.2f (%.2f s)" % (reappeared[0]["t"], reappeared[0]["goneFor"]), wood["damage"]["clientSwingsApplied"], wood["damage"]["hostSwingsApplied"]])
     return rows
 
 
