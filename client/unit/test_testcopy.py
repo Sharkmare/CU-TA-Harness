@@ -72,5 +72,11 @@ class TestCopyTests(unittest.TestCase):
             testcopy.make_copy(self.destination, self.source, remove_single_instance=True)
 
 
+class RepositoryRootTests(unittest.TestCase):
+    def test_the_repository_root_is_the_folder_holding_client_and_plugin(self):
+        self.assertTrue(os.path.isfile(os.path.join(testcopy.REPO_ROOT, "client", "run_tests.py")))
+        self.assertTrue(os.path.isdir(os.path.join(testcopy.REPO_ROOT, "plugin")))
+
+
 if __name__ == "__main__":
     unittest.main()
