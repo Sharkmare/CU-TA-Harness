@@ -90,6 +90,32 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(gates, [])
         self.assertEqual(verdict["values"]["limb"]["limb1ToTarget"], 4.07)
 
+    def test_a_limb_off_its_rest_pose_but_in_reach_passes_when_the_rest_pose_is_not_gated(self):
+        state = good_state()
+        state["pose"]["limb1"] = {"x": 0.5, "y": -2.2}
+        gates, verdict = failed_gates(state, good_spec(restPoseGated=False))
+        self.assertEqual(gates, [])
+        self.assertGreater(verdict["values"]["limb"]["limb1Moved"], swinggate.LIMB_POSE_TOLERANCE)
+
+    def test_a_limb_off_its_rest_pose_fails_when_the_rest_pose_is_gated(self):
+        state = good_state()
+        state["pose"]["limb1"] = {"x": 0.5, "y": -2.2}
+        self.assertEqual(failed_gates(state, good_spec(restPoseGated=True))[0], ["limb"])
+
+    def test_a_limb_out_of_reach_never_fires_even_when_the_rest_pose_is_not_gated(self):
+        state = good_state()
+        state["pose"]["limb1"] = {"x": -4.0, "y": -2.2}
+        gates, verdict = failed_gates(state, good_spec(restPoseGated=False))
+        self.assertEqual(gates, ["limb"])
+        self.assertTrue(any("from the target (reach" in item["detail"] for item in verdict["failures"]))
+
+    def test_the_other_gates_still_hold_when_the_rest_pose_is_not_gated(self):
+        for change, gate in ((lambda s: s["pose"].__setitem__("isRight", False), "facing"), (lambda s: s["pose"].__setitem__("cooldown", 0.4), "cooldown"),
+                             (lambda s: s["pose"]["snapshot"]["paths"].__setitem__("rb.position", {"x": 0.5, "y": 0.0}), "seat")):
+            state = good_state()
+            change(state)
+            self.assertIn(gate, failed_gates(state, good_spec(restPoseGated=False))[0])
+
     def test_without_a_rest_pose_nothing_is_fired(self):
         gates, verdict = failed_gates(good_state(), good_spec(rest=None))
         self.assertEqual(gates, ["limb"])
@@ -303,6 +329,24 @@ class WaitReadyTests(unittest.TestCase):
         verdict = self.run_wait(self.gate_with([self.failed(), self.failed("seat"), self.passed()]))
         self.assertTrue(verdict["passed"])
         self.assertEqual(verdict["waitedReads"], 2)
+
+    def test_only_the_first_swing_is_gated_on_the_rest_pose(self):
+        state = good_state()
+        state["pose"]["limb1"] = {"x": 0.5, "y": -2.2}
+        gate = swinggate.Gate(good_spec(), lambda: state["target"])
+        with mock.patch.object(swinggate, "read_pose", lambda client, paths: state["pose"]):
+            first = gate.check(mock.Mock())
+            clock = [0.0]
+            gate.wait_ready(mock.Mock(), sleep=lambda s: clock.__setitem__(0, clock[0] + s), now=lambda: clock[0], timeout=0.3)
+            self.assertEqual(gate.swings_passed, 0)
+            state["pose"]["limb1"] = {"x": 0.5, "y": -0.2}
+            gate.wait_ready(mock.Mock())
+            self.assertEqual(gate.swings_passed, 1)
+            state["pose"]["limb1"] = {"x": 0.5, "y": -2.2}
+            clock[0] = 0.0
+            second = gate.wait_ready(mock.Mock(), sleep=lambda s: clock.__setitem__(0, clock[0] + s), now=lambda: clock[0], timeout=0.3)
+        self.assertEqual([item["gate"] for item in first["failures"]], ["limb"])
+        self.assertTrue(second["passed"])
 
     def test_a_gate_that_never_passes_times_out_failed_and_nothing_is_fired(self):
         verdict = self.run_wait(self.gate_with([self.failed()]), timeout=1.0)

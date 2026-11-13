@@ -141,7 +141,8 @@ class ActTests(ActHarness):
         entry = context["measurements"][1]
         geometry = entry["geometry"]
         self.assertEqual(set(geometry), {"clientPosition", "victimHostPosition", "victimClientPosition", "distance", "distanceToClientCopy", "movedSincePreviousPunch",
-                                         "idleDriftPerSecond", "victimConscious", "side", "limb1Position", "limb1ToBodyDistance", "aimIsBodyCentre"})
+                                         "idleDriftPerSecond", "victimConscious", "side", "limb1Position", "limb1ToBodyDistance", "aimIsBodyCentre", "facingAfter"})
+        self.assertEqual(set(geometry["facingAfter"]), {"isRight", "victimIsRight"})
         self.assertEqual(context["measurements"][0]["geometry"]["movedSincePreviousPunch"], None)
         self.assertAlmostEqual(geometry["movedSincePreviousPunch"], 0.0, places=2)
         self.assertEqual(geometry["victimConscious"], True)

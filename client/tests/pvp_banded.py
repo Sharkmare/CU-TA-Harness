@@ -232,6 +232,7 @@ def run_punches(host, client, context, entries, accept_range):
         time.sleep(hooks.SETTLE_AFTER_SWING_SECONDS)
         after = (hooks.limb_total(host, context["hostVictim"]), hooks.limb_total(client, context["clientVictim"]), round(float(host.get(context["hostVictim"], base.BODY_PATH, depth=0)["x"]), 3))
         lines = {which: evidence.new_lines(marks[which], evidence.read_log(which)) for which in ("host", "client")}
+        geometry["facingAfter"] = {"isRight": crates.optional_read(client, "isRight"), "victimIsRight": victim["x"] > player["x"]}
         previous_after = victim_position(host, context["hostVictim"])
         entries.append({"swing": index, "fired": fired, "host": [before[0], after[0]], "client": [before[1], after[1]], "extra": [before[2], after[2]],
                         "hostDelta": round(before[0] - after[0], 3), "clientDelta": round(before[1] - after[1], 3), "band": band, "geometry": geometry, "gate": verdict,

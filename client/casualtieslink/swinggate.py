@@ -2,7 +2,7 @@
 
 A run is all or nothing. A swing is fired only when, read fresh at that moment, the body sits on its seat (holder view and rb.position), the swinging limbs are where the rest pose
 puts them and within reach of the target, the body faces the target, the attack cooldown is ready, the target is present, the distance is inside the band and no other body is
-inside the swing box. A swing that fails the gate is not fired and the run is INVALID. A swing that was fired with every gate passed and still did not land is a FAIL: a finding
+inside the swing box. The first swing of a run is also gated on the limb rest pose; later swings are not, because the limb and body recoil after a swing and a swing is judged by whether the limb is within reach. A swing that fails the gate is not fired and the run is INVALID. A swing that was fired with every gate passed and still did not land is a FAIL: a finding
 about the product, reported apart from the invalid runs.
 """
 import math
@@ -89,7 +89,7 @@ def judge(state, spec):
     for name in ("limb0", "limb1"):
         current = offset(pose[name], body)
         limb_values[name] = current
-        gated = name in spec.get("gatedLimbs", GATED_LIMBS)
+        gated = name in spec.get("gatedLimbs", GATED_LIMBS) and spec.get("restPoseGated", True)
         if rest is None or rest.get(name) is None:
             if gated:
                 failures.append({"gate": "limb", "detail": "no rest pose for %s" % name})
@@ -140,16 +140,21 @@ class Gate:
         self.parked_game = parked_game
         self.parked_paths = list(parked_paths)
         self.settle_record = None
+        self.swings_passed = 0
+        self.last_aim = None
 
     def aim(self, client, settle=0.0, sleep=None):
         """Put the injected mouse on the target: the game turns the body toward the mouse every frame, so a body that is not aimed turns away from the target between swings."""
         position = (self.read_target() or {}).get("position")
+        self.last_aim = {"target": position, "sent": False, "error": None}
         if position is None:
             return False
         try:
             client.call("mouse", wx=position["x"], wy=position["y"])
-        except Exception:
+        except Exception as failure:
+            self.last_aim["error"] = str(failure)[:120]
             return False
+        self.last_aim["sent"] = True
         if settle:
             (sleep or time.sleep)(settle)
         return True
@@ -180,13 +185,17 @@ class Gate:
             verdict = self.check(client)
             waited += 1
         verdict["waitedReads"] = waited
+        if verdict["passed"]:
+            self.swings_passed += 1
         return verdict
 
     def check(self, client):
         self.aim(client)
         state = {"pose": read_pose(client, self.client_paths), "target": self.read_target() or {}}
         state["parked"] = None if self.parked_game is None else positioncontrol.parked_snapshot(self.parked_game, self.parked_paths)
-        return judge(state, self.spec)
+        verdict = judge(state, dict(self.spec, restPoseGated=self.swings_passed == 0))
+        verdict["aim"] = self.last_aim
+        return verdict
 
 
 def gate_reason(failure):
