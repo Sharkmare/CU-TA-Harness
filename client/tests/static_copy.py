@@ -14,6 +14,9 @@ FAR_COLUMNS = (45.0, -45.0, 50.0, -50.0, 55.0, -55.0, 60.0, -60.0)
 MIN_FAR_DISTANCE = 40.0
 FAR_ATTEMPTS = 4
 OFFER_RADIUS = 60.0
+LIMB_REACH = 4.0
+LIMB_SETTLE_TIMEOUT_SECONDS = 6.0
+LIMB_POLL_SECONDS = 0.15
 OFFER_LIMIT = 15
 OFFER_MATCH_DISTANCE = 0.5
 POCKET_ROWS = 4
@@ -122,6 +125,9 @@ def prepare(host, client):
                 STATE["adopted"] += 1
                 return context
         if pocket is None:
+            if STATE["offers"] is None:
+                STATE["offers"] = offer_summary(world_offer(host, client, anchor))
+                print("STATIC OFFER: no usable far pocket after %d attempts; buildings within %.0f of the client: %s" % (len(states), OFFER_RADIUS, STATE["offers"]))
             fail_setup("no-far-pocket", "no open pocket %s to %s tiles from the client at (%.1f, %.1f) in a world half width of %d, farther than %.0f; copy states so far %s; buildings the world offers within %.0f (none usable as a static target) %s" % (
                 FAR_COLUMNS[0], FAR_COLUMNS[-1], anchor["x"], anchor["y"], half_width, far_distance, states, OFFER_RADIUS, STATE["offers"]))
         try:
@@ -174,6 +180,26 @@ def approach(host, client, context):
     return timeline
 
 
+def wait_for_limbs(host, client, context):
+    """After the one-step move the client's arm limb can lag the body by 9 units (every missed swing of the last static runs had limb 1 about 8 to 10 below the body, every landed one had it 2.4 to 3.6 from the crate), so the swings wait until limb 1 is within LIMB_REACH of the crate on two readings in a row."""
+    handle = context["hostHandle"]
+    started = time.time()
+    rows = []
+    near = 0
+    while time.time() - started < LIMB_SETTLE_TIMEOUT_SECONDS:
+        crate = world.host_position(host, handle) or context["position"]
+        limb = crates.point_of(crates.optional_read(client, "limbs[1].transform.position"))
+        distance = None if limb is None else round(base.distance(limb, crate), 3)
+        rows.append({"seconds": round(time.time() - started, 2), "limb1ToCrate": distance})
+        near = near + 1 if distance is not None and distance <= LIMB_REACH else 0
+        if near >= 2:
+            context["target"]["limbSettle"] = {"ok": True, "rows": rows}
+            return True
+        time.sleep(LIMB_POLL_SECONDS)
+    context["target"]["limbSettle"] = {"ok": False, "rows": rows}
+    return False
+
+
 def return_to_anchor(client, context):
     anchor = context.get("anchor")
     if anchor is None:
@@ -188,6 +214,7 @@ def return_to_anchor(client, context):
 def act(client, context):
     try:
         approach(context["host"], client, context)
+        wait_for_limbs(context["host"], client, context)
         world.act(client, context, before_swing=crates.before_swing)
         first = (context["measurements"] or [{}])[0]
         copy_at_swing = ((first.get("physics") or {}).get("client") or {}).get("physicsActive")

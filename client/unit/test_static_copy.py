@@ -155,7 +155,7 @@ class StaticOfferTests(PrepareHarness):
 
     def test_an_adopted_building_is_never_destroyed_by_the_cleanup(self):
         context = {"host": self.host, "hostHandle": "id:11", "target": {"adopted": True}, "measurements": [], "anchor": None}
-        with mock.patch.object(static, "approach", lambda *a: None), mock.patch.object(static.world, "act", lambda *a, **k: None), mock.patch.object(static, "return_to_anchor", lambda *a: None):
+        with mock.patch.object(static, "wait_for_limbs", lambda *a: None), mock.patch.object(static, "approach", lambda *a: None), mock.patch.object(static.world, "act", lambda *a, **k: None), mock.patch.object(static, "return_to_anchor", lambda *a: None):
             static.act(self.client, context)
         self.host.set.assert_not_called()
 
@@ -167,6 +167,43 @@ class StaticOfferTests(PrepareHarness):
             static.prepare(self.host, self.client)
         self.assertEqual(caught.exception.category, "no-far-pocket")
         self.assertIn("wallpanel", str(caught.exception))
+
+
+class LimbGateTests(unittest.TestCase):
+    def run_gate(self, limb_distances):
+        readings = iter(limb_distances)
+        clock = [0.0]
+        context = {"hostHandle": "id:1", "position": {"x": 0.0, "y": 0.0}, "target": {}}
+        with mock.patch.object(static.time, "time", lambda: clock[0]), mock.patch.object(static.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)),                 mock.patch.object(static.world, "host_position", lambda host, handle: {"x": 0.0, "y": 0.0}),                 mock.patch.object(static.crates, "optional_read", lambda game, path: None if (value := next(readings, 99.0)) is None else {"x": value, "y": 0.0}):
+            return static.wait_for_limbs(mock.Mock(), mock.Mock(), context), context["target"]["limbSettle"]
+
+    def test_the_swings_wait_until_limb_one_is_near_the_crate_on_two_readings_in_a_row(self):
+        ok, record = self.run_gate([9.8, 8.5, 3.4, 3.5])
+        self.assertTrue(ok)
+        self.assertEqual([row["limb1ToCrate"] for row in record["rows"]], [9.8, 8.5, 3.4, 3.5])
+
+    def test_a_single_near_reading_between_far_ones_does_not_open_the_gate(self):
+        ok, record = self.run_gate([9.8, 3.4, 9.0, 3.4, 9.0])
+        self.assertTrue(record["ok"] is ok)
+        self.assertFalse(ok)
+
+    def test_a_limb_that_stays_away_is_recorded_as_not_settled_and_the_swings_still_run(self):
+        ok, record = self.run_gate([9.0] * 100)
+        self.assertFalse(ok)
+        self.assertFalse(record["ok"])
+        self.assertGreater(len(record["rows"]), 3)
+
+    def test_an_unreadable_limb_is_never_taken_for_near(self):
+        ok, record = self.run_gate([None] * 100)
+        self.assertFalse(ok)
+        self.assertEqual({row["limb1ToCrate"] for row in record["rows"]}, {None})
+
+    def test_the_gate_runs_between_the_approach_and_the_swings(self):
+        order = []
+        context = {"host": mock.Mock(), "hostHandle": "id:1", "target": {}, "measurements": [], "anchor": None}
+        with mock.patch.object(static, "approach", lambda *a: order.append("approach")), mock.patch.object(static, "wait_for_limbs", lambda *a: order.append("limbs")),                 mock.patch.object(static.world, "act", lambda *a, **k: order.append("swings")), mock.patch.object(static, "return_to_anchor", lambda *a: None),                 mock.patch.object(static, "crates_destroy", lambda *a: None):
+            static.act(mock.Mock(), context)
+        self.assertEqual(order, ["approach", "limbs", "swings"])
 
 
 class PrepareTests(PrepareHarness):
@@ -308,7 +345,7 @@ class ActTests(unittest.TestCase):
                 raise RuntimeError("link lost")
             ctx["measurements"] = [{"swing": 1, "hostDelta": 19.3, "clientDelta": 19.3, "physics": {"client": client_state}}]
 
-        with mock.patch.object(static, "approach", lambda h, c, ctx: []), mock.patch.object(static.world, "act", world_act), mock.patch.object(static.time, "sleep", lambda seconds: None):
+        with mock.patch.object(static, "wait_for_limbs", lambda *a: None), mock.patch.object(static, "approach", lambda h, c, ctx: []), mock.patch.object(static.world, "act", world_act), mock.patch.object(static.time, "sleep", lambda seconds: None):
             if raises:
                 with self.assertRaises(RuntimeError):
                     static.act(client, context)
@@ -333,7 +370,7 @@ class ActTests(unittest.TestCase):
 
     def test_the_swing_hook_is_the_crate_band_hook(self):
         seen = {}
-        with mock.patch.object(static, "approach", lambda h, c, ctx: []), mock.patch.object(static.world, "act", lambda client, ctx, before_swing=None: seen.update(hook=before_swing)), \
+        with mock.patch.object(static, "wait_for_limbs", lambda *a: None), mock.patch.object(static, "approach", lambda h, c, ctx: []), mock.patch.object(static.world, "act", lambda client, ctx, before_swing=None: seen.update(hook=before_swing)), \
                 mock.patch.object(static.time, "sleep", lambda seconds: None):
             static.act(mock.Mock(), {"host": mock.Mock(), "hostHandle": "id:5", "clientHandle": "id:-5", "position": {}, "target": {}, "measurements": [], "anchor": None})
         self.assertIs(seen["hook"], static.crates.before_swing)
