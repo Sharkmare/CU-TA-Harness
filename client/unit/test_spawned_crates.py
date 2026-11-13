@@ -320,7 +320,7 @@ class BeforeSwingTests(unittest.TestCase):
         values = {"standing": True, "isRight": False, "limbs[1].transform.position": {"x": 17.2, "y": 5.4}, "targetLookPos": {"x": 20.0, "y": 5.0, "z": 0.0}}
         client = mock.Mock()
         client.get.side_effect = lambda target, path, depth=0: values[path]
-        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback: {"ok": True, "reseats": 0, "distances": [3.0]}), \
+        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback, **k: {"ok": True, "reseats": 0, "distances": [3.0]}), \
                 mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}), \
                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 17.0, "y": 5.0}), \
                 mock.patch.object(crates, "client_crate_position", lambda game, near: {"x": 19.9, "y": 5.0}), \
@@ -346,7 +346,7 @@ class BeforeSwingTests(unittest.TestCase):
 
         client = mock.Mock()
         client.get.return_value = True
-        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback: {"ok": True, "reseats": 0, "distances": [3.0]}),                 mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}),                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 17.0, "y": 5.0}),                 mock.patch.object(crates, "client_crate_position", lambda game, near: None),                 mock.patch.object(crates, "mimic_cast", lambda game, origin, aim: {"method": None, "hits": []}),                 mock.patch.object(crates.world, "optional_get", optional_get), mock.patch.object(crates.world, "physics_active", physics_active):
+        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback, **k: {"ok": True, "reseats": 0, "distances": [3.0]}),                 mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}),                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 17.0, "y": 5.0}),                 mock.patch.object(crates, "client_crate_position", lambda game, near: None),                 mock.patch.object(crates, "mimic_cast", lambda game, origin, aim: {"method": None, "hits": []}),                 mock.patch.object(crates.world, "optional_get", optional_get), mock.patch.object(crates.world, "physics_active", physics_active):
             extra = crates.before_swing(client, self.context, 1, {"x": 20.0, "y": 5.0})
         self.assertEqual(extra["physics"]["host"], {"handle": "id:1", "bodyType": "Dynamic", "physicsActive": True})
         self.assertEqual(extra["physics"]["client"], {"handle": "id:-44", "bodyType": "Kinematic", "physicsActive": False})
@@ -355,7 +355,7 @@ class BeforeSwingTests(unittest.TestCase):
     def test_unreadable_fields_are_recorded_with_their_error_not_fatal(self):
         client = mock.Mock()
         client.get.side_effect = RuntimeError("no member")
-        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback: {"ok": True, "reseats": 0, "distances": [3.0]}), \
+        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback, **k: {"ok": True, "reseats": 0, "distances": [3.0]}), \
                 mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}), \
                 mock.patch.object(crates.base, "player_position", lambda game: {"x": 17.0, "y": 5.0}), \
                 mock.patch.object(crates, "client_crate_position", lambda game, near: None):
@@ -364,7 +364,7 @@ class BeforeSwingTests(unittest.TestCase):
         self.assertIsNone(extra["geometry"]["limb1Position"])
 
     def test_a_swing_that_cannot_be_brought_into_the_band_is_not_fired_and_the_run_is_marked(self):
-        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback: {"ok": False, "reseats": 4, "distances": [3.6, 3.5, 3.5, 3.6, 3.7]}):
+        with mock.patch.object(crates, "ensure_band", lambda host, game, handle, fallback, **k: {"ok": False, "reseats": 4, "distances": [3.6, 3.5, 3.5, 3.6, 3.7]}):
             self.assertIsNone(crates.before_swing(mock.Mock(), self.context, 3, {"x": 20.0, "y": 5.0}))
         self.assertEqual(self.context["bandFailure"], {"swing": 3, "distances": [3.6, 3.5, 3.5, 3.6, 3.7]})
 
@@ -488,18 +488,40 @@ class SettledSetupTests(unittest.TestCase):
         self.assertEqual((row["clientVelocity"], row["crate"], row["crateVelocity"], row["hostBody"]), ({"x": 0.5, "y": 0.0}, {"x": 12.85, "y": 50.0}, {"x": 0.0, "y": -0.1}, {"x": -2.0, "y": 50.0}))
         self.assertEqual(row["clientToCrate"], 2.75)
 
-    def test_a_crate_that_stays_still_is_reported_still_and_one_that_keeps_moving_is_not(self):
+    def test_a_crate_whose_position_stops_changing_is_still_and_one_that_keeps_sliding_is_not(self):
         clock = [0.0]
-        speeds = iter([0.5, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01])
-        with mock.patch.object(crates.time, "time", lambda: clock[0]), mock.patch.object(crates.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)), \
-                mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 1.0, "y": 2.0}), mock.patch.object(crates, "read_at", lambda game, handle, path: {"x": next(speeds), "y": 0.0}):
+        positions = iter([{"x": 1.0 + step * 0.2, "y": 2.0} for step in range(3)] + [{"x": 1.6, "y": 2.0}] * 40)
+        with mock.patch.object(crates.time, "time", lambda: clock[0]), mock.patch.object(crates.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)),                 mock.patch.object(crates.world, "host_position", lambda host, handle: next(positions)):
             still = REAL_WAIT_CRATE_STILL(self.host, "id:1", {"x": 1.0, "y": 2.0})
         self.assertTrue(still["still"])
         clock[0] = 0.0
-        with mock.patch.object(crates.time, "time", lambda: clock[0]), mock.patch.object(crates.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)), \
-                mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 1.0, "y": 2.0}), mock.patch.object(crates, "read_at", lambda game, handle, path: {"x": 0.5, "y": 0.0}):
+        slide = iter([{"x": 1.0 + step * 0.2, "y": 2.0} for step in range(400)])
+        with mock.patch.object(crates.time, "time", lambda: clock[0]), mock.patch.object(crates.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)),                 mock.patch.object(crates.world, "host_position", lambda host, handle: next(slide)):
             moving = REAL_WAIT_CRATE_STILL(self.host, "id:1", {"x": 1.0, "y": 2.0})
         self.assertFalse(moving["still"])
+
+    def test_a_crate_at_rest_with_a_jittering_rb_velocity_is_still_because_only_the_position_counts(self):
+        clock = [0.0]
+        with mock.patch.object(crates.time, "time", lambda: clock[0]), mock.patch.object(crates.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)),                 mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 1.0, "y": 2.0}),                 mock.patch.object(crates, "read_at", lambda game, handle, path: {"x": 0.0, "y": -1.1}):
+            self.assertTrue(REAL_WAIT_CRATE_STILL(self.host, "id:1", {"x": 1.0, "y": 2.0})["still"])
+
+    def test_the_band_reseat_uses_the_given_standing_height_not_the_crate_height_and_the_legacy_default_keeps_the_crate_height(self):
+        for seat_y, expected in ((None, 5.0), (5.6, 5.6)):
+            with self.subTest(seat_y=seat_y):
+                seats = []
+                client = mock.Mock()
+                with mock.patch.object(crates.world, "host_position", lambda host, handle: {"x": 20.0, "y": 5.0}), mock.patch.object(crates.base, "player_position", lambda game: {"x": 10.0, "y": 5.6}),                         mock.patch.object(crates, "seat_client", lambda game, seat: seats.append(seat)), mock.patch.object(crates.time, "sleep", lambda seconds: None):
+                    crates.ensure_band(None, client, "id:1", {"x": 20.0, "y": 5.0}, seat_y=seat_y)
+                self.assertTrue(seats)
+                self.assertEqual({seat["y"] for seat in seats}, {expected})
+
+    def test_the_first_swing_reseats_at_the_anchor_height(self):
+        crates.STATE["anchor"] = {"x": 0.0, "y": 503.6}
+        context = {"host": self.host, "hostHandle": "id:7", "position": {"x": 2.8, "y": 503.0}}
+        seen = {}
+        with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback, **k: seen.update(k) or {"ok": False, "distances": [4.0]}):
+            crates.before_swing(self.client, context, 1, {"x": 2.8, "y": 503.0})
+        self.assertEqual(seen, {"seat_y": 503.6})
 
 
 class RunControlTests(unittest.TestCase):

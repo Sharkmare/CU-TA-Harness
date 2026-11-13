@@ -187,16 +187,14 @@ def vector_length(value):
 
 
 def wait_crate_still(host, handle, fallback):
-    """Wait until the crate's speed has stayed near zero for CRATE_STILL_SECONDS; the speed is rb.velocity when it can be read, otherwise the step between two positions."""
+    """Wait until the crate's speed, taken from the step between two position reads, has stayed near zero for CRATE_STILL_SECONDS. rb.velocity is not used: a body resting on the floor reads a velocity that flips between zero and about 1 every tick."""
     started = time.time()
     still_since = None
     previous = world.host_position(host, handle) or fallback
     while time.time() - started < CRATE_STILL_TIMEOUT_SECONDS:
         time.sleep(TRACE_INTERVAL_SECONDS)
         current = world.host_position(host, handle) or previous
-        speed = vector_length(read_at(host, handle, "rb.velocity"))
-        if speed is None:
-            speed = base.distance(current, previous) / TRACE_INTERVAL_SECONDS
+        speed = base.distance(current, previous) / TRACE_INTERVAL_SECONDS
         previous = current
         if speed <= CRATE_STILL_SPEED:
             still_since = still_since if still_since is not None else time.time()
@@ -250,7 +248,8 @@ def trace_client_and_crate(host, client, context, seconds=TRACE_SECONDS, interva
     return rows
 
 
-def ensure_band(host, client, handle, fallback, side=-1):
+def ensure_band(host, client, handle, fallback, side=-1, seat_y=None):
+    """Re-seat the client until it stands inside the distance band. The seat height is the crate's own height unless seat_y is given: a crate rests lower than a standing body, so a seat at the crate height pulls the held body into the floor and it fights the hold."""
     history = []
     offsets = []
     seats = []
@@ -267,7 +266,7 @@ def ensure_band(host, client, handle, fallback, side=-1):
         if attempt > 0:
             offset = max(MIN_RESEAT_OFFSET, offset + BAND_GAIN * (BAND_TARGET - distance))
         offsets.append(round(offset, 3))
-        seat = {"x": crate["x"] + side * offset, "y": crate["y"]}
+        seat = {"x": crate["x"] + side * offset, "y": crate["y"] if seat_y is None else seat_y}
         seat_client(client, seat)
         seats.append(seat)
     return {"ok": False, "reseats": BAND_TRIES, "distances": history, "offsets": offsets, "seat": seats[-1] if seats else None}
@@ -420,7 +419,7 @@ def record_parked_host(host, client, context, index):
 
 def before_swing(client, context, index, aim):
     host = context["host"]
-    band = ensure_band(host, client, context["hostHandle"], context["position"])
+    band = ensure_band(host, client, context["hostHandle"], context["position"], seat_y=None if STATE["anchor"] is None else STATE["anchor"]["y"])
     if not band["ok"]:
         context["bandFailure"] = {"swing": index, "distances": band["distances"]}
         return None

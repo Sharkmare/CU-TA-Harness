@@ -45,7 +45,7 @@ class CrateWiringTests(unittest.TestCase):
             crates.position_setup(self.host, self.client, self.context)
             crates.seat_client(self.client, {"x": 50.0, "y": 50.0})
             band = {"ok": True, "distances": [3.0], "seat": {"x": 50.0, "y": 50.0}}
-            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback: band), \
+            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback, **k: band), \
                     mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {}):
                 crates.before_swing(self.client, self.context, 1, {"x": 53.0, "y": 50.0})
         check = self.context["positionControl"]
@@ -59,7 +59,7 @@ class CrateWiringTests(unittest.TestCase):
             crates.position_setup(self.host, self.client, self.context)
             self.host.position = {"x": 50.5, "y": 50.0}
             band = {"ok": True, "distances": [3.0], "seat": {"x": 50.0, "y": 50.0}}
-            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback: band), \
+            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback, **k: band), \
                     mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {"never": "read"}):
                 result = crates.before_swing(self.client, self.context, 1, {"x": 53.0, "y": 50.0})
         self.assertIsNone(result)
@@ -73,7 +73,7 @@ class CrateWiringTests(unittest.TestCase):
         self.assertEqual(dict(crates.STATE["reasons"]), {crates.POSITION_FAILURE_CATEGORY: 1})
 
     def test_the_preflight_only_runs_on_the_first_swing(self):
-        with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback: {"ok": True, "distances": [3.0], "seat": None}), \
+        with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback, **k: {"ok": True, "distances": [3.0], "seat": None}), \
                 mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {}), mock.patch.object(crates, "run_preflight") as preflight, \
                 mock.patch.object(crates, "crate_physics", lambda game, handle: {}):
             self.context["hostPark"] = {"x": 38.0, "y": 50.0}
@@ -88,7 +88,7 @@ class CrateWiringTests(unittest.TestCase):
             real = self.host.get
             self.host.get = lambda target, path="", depth=1: {"x": real(target, path, depth)["x"] + host_offset, "y": real(target, path, depth)["y"]}
             band = {"ok": True, "distances": [3.0], "seat": {"x": 50.0, "y": 50.0}}
-            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback: band), \
+            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback, **k: band), \
                     mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {}):
                 return crates.before_swing(self.client, self.context, 1, {"x": 53.0, "y": 50.0})
 
@@ -132,7 +132,7 @@ class CrateWiringTests(unittest.TestCase):
             real = self.client.get
             self.client.get = lambda target, path="", depth=1: ({"x": real(target, path, depth)["x"] + 0.3, "y": real(target, path, depth)["y"]} if path == "rb.position" else real(target, path, depth))
             band = {"ok": True, "distances": [3.0], "seat": {"x": 50.0, "y": 50.0}}
-            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback: band), \
+            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback, **k: band), \
                     mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {"never": "read"}):
                 result = crates.before_swing(self.client, self.context, 1, {"x": 53.0, "y": 50.0})
         self.assertIsNone(result)
