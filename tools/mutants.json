@@ -85,14 +85,14 @@
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/pair.py",
+    "file": "client/casualtieslink/games/pair.py",
     "old": "        if not os.path.exists(os.path.join(source, name)):\n            path = os.path.join(target, name)",
     "new": "        if False:\n            path = os.path.join(target, name)",
     "label": "new profile files kept"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/pair.py",
+    "file": "client/casualtieslink/games/pair.py",
     "old": "for member in (self.client, self.host):",
     "new": "for member in (self.host, self.client):",
     "label": "host closed before client"
@@ -113,7 +113,7 @@
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/testcopy.py",
+    "file": "client/casualtieslink/games/testcopy.py",
     "old": "if target == os.path.normcase(REPO_ROOT) or target.startswith(os.path.normcase(REPO_ROOT) + os.sep):",
     "new": "if False:",
     "label": "copy allowed inside the repository"
@@ -162,70 +162,70 @@
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/desync.py",
+    "file": "client/casualtieslink/scenarioengine/desync.py",
     "old": "    if perform_action:\n        scenario.act(client, context)",
     "new": "    if True:\n        scenario.act(client, context)",
     "label": "desync ignores the skipped action"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/desync.py",
+    "file": "client/casualtieslink/scenarioengine/desync.py",
     "old": "if any(changed_on_client) and not changed_on_client[-1] and not changed_on_host[-1]:",
     "new": "if False:",
     "label": "desync never reports a revert"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/desync.py",
+    "file": "client/casualtieslink/scenarioengine/desync.py",
     "old": "    if any(sample.host != sample.client for sample in observation.samples):",
     "new": "    if False:",
     "label": "desync ignores disagreement"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/desync.py",
+    "file": "client/casualtieslink/scenarioengine/desync.py",
     "old": "def stage_dll_hash(stage_directory):\n    path = os.path.join(stage_directory, \"plugins\", \"Together\", \"CasualtiesMP.dll\")",
     "new": "def stage_dll_hash(stage_directory):\n    path = os.path.join(stage_directory, \"plugins\", \"CasualtiesMP.dll\")",
     "label": "desync hashes the wrong stage file"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/launchplan.py",
+    "file": "client/casualtieslink/scenarioengine/launchplan.py",
     "old": "            if (build, group) in seen:",
     "new": "            if False:",
     "label": "launch plan keeps duplicate build and group"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/launchplan.py",
-    "old": "    return (steady[\"plain\"] + steady[\"network\"] * len(launch.profiles)) * launch.repetitions",
-    "new": "    return (steady[\"plain\"] + steady[\"network\"]) * launch.repetitions",
+    "file": "client/casualtieslink/scenarioengine/launchplan.py",
+    "old": "    network_runs = sum(profile.repeat or launch.repetitions for profile in launch.profiles) * steady[\"network\"]",
+    "new": "    network_runs = launch.repetitions * steady[\"network\"]",
     "label": "run count ignores the network profiles"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/desync.py",
-    "old": "            chosen = profiles if scenario.network_sensitive else [launchplan.DIRECT]",
-    "new": "            chosen = profiles",
+    "file": "client/casualtieslink/scenarioengine/desync.py",
+    "old": "        chosen = profiles if scenario.network_sensitive else [launchplan.DIRECT]",
+    "new": "        chosen = profiles",
     "label": "plain scenarios run once per network profile"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/udpproxy.py",
+    "file": "client/casualtieslink/games/udpproxy.py",
     "old": "            self.delay_ms, self.jitter_ms, self.loss, self.reorder = new",
     "new": "            self.jitter_ms, self.loss, self.reorder = new[1:]",
     "label": "proxy set ignores a new delay"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/udpproxy.py",
+    "file": "client/casualtieslink/games/udpproxy.py",
     "old": "    return address in (LOOPBACK, \"::1\", \"::ffff:127.0.0.1\")",
     "new": "    return True",
     "label": "control accepts any peer"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/udpproxy.py",
+    "file": "client/casualtieslink/games/udpproxy.py",
     "old": "    return host in ALLOWED_CONTROL_HOSTS and (not given_port or given_port == str(port))",
     "new": "    return True",
     "label": "control accepts any Host header"
@@ -253,28 +253,28 @@
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/positioncontrol.py",
+    "file": "client/casualtieslink/scenarioengine/positioncontrol.py",
     "old": "return {\"ok\": max(drifts) <= tolerance and held,",
     "new": "return {\"ok\": True,",
     "label": "hold verification always passes"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/positioncontrol.py",
+    "file": "client/casualtieslink/scenarioengine/positioncontrol.py",
     "old": "    if separation < min_separation:",
     "new": "    if False:",
     "label": "overlap never detected"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/positioncontrol.py",
+    "file": "client/casualtieslink/scenarioengine/positioncontrol.py",
     "old": "    if client_drift > tolerance:",
     "new": "    if False:",
     "label": "client drift never detected"
   },
   {
     "suite": "python",
-    "file": "client/casualtieslink/positioncontrol.py",
+    "file": "client/casualtieslink/scenarioengine/positioncontrol.py",
     "old": "    check[\"ok\"] = not check[\"issues\"]\n    check[\"clientHold\"]",
     "new": "    check[\"clientHold\"]",
     "label": "failed hold verification does not invalidate the seat"

@@ -66,5 +66,22 @@ class ControlRunTests(unittest.TestCase):
         self.assertEqual(environment[mutation_check.LINK_DLL_ENVIRONMENT_VARIABLE], mutation_check.BUILT_LINK_DLL)
 
 
+class MutantListTests(unittest.TestCase):
+    def test_every_mutant_names_an_existing_file_and_an_anchor_that_occurs_once(self):
+        with open(mutation_check.MUTANTS_PATH, encoding="utf-8") as handle:
+            mutants = json.load(handle)
+        problems = []
+        for mutant in mutants:
+            path = os.path.join(mutation_check.REPO, mutant["file"])
+            if not os.path.isfile(path):
+                problems.append("%s: no such file %s" % (mutant["label"], mutant["file"]))
+                continue
+            with open(path, encoding="utf-8") as handle:
+                count = handle.read().replace("\r\n", "\n").count(mutant["old"])
+            if count != 1:
+                problems.append("%s: anchor found %d times in %s" % (mutant["label"], count, mutant["file"]))
+        self.assertEqual(problems, [])
+
+
 if __name__ == "__main__":
     unittest.main()
