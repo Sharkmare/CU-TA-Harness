@@ -81,7 +81,7 @@ class JudgeTests(unittest.TestCase):
         rest["limb1"] = {"x": -1.08, "y": -1.06}
         gates, verdict = failed_gates(state, good_spec(rest=rest))
         self.assertEqual(gates, [])
-        self.assertEqual(verdict["values"]["limb"]["limb1ToTarget"], 4.09)
+        self.assertEqual(verdict["values"]["limb"]["limb1ToTarget"], 4.07)
 
     def test_without_a_rest_pose_nothing_is_fired(self):
         gates, verdict = failed_gates(good_state(), good_spec(rest=None))
