@@ -3,7 +3,6 @@ import unittest
 from unittest import mock
 
 from casualtieslink.scenarioengine import swinggate
-from scenarios import world_building as world
 
 SEAT = {"x": 0.0, "y": 0.0}
 TARGET = {"x": 2.85, "y": 0.0}
@@ -395,60 +394,6 @@ class RunVerdictTests(unittest.TestCase):
     def test_the_reason_names_the_gates_that_failed(self):
         failure = {"failures": [{"gate": "limb", "detail": "a"}, {"gate": "facing", "detail": "b"}, {"gate": "limb", "detail": "c"}]}
         self.assertEqual(swinggate.gate_reason(failure), "gate facing, limb failed")
-
-
-class WorldActGateTests(unittest.TestCase):
-    def run_act(self, verdicts, fire_result=True):
-        gate = mock.Mock()
-        gate.wait_ready.side_effect = verdicts
-        context = {"host": mock.Mock(), "hostHandle": "id:7", "clientHandle": "id:-7", "position": {"x": 3.0, "y": 0.0}, "target": {}, "gate": gate}
-        fired = []
-        client = mock.Mock()
-        client.get.return_value = 0.0
-
-        def fire(game, aim, **kwargs):
-            fired.append(aim)
-            return fire_result
-
-        patches = [mock.patch.object(world.hooks, "fire_one_swing", fire), mock.patch.object(world, "health_by_handle", lambda game, handle: 1000.0), mock.patch.object(world, "current_position", lambda host, ctx: {"x": 3.0, "y": 0.0}),
-                   mock.patch.object(world, "collider_at", lambda game, point: None), mock.patch.object(world.evidence, "read_log", lambda which: ""), mock.patch.object(world.base, "player_position", lambda game: {"x": 0.0, "y": 0.0}),
-                   mock.patch.object(world.time, "sleep", lambda seconds: None)]
-        for patch in patches:
-            patch.start()
-            self.addCleanup(patch.stop)
-        world.act(client, context)
-        return context, fired
-
-    def passed(self, **values):
-        return {"passed": True, "failures": [], "values": values}
-
-    def failed(self):
-        return {"passed": False, "failures": [{"gate": "limb", "detail": "limb1 is 9.00 from its rest pose (tolerance 0.50)"}], "values": {"limb": {"limb1Moved": 9.0}}}
-
-    def test_a_swing_that_fails_the_gate_is_not_fired_and_no_later_swing_is_tried(self):
-        context, fired = self.run_act([self.passed(), self.passed(), self.failed()])
-        self.assertEqual(len(fired), 2)
-        self.assertEqual(len(context["measurements"]), 2)
-        self.assertEqual(context["gateFailure"]["swing"], 3)
-        self.assertEqual(context["gateFailure"]["values"], {"limb": {"limb1Moved": 9.0}})
-
-    def test_the_gate_values_at_fire_time_are_kept_in_every_swing_record(self):
-        context, fired = self.run_act([self.passed(seat=1), self.passed(seat=2), self.passed(seat=3), self.passed(seat=4), self.passed(seat=5)])
-        self.assertEqual([entry["gate"]["values"] for entry in context["measurements"]], [{"seat": 1}, {"seat": 2}, {"seat": 3}, {"seat": 4}, {"seat": 5}])
-        self.assertNotIn("gateFailure", context)
-
-    def test_a_gate_failure_on_the_first_swing_fires_nothing_and_leaves_no_measurement(self):
-        context, fired = self.run_act([self.failed()])
-        self.assertEqual(fired, [])
-        self.assertEqual(context["measurements"], [])
-        self.assertEqual(swinggate.run_verdict(context["measurements"], context["gateFailure"])[0], "invalid")
-
-    def test_a_swing_fired_with_every_gate_passed_that_did_not_land_is_classified_a_fail(self):
-        context, fired = self.run_act([self.passed()] * 5)
-        self.assertEqual(len(context["measurements"]), 5)
-        verdict, reason = swinggate.run_verdict(context["measurements"], context.get("gateFailure"))
-        self.assertEqual(verdict, "fail")
-        self.assertIn("swing 1 did not land with every gate passed", reason)
 
 
 if __name__ == "__main__":

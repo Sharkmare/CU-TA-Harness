@@ -1,2 +1,5 @@
 .githooks/* text eol=lf
 *.sh text eol=lf
+
+# golden files are compared byte for byte
+client/unit/fixtures/prtable/golden_* text eol=lf

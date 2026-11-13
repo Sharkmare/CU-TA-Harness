@@ -27,7 +27,14 @@ OFFLINE_GROUP = "client-offline"
 def offline_python_modules(root):
     with open(os.path.join(root, GROUPS_RELATIVE), encoding="utf-8") as handle:
         groups = json.load(handle)["groups"]
-    return next(group["modules"] for group in groups if group["id"] == OFFLINE_GROUP)
+    modules = list(next(group["modules"] for group in groups if group["id"] == OFFLINE_GROUP))
+    local_groups = os.path.join(root, LOCAL_FOLDER, "test_groups.json")
+    if include_local[0] and os.path.isfile(local_groups):
+        with open(local_groups, encoding="utf-8") as handle:
+            for group in json.load(handle)["groups"]:
+                if group["id"] == OFFLINE_GROUP:
+                    modules += group["modules"]
+    return modules
 
 
 def suite_command(suite, root):

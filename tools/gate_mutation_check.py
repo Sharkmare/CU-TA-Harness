@@ -21,7 +21,6 @@ MUTATIONS = [
     ("casualtieslink/scenarioengine/swinggate.py", "restPoseGated=self.swings_passed == 0", "restPoseGated=True", "the rest pose gates swing 2 and later"),
     ("casualtieslink/scenarioengine/swinggate.py", "restPoseGated=self.swings_passed == 0", "restPoseGated=False", "the first swing is not gated on the rest pose"),
     ("casualtieslink/scenarioengine/swinggate.py", "            self.swings_passed += 1", "            pass", "a passed swing is not counted"),
-    ("scenarios/world_building.py", "            if not verdict[\"passed\"]:\n                context[\"gateFailure\"] = dict(verdict, swing=index)\n                break", "            if not verdict[\"passed\"]:\n                context[\"gateFailure\"] = dict(verdict, swing=index)", "a failed gate does not stop the swing"),
 ]
 
 failures = []
