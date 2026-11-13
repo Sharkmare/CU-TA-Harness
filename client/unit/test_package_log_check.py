@@ -26,9 +26,9 @@ class CheckTests(unittest.TestCase):
         self.assertTrue(any("STEAMLIKE" in line for line in found))
         self.assertEqual(len(checker.problems(self.report(client=GOOD.replace("Body.Attack TRANSPILER SUCCESS :)", "")))), 1)
 
-    def test_different_version_tags_are_a_problem(self):
-        found = checker.problems(self.report(client=GOOD.replace("fork45F0", "forkOTHER")))
-        self.assertTrue(any("different version tags" in line for line in found))
+    def test_different_together_load_lines_are_a_problem(self):
+        found = checker.problems(self.report(client=GOOD.replace("Together 5.5.1", "Together 5.5.2")))
+        self.assertTrue(any("different Together load lines" in line for line in found))
 
     def test_the_swingburst_lines_are_counted_by_kind(self):
         data = checker.check_log(GOOD + "SWINGBURST accepted-by-credit a\nSWINGBURST accepted-by-credit b\nSWINGBURST dropped c\nSWINGBURST summary d\n")

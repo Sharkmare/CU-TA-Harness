@@ -39,10 +39,9 @@ def problems(report):
             found.append("%s: %d RESYNCGUARD lines" % (side, data["resyncGuardLines"]))
         if data["steamlikeLines"]:
             found.append("%s: %d STEAMLIKE lines" % (side, data["steamlikeLines"]))
-    if report["host"]["versions"] != report["client"]["versions"]:
-        found.append("host and client log different version tags: %s against %s" % (report["host"]["versions"], report["client"]["versions"]))
-    if not report["host"]["versions"]:
-        found.append("no version tag in the host log")
+    host_line, client_line = [re.sub(r"^\[[^\]]*\]\s*", "", report[side]["togetherLoadLine"] or "") for side in SIDES]
+    if host_line != client_line:
+        found.append("host and client log different Together load lines: %r against %r" % (host_line, client_line))
     return found
 
 
