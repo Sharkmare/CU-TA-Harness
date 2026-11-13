@@ -2,7 +2,7 @@ import os
 import time
 import unittest
 
-from casualtieslink import desync, diagblock, launchplan
+from casualtieslink import desync, launchplan
 from casualtieslink.instances import ScenarioGames, flavour_zip, stage_directory_by_build
 from casualtieslink.launcher import mp_arguments
 
@@ -137,8 +137,6 @@ def series_method(run):
         report["gamesAnswerAfterRun"] = games_answer(self)
         report["clientBody"] = body_identity(self)
         report["transpilerLines"] = {which: desync.transpiler_lines(GAMES.log_text(which)) for which in ("host", "client")}
-        if BUILD in desync.DIAG_BUILDS:
-            report["diagBlock"] = diagblock.summarise_run(run_logs["client"], run_logs["host"], observation.hit_times, observation.context.get("swingLog"))
         text = desync.format_series_report(report)
         print("\n" + text)
         desync.save_series_report(report, REPORT_DIRECTORY)
@@ -207,7 +205,7 @@ class DesyncMixin:
         if self.host_plugins == [] and self.__class__.__name__.endswith("hand_mining"):
             self.skipTest("only the hook check group is expected to carry the repaired transpiler")
         checks = desync.launch_log_checks(GAMES.log_text("host"), GAMES.log_text("client"), expect_no_scatter=bool(self.host_plugins),
-                                          expect_success=BUILD != desync.BASELINE_BUILD, record_only=RECORD_ONLY_LAUNCH_CHECKS)
+                                          expect_success=True, record_only=RECORD_ONLY_LAUNCH_CHECKS)
         print("\nlaunch log checks: %s" % checks)
         desync.save_launch_checks(checks, REPORT_DIRECTORY, LAUNCH_ID)
         if any(group in self.__class__.__name__.replace("_", "-") for group in ("hook-check", "hook-regression", "hook-evidence", "hook-dune")):

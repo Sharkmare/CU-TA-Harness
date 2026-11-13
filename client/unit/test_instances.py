@@ -136,16 +136,16 @@ class ConfigureInstanceTests(InstanceFixture):
         for name, content in (("CasualtiesMP.dll", "upstream"), ("Multiupdater.dll", "updater"), ("LiteNetLib.dll", "net")):
             with open(os.path.join(stage, "plugins", "Together", name), "w") as handle:
                 handle.write(content)
-        with mock.patch.dict(os.environ, {instances.STAGE_ENVIRONMENT_VARIABLE: stage}):
-            instances.configure_instance(self.copy, [], together="stage")
+        with mock.patch.dict(os.environ, {instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE: stage}):
+            instances.configure_instance(self.copy, [], together="pr24-fixed-stage")
         self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "upstream")
         self.assertFalse(os.path.exists(self.plugin_file("Together", "Multiupdater.dll")))
         self.assertFalse(os.path.exists(self.plugin_file("Together", "RefMagic.dll")), "old files must not survive")
 
     def test_a_stage_without_the_mod_dll_is_an_error(self):
-        with mock.patch.dict(os.environ, {instances.STAGE_ENVIRONMENT_VARIABLE: self.directory.name}):
+        with mock.patch.dict(os.environ, {instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE: self.directory.name}):
             with self.assertRaises(FileNotFoundError):
-                instances.configure_instance(self.copy, [], together="stage")
+                instances.configure_instance(self.copy, [], together="pr24-fixed-stage")
 
     def test_a_non_flavour_build_removes_the_switch_that_an_earlier_flavour_left(self):
         with mock.patch.dict(os.environ, {instances.FLAVOUR_ZIP_ENVIRONMENT_VARIABLE: self.flavour_package()}):
@@ -159,14 +159,10 @@ class ConfigureInstanceTests(InstanceFixture):
         self.assertIn(instances.SESSION_ADDRESS, instances.client_arguments())
         self.assertIn(instances.SESSION_ADDRESS, instances.host_arguments())
 
-    def test_the_diag_stage_build_is_installed_from_its_own_folder(self):
-        stage = os.path.join(self.directory.name, "diag")
-        os.makedirs(os.path.join(stage, "plugins", "Together"))
-        with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
-            handle.write("diag build")
-        with mock.patch.dict(os.environ, {instances.DIAG_STAGE_ENVIRONMENT_VARIABLE: stage}):
-            instances.configure_instance(self.copy, [], together="diag-stage")
-        self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "diag build")
+    def test_the_stage_choice_follows_the_build_name(self):
+        from casualtieslink import desync
+        self.assertEqual(desync.together_choice("pr24-fixed"), "pr24-fixed-stage")
+        self.assertEqual(desync.parse_build("pr24-fixed"), "pr24-fixed")
 
     def test_the_probe_config_turns_the_evidence_loggers_on_and_is_cleared_for_the_next_launch(self):
         instances.write_probe_config(self.copy)
@@ -174,34 +170,6 @@ class ConfigureInstanceTests(InstanceFixture):
         self.assertIn("FindTheBug = true", self.read(config))
         instances.configure_instance(self.copy, [], together="keep")
         self.assertFalse(os.path.exists(config))
-
-    def test_the_second_diag_stage_has_its_own_folder_and_build_name(self):
-        from casualtieslink import desync
-        stage = os.path.join(self.directory.name, "diag2")
-        os.makedirs(os.path.join(stage, "plugins", "Together"))
-        with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
-            handle.write("diag two")
-        with mock.patch.dict(os.environ, {instances.DIAG_STAGE2_ENVIRONMENT_VARIABLE: stage}):
-            instances.configure_instance(self.copy, [], together=desync.together_choice("upstream-diag2"))
-        self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "diag two")
-        self.assertIn("upstream-diag2", desync.DIAG_BUILDS)
-
-    def test_the_third_diag_stage_has_its_own_folder_and_build_name(self):
-        from casualtieslink import desync
-        stage = os.path.join(self.directory.name, "diag3")
-        os.makedirs(os.path.join(stage, "plugins", "Together"))
-        with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
-            handle.write("diag three")
-        with mock.patch.dict(os.environ, {instances.DIAG_STAGE3_ENVIRONMENT_VARIABLE: stage}):
-            instances.configure_instance(self.copy, [], together=desync.together_choice("upstream-diag3"))
-        self.assertEqual(self.read(self.plugin_file("Together", "CasualtiesMP.dll")), "diag three")
-        self.assertIn("upstream-diag3", desync.DIAG_BUILDS)
-
-    def test_the_diag_choice_follows_the_build_name(self):
-        from casualtieslink import desync
-        self.assertEqual(desync.together_choice("upstream-diag"), "diag-stage")
-        self.assertEqual(desync.together_choice("upstream-fixes"), "stage")
-        self.assertEqual(desync.parse_build("upstream-diag"), "upstream-diag")
 
     def test_an_unknown_together_choice_is_refused(self):
         with self.assertRaises(ValueError):

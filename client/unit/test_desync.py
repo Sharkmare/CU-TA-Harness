@@ -133,17 +133,17 @@ class BuildTests(unittest.TestCase):
     def test_known_builds_parse_and_default_to_stock_5_5_0(self):
         self.assertEqual(desync.parse_build("FORK"), "fork")
         self.assertEqual(desync.parse_build(None), desync.DEFAULT_BUILD)
-        self.assertEqual(desync.parse_build(" upstream-fixes "), "upstream-fixes")
+        self.assertEqual(desync.parse_build(" pr24-fixed "), "pr24-fixed")
 
     def test_an_unknown_build_names_the_choices(self):
         with self.assertRaises(ValueError) as caught:
             desync.parse_build("stock-9")
         self.assertIn("stock-5.4.0", str(caught.exception))
 
-    def test_flavour_builds_map_to_the_flavour_choice_and_upstream_to_stage(self):
+    def test_flavour_builds_map_to_the_flavour_choice_and_staged_builds_to_their_stage(self):
         self.assertEqual(desync.together_choice("stock-5.4.0"), "flavour:stock-5.4.0")
         self.assertEqual(desync.together_choice("fork"), "flavour:fork")
-        self.assertEqual(desync.together_choice("upstream-fixes"), "stage")
+        self.assertEqual(desync.together_choice("pr24-fixed"), "pr24-fixed-stage")
 
     def test_the_flavour_hash_is_read_from_the_package_zip(self):
         with tempfile.TemporaryDirectory() as directory:

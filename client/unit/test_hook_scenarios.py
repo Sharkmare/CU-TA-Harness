@@ -143,8 +143,8 @@ class LaunchLogCheckTests(unittest.TestCase):
 
     def test_the_checks_are_saved_as_json_named_by_launch(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = desync.save_launch_checks({"issues": []}, directory, "L1-upstream-fixes-hook-check")
-            self.assertTrue(os.path.basename(path).startswith("launch_checks__L1-upstream-fixes-hook-check"))
+            path = desync.save_launch_checks({"issues": []}, directory, "L1-pr24-fixed-hook-check")
+            self.assertTrue(os.path.basename(path).startswith("launch_checks__L1-pr24-fixed-hook-check"))
             self.assertTrue(os.path.exists(path))
 
 
@@ -155,11 +155,11 @@ class SaveGameLogsTests(unittest.TestCase):
 
     def test_both_logs_that_have_text_are_saved_under_the_launch_and_class_name(self):
         with tempfile.TemporaryDirectory() as directory:
-            saved = desync.save_game_logs(self.Games(), directory, "L1-upstream-fixed-hook-regression", "Desync_x")
+            saved = desync.save_game_logs(self.Games(), directory, "L1-pr24-fixed-hook-regression", "Desync_x")
             self.assertEqual([os.path.basename(path) for path in saved], ["host-LogOutput.log"])
             with open(saved[0], encoding="utf-8") as handle:
                 self.assertEqual(handle.read(), "host log line\n")
-            self.assertIn("L1-upstream-fixed-hook-regression__Desync_x", saved[0])
+            self.assertIn("L1-pr24-fixed-hook-regression__Desync_x", saved[0])
 
 
 class NoScatterInstallTests(unittest.TestCase):

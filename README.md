@@ -200,7 +200,8 @@ Builds, chosen with `--together` or listed with `--builds`:
 | Build | What is installed |
 |---|---|
 | `stock-5.5.0`, `stock-5.4.0`, `fork` | the flavour package (`CU_FLAVOUR_ZIP`), started with `--mp-flavour` |
-| `upstream-fixes` | `plugins/Together` from `casualties-together-upstream/build/stage` (`CU_UPSTREAM_STAGE`), without the updater |
+| `official-5.5.0` | `plugins/Together` of the official 5.5.0 release, extracted by `casualtieslink/officialstage.py` into `.state/stages/official-5.5.0` (`CU_OFFICIAL_STAGE`), without the updater |
+| `fullbuild-control`, `fullbuild-fixed`, `spectator-fix`, `pr24-control`, `pr24-fixed`, `pr24-fixed-verbose`, `pr24-control-verbose` | `plugins/Together` of a build staged by the Together source session under `Private CU together/build/stage_*`, without the updater; each folder can be moved with its own variable (`CU_FULLBUILD_CONTROL_STAGE`, `CU_FULLBUILD_FIXED_STAGE`, `CU_SPECTATOR_FIX_STAGE`, `CU_PR24_CONTROL_STAGE`, `CU_PR24_FIXED_STAGE`, `CU_PR24_VERBOSE_STAGE`, `CU_PR24_CONTROL_VERBOSE_STAGE`). The DLL md5 of each is pinned in `unit/test_fullbuild_stages.py` |
 
 The test class name carries the build and the first eight hex digits of the DLL hash (`Desync_stock_5_5_0_9bb980b8_default`), and a test checks that both games run the DLL with that hash. Every report names its launch, repetition, game version, network profile and proxy seed.
 
@@ -209,7 +210,7 @@ The client connects to the host through a UDP proxy (`casualtieslink/udpproxy.py
 A scenario that depends on the network (the series scenarios) runs once per profile of `--net DELAY:JITTER[:LOSS[:REORDER]]`; the other scenarios run once. The runner applies the profile before each scenario and restores a direct link after it. `--repeat N` runs every scenario N times inside the same launch.
 
 ```bash
-python run_tests.py --pair --only desync --builds upstream-fixes stock-5.5.0 --net 100:0 100:60 250:100 --repeat 3 --match hold_mining
+python run_tests.py --pair --only desync --builds pr24-fixed stock-5.5.0 --net 100:0 100:60 250:100 --repeat 3 --match hold_mining
 python run_tests.py --only desync --builds fork stock-5.5.0 --net 100:0 --list
 python run_tests.py --pair --only desync --together stock-5.5.0 --budget-seconds 600
 python run_tests.py --pair --only desync --together stock-5.5.0 --mutate skip-client-action
@@ -231,10 +232,10 @@ The held-click scenarios take a fresh block for every run: the host places block
 A network profile can carry its own repetition count, `DELAY:JITTER@COUNT`:
 
 ```bash
-python run_tests.py --pair --only desync --builds upstream-diag --net 0:0@15 100:0@15 --match hold_mining_cracks
-python run_tests.py --pair --only desync --builds upstream-diag --net 0:0@15 100:0@15 --match aim_circle_mining_cracks
-python run_tests.py --pair --only desync --builds upstream-diag --net 0:0@10 100:0@10 --match dune_client_hold_mining
-python tools/desync_summary.py L1-upstream-diag-hand-mining
+python run_tests.py --pair --only desync --builds pr24-fixed --net 0:0@15 100:0@15 --match hold_mining_cracks
+python run_tests.py --pair --only desync --builds pr24-fixed --net 0:0@15 100:0@15 --match aim_circle_mining_cracks
+python run_tests.py --pair --only desync --builds pr24-fixed --net 0:0@10 100:0@10 --match dune_client_hold_mining
+python tools/desync_summary.py L1-pr24-fixed-hand-mining
 ```
 
 `tools/desync_summary.py` sums the reports of one launch per network profile: blocks mined, blocks that reappeared, swings sent, received and accepted, losses by reason, and the delay the proxy planned.

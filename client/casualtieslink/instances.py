@@ -21,17 +21,6 @@ FORK_ZIP_ENVIRONMENT_VARIABLE = "CU_FORK_TOGETHER_ZIP"
 TOGETHER_IN_ZIP = "BepInEx/plugins/Together/"
 FLAVOUR_ZIP_ENVIRONMENT_VARIABLE = "CU_FLAVOUR_ZIP"
 FLAVOUR_PREFIX = "flavour:"
-STAGE_ENVIRONMENT_VARIABLE = "CU_UPSTREAM_STAGE"
-STAGE_CHOICE = "stage"
-DIAG_STAGE_CHOICE = "diag-stage"
-DIAG_STAGE2_CHOICE = "diag-stage2"
-DIAG_STAGE3_CHOICE = "diag-stage3"
-FULLGAME_STAGE_CHOICE = "fullgame-stage"
-BASELINE_STAGE_CHOICE = "baseline-stage"
-FULLGAME_DIAG_STAGE_CHOICE = "fullgame-diag-stage"
-FULLGAME_NOBUILD_STAGE_CHOICE = "fullgame-nobuild-stage"
-FULLGAME_V2_STAGE_CHOICE = "fullgame-v2-stage"
-FULLGAME_FINAL_STAGE_CHOICE = "fullgame-final-stage"
 OFFICIAL_STAGE_CHOICE = "official-stage"
 FULLBUILD_CONTROL_STAGE_CHOICE = "fullbuild-control-stage"
 FULLBUILD_FIXED_STAGE_CHOICE = "fullbuild-fixed-stage"
@@ -45,20 +34,11 @@ PR24_CONTROL_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_VERBOSE_STAGE
 PR24_VERBOSE_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_VERBOSE_STAGE"
 PR24_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_CONTROL_STAGE"
 PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE = "CU_PR24_FIXED_STAGE"
-FULLGAME_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_STAGE"
-BASELINE_STAGE_ENVIRONMENT_VARIABLE = "CU_BASELINE_STAGE"
-FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_DIAG_STAGE"
-FULLGAME_NOBUILD_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_NOBUILD_STAGE"
-FULLGAME_V2_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_V2_STAGE"
-FULLGAME_FINAL_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLGAME_FINAL_STAGE"
 OFFICIAL_STAGE_ENVIRONMENT_VARIABLE = "CU_OFFICIAL_STAGE"
 FULLBUILD_CONTROL_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLBUILD_CONTROL_STAGE"
 FULLBUILD_FIXED_STAGE_ENVIRONMENT_VARIABLE = "CU_FULLBUILD_FIXED_STAGE"
 SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE = "CU_SPECTATOR_FIX_STAGE"
 FULLBUILD_PROJECT_FOLDER = "Private CU together"
-DIAG_STAGE3_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE3"
-DIAG_STAGE2_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE2"
-DIAG_STAGE_ENVIRONMENT_VARIABLE = "CU_DIAG_STAGE"
 TOGETHER_CONFIG_NAME = "CasualtiesMP.cfg"
 PROBE_CONFIG_TEXT = "[Probe]\n\nFindTheBug = true\n"
 FLAVOUR_OPTION = "--mp-flavour"
@@ -255,69 +235,6 @@ def install_flavour_package(copy):
     return archive_path
 
 
-def stage_directory():
-    explicit = os.environ.get(STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage")
-
-
-def diag_stage_directory():
-    explicit = os.environ.get(DIAG_STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-local", "build", "diag_stage")
-
-
-def diag_stage2_directory():
-    explicit = os.environ.get(DIAG_STAGE2_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-local", "build", "diag_stage2")
-
-
-def diag_stage3_directory():
-    explicit = os.environ.get(DIAG_STAGE3_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-local", "build", "diag_stage3")
-
-
-def fullgame_stage_directory():
-    explicit = os.environ.get(FULLGAME_STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_fullgame")
-
-
-def fullgame_diag_stage_directory():
-    explicit = os.environ.get(FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_fullgame_diag")
-
-
-def fullgame_nobuild_stage_directory():
-    explicit = os.environ.get(FULLGAME_NOBUILD_STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_fullgame_nobuild")
-
-
-def fullgame_v2_stage_directory():
-    explicit = os.environ.get(FULLGAME_V2_STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_fullgame_v2")
-
-
-def fullgame_final_stage_directory():
-    explicit = os.environ.get(FULLGAME_FINAL_STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_final")
-
-
 def official_stage_directory():
     explicit = os.environ.get(OFFICIAL_STAGE_ENVIRONMENT_VARIABLE)
     if explicit:
@@ -360,26 +277,14 @@ def spectator_fix_stage_directory():
     return fullbuild_stage_directory(SPECTATOR_FIX_STAGE_ENVIRONMENT_VARIABLE, "stage_spectator_fix")
 
 
-def baseline_stage_directory():
-    explicit = os.environ.get(BASELINE_STAGE_ENVIRONMENT_VARIABLE)
-    if explicit:
-        return explicit
-    return os.path.join(mods_root(), "casualties-together-upstream", "build", "stage_baseline")
-
-
 def stage_directory_by_build():
-    return {"upstream-fixes": stage_directory, "upstream-diag": diag_stage_directory, "upstream-diag2": diag_stage2_directory,
-            "upstream-diag3": diag_stage3_directory, "upstream-fixed": fullgame_stage_directory, "upstream-baseline": baseline_stage_directory,
-            "upstream-fixed-diag": fullgame_diag_stage_directory, "upstream-fixed-nobuild": fullgame_nobuild_stage_directory,
-            "upstream-fixed-v2": fullgame_v2_stage_directory, "upstream-fixed-final": fullgame_final_stage_directory, "official-5.5.0": official_stage_directory,
-            "fullbuild-control": fullbuild_control_stage_directory, "fullbuild-fixed": fullbuild_fixed_stage_directory, "spectator-fix": spectator_fix_stage_directory,
-            "pr24-control": pr24_control_stage_directory, "pr24-fixed": pr24_fixed_stage_directory,
-            "pr24-fixed-verbose": pr24_verbose_stage_directory,
-            "pr24-control-verbose": pr24_control_verbose_stage_directory}
+    return {"official-5.5.0": official_stage_directory, "fullbuild-control": fullbuild_control_stage_directory, "fullbuild-fixed": fullbuild_fixed_stage_directory,
+            "spectator-fix": spectator_fix_stage_directory, "pr24-control": pr24_control_stage_directory, "pr24-fixed": pr24_fixed_stage_directory,
+            "pr24-fixed-verbose": pr24_verbose_stage_directory, "pr24-control-verbose": pr24_control_verbose_stage_directory}
 
 
-def install_stage_together(copy, directory=None):
-    source = os.path.join(directory or stage_directory(), "plugins", TOGETHER_FOLDER)
+def install_stage_together(copy, directory):
+    source = os.path.join(directory, "plugins", TOGETHER_FOLDER)
     if not os.path.isfile(os.path.join(source, "CasualtiesMP.dll")):
         raise FileNotFoundError(os.path.join(source, "CasualtiesMP.dll"))
     target = os.path.join(copy, PLUGINS_RELATIVE, TOGETHER_FOLDER)
@@ -438,24 +343,6 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stock_together(copy)
     elif together == "fork":
         installed["together"] = install_fork_together(copy)
-    elif together == STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy)
-    elif together == DIAG_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, diag_stage_directory())
-    elif together == DIAG_STAGE2_CHOICE:
-        installed["together"] = install_stage_together(copy, diag_stage2_directory())
-    elif together == DIAG_STAGE3_CHOICE:
-        installed["together"] = install_stage_together(copy, diag_stage3_directory())
-    elif together == FULLGAME_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, fullgame_stage_directory())
-    elif together == FULLGAME_DIAG_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, fullgame_diag_stage_directory())
-    elif together == FULLGAME_NOBUILD_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, fullgame_nobuild_stage_directory())
-    elif together == FULLGAME_V2_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, fullgame_v2_stage_directory())
-    elif together == FULLGAME_FINAL_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, fullgame_final_stage_directory())
     elif together == OFFICIAL_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, official_stage_directory())
     elif together == FULLBUILD_CONTROL_STAGE_CHOICE:
@@ -472,8 +359,6 @@ def configure_instance(copy, plugins, together="stock", debug=True):
         installed["together"] = install_stage_together(copy, pr24_verbose_stage_directory())
     elif together == PR24_FIXED_STAGE_CHOICE:
         installed["together"] = install_stage_together(copy, pr24_fixed_stage_directory())
-    elif together == BASELINE_STAGE_CHOICE:
-        installed["together"] = install_stage_together(copy, baseline_stage_directory())
     elif together == FRIENDS_ZIP_CHOICE:
         installed["together"] = friendszip.extract_into_copy(friendszip.default_zip_path(), copy, remove_extras=True)
         if debug:
@@ -481,7 +366,7 @@ def configure_instance(copy, plugins, together="stock", debug=True):
     elif flavour_name(together):
         installed["together"] = install_flavour_package(copy)
     elif together != "keep":
-        raise ValueError("together must be stock, fork, stage, keep or flavour:<name>, not %r" % together)
+        raise ValueError("together must be stock, fork, a stage choice, keep or flavour:<name>, not %r" % together)
     for name in plugins:
         installed[name] = PLUGIN_INSTALLERS[name](copy)
         if debug and name in PLUGIN_DEBUG_GUIDS:

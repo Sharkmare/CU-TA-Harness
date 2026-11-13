@@ -43,12 +43,12 @@ class RunArgumentTests(unittest.TestCase):
         from contextlib import redirect_stdout
         buffer = io.StringIO()
         with redirect_stdout(buffer), mock.patch.dict(os.environ, {}, clear=False):
-            code = run_tests.main(["--list", "--only", "desync", "--builds", "upstream-fixes", "stock-5.5.0", "--net", "100:0", "100:60", "250:100",
+            code = run_tests.main(["--list", "--only", "desync", "--builds", "pr24-fixed", "stock-5.5.0", "--net", "100:0", "100:60", "250:100",
                                    "--repeat", "3", "--match", "hold_mining_cracks"])
         text = buffer.getvalue()
         self.assertEqual(code, 0)
         self.assertIn("launches (2):", text)
-        self.assertIn("L1-upstream-fixes-hand-mining", text)
+        self.assertIn("L1-pr24-fixed-hand-mining", text)
         self.assertIn("L2-stock-5.5.0-hand-mining", text)
         self.assertIn("9 scenario runs", text)
         self.assertIn("2 launches; one per scenario run would be 18", text)

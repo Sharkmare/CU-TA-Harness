@@ -101,11 +101,11 @@ class SeriesReportTests(unittest.TestCase):
         scenario = desync.SeriesScenario("hand_mining_cracks", "bare hands", lambda host, client: {}, block.hit, block.read,
                                          cadence_seconds=0.02, max_hits=5, interval_seconds=0.01, tail_seconds=0.05)
         observation = desync.observe_series(scenario, "host", "client")
-        return desync.describe_series(observation, "upstream-fixes", "cd" * 32, "1.0", delay, 20.0)
+        return desync.describe_series(observation, "pr24-fixed", "cd" * 32, "1.0", delay, 20.0)
 
     def test_the_report_names_build_hash_delay_and_both_sides(self):
         text = desync.format_series_report(self.report())
-        self.assertIn("[upstream-fixes] sha256 " + "cd" * 32, text)
+        self.assertIn("[pr24-fixed] sha256 " + "cd" * 32, text)
         self.assertIn("100 ms one way (+ jitter up to 20 ms)", text)
         self.assertIn("game version 1.0, action performed by the client", text)
         self.assertIn("host: broke at", text)
@@ -119,7 +119,7 @@ class SeriesReportTests(unittest.TestCase):
         report = self.report()
         with tempfile.TemporaryDirectory() as directory:
             path = desync.save_series_report(report, directory)
-            self.assertRegex(os.path.basename(path), r"__upstream-fixes_cdcdcdcd__delay100_jitter20_r1__\d{6}\.json$")
+            self.assertRegex(os.path.basename(path), r"__pr24-fixed_cdcdcdcd__delay100_jitter20_r1__\d{6}\.json$")
             with open(path, encoding="utf-8") as handle:
                 loaded = json.load(handle)
         self.assertEqual(loaded["delayMs"], 100.0)

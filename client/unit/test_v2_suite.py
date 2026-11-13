@@ -43,42 +43,10 @@ class SuiteTests(unittest.TestCase):
 
     def test_the_launch_plan_for_the_v2_command_is_one_launch(self):
         counts = scenarios.counts_by_group(["pvp_banded", "spawned_crate", "v2check", "launch_log_checks"])
-        launches = launchplan.plan_launches(["upstream-fixed-v2"], sorted(counts), launchplan.parse_profiles(["100:0@5"]), 8, ["pvp_banded", "spawned_crate", "v2check", "launch_log_checks"])
+        launches = launchplan.plan_launches(["pr24-fixed"], sorted(counts), launchplan.parse_profiles(["100:0@5"]), 8, ["pvp_banded", "spawned_crate", "v2check", "launch_log_checks"])
         self.assertEqual(len(launches), 1)
         self.assertEqual(launches[0].startup_group, "hook-evidence")
 
-
-class V2BuildTests(unittest.TestCase):
-    def test_the_v2_build_has_its_own_stage_folder_and_choice(self):
-        self.assertEqual(desync.parse_build("upstream-fixed-v2"), "upstream-fixed-v2")
-        self.assertEqual(desync.together_choice("upstream-fixed-v2"), "fullgame-v2-stage")
-        self.assertIn("upstream-fixed-v2", instances.stage_directory_by_build())
-        with tempfile.TemporaryDirectory() as stage:
-            os.makedirs(os.path.join(stage, "plugins", "Together"))
-            with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
-                handle.write("v2")
-            with tempfile.TemporaryDirectory() as copy, mock.patch.dict(os.environ, {instances.FULLGAME_V2_STAGE_ENVIRONMENT_VARIABLE: stage}):
-                instances.configure_instance(copy, [], together="fullgame-v2-stage")
-                with open(os.path.join(copy, "BepInEx", "plugins", "Together", "CasualtiesMP.dll")) as handle:
-                    self.assertEqual(handle.read(), "v2")
-
-    def test_the_final_build_has_its_own_stage_folder_and_choice(self):
-        self.assertEqual(desync.parse_build("upstream-fixed-final"), "upstream-fixed-final")
-        self.assertEqual(desync.together_choice("upstream-fixed-final"), "fullgame-final-stage")
-        with tempfile.TemporaryDirectory() as stage:
-            os.makedirs(os.path.join(stage, "plugins", "Together"))
-            with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
-                handle.write("final")
-            with tempfile.TemporaryDirectory() as copy, mock.patch.dict(os.environ, {instances.FULLGAME_FINAL_STAGE_ENVIRONMENT_VARIABLE: stage}):
-                instances.configure_instance(copy, [], together="fullgame-final-stage")
-                with open(os.path.join(copy, "BepInEx", "plugins", "Together", "CasualtiesMP.dll")) as handle:
-                    self.assertEqual(handle.read(), "final")
-        self.assertTrue(instances.fullgame_final_stage_directory().replace("\\", "/").endswith("casualties-together-upstream/build/stage_final"))
-
-    def test_the_default_folder_is_the_v2_stage_of_the_upstream_build_tree(self):
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop(instances.FULLGAME_V2_STAGE_ENVIRONMENT_VARIABLE, None)
-            self.assertTrue(instances.fullgame_v2_stage_directory().replace("\\", "/").endswith("casualties-together-upstream/build/stage_fullgame_v2"))
 
 
 class RawHitTests(unittest.TestCase):

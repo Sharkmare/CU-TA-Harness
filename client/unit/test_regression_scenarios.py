@@ -140,25 +140,6 @@ class MeasureTests(unittest.TestCase):
 
 
 class BuildAndGroupTests(unittest.TestCase):
-    def test_the_fixed_and_baseline_builds_have_their_own_stage_folders(self):
-        self.assertEqual(desync.together_choice("upstream-fixed"), "fullgame-stage")
-        self.assertEqual(desync.together_choice("upstream-baseline"), "baseline-stage")
-        self.assertEqual(desync.together_choice("upstream-fixed-diag"), "fullgame-diag-stage")
-        self.assertEqual(desync.parse_build("upstream-fixed-diag"), "upstream-fixed-diag")
-        self.assertEqual(desync.together_choice("upstream-fixed-nobuild"), "fullgame-nobuild-stage")
-        self.assertEqual(desync.parse_build("upstream-fixed-nobuild"), "upstream-fixed-nobuild")
-        for build, variable, choice in (("fixed", instances.FULLGAME_STAGE_ENVIRONMENT_VARIABLE, "fullgame-stage"), ("baseline", instances.BASELINE_STAGE_ENVIRONMENT_VARIABLE, "baseline-stage"),
-                                        ("fixed-diag", instances.FULLGAME_DIAG_STAGE_ENVIRONMENT_VARIABLE, "fullgame-diag-stage"),
-                                        ("fixed-nobuild", instances.FULLGAME_NOBUILD_STAGE_ENVIRONMENT_VARIABLE, "fullgame-nobuild-stage")):
-            with tempfile.TemporaryDirectory() as stage:
-                os.makedirs(os.path.join(stage, "plugins", "Together"))
-                with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
-                    handle.write(build)
-                with tempfile.TemporaryDirectory() as copy, mock.patch.dict(os.environ, {variable: stage}):
-                    instances.configure_instance(copy, [], together=choice)
-                    with open(os.path.join(copy, "BepInEx", "plugins", "Together", "CasualtiesMP.dll")) as handle:
-                        self.assertEqual(handle.read(), build)
-
     def test_every_staged_build_has_a_stage_directory_for_hashing_and_the_preflight(self):
         directories = instances.stage_directory_by_build()
         for build in desync.STAGE_CHOICES:
@@ -167,10 +148,10 @@ class BuildAndGroupTests(unittest.TestCase):
 
     def test_the_preflight_refuses_a_planned_stage_build_whose_dll_is_missing(self):
         from tests import desync_scenarios as scenarios
-        with tempfile.TemporaryDirectory() as empty, mock.patch.dict(os.environ, {instances.FULLGAME_NOBUILD_STAGE_ENVIRONMENT_VARIABLE: empty}):
-            problems = scenarios.preflight_problems(["spawned_crate"], 12, ["upstream-fixed-nobuild"])
+        with tempfile.TemporaryDirectory() as empty, mock.patch.dict(os.environ, {instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE: empty}):
+            problems = scenarios.preflight_problems(["spawned_crate"], 12, ["pr24-fixed"])
         self.assertEqual(len(problems), 1)
-        self.assertIn("upstream-fixed-nobuild", problems[0])
+        self.assertIn("pr24-fixed", problems[0])
 
     def test_the_preflight_accepts_a_stage_build_with_a_dll(self):
         from tests import desync_scenarios as scenarios
@@ -178,8 +159,8 @@ class BuildAndGroupTests(unittest.TestCase):
             os.makedirs(os.path.join(stage, "plugins", "Together"))
             with open(os.path.join(stage, "plugins", "Together", "CasualtiesMP.dll"), "w") as handle:
                 handle.write("x")
-            with mock.patch.dict(os.environ, {instances.FULLGAME_NOBUILD_STAGE_ENVIRONMENT_VARIABLE: stage}):
-                self.assertEqual(scenarios.preflight_problems(["spawned_crate"], 12, ["upstream-fixed-nobuild"]), [])
+            with mock.patch.dict(os.environ, {instances.PR24_FIXED_STAGE_ENVIRONMENT_VARIABLE: stage}):
+                self.assertEqual(scenarios.preflight_problems(["spawned_crate"], 12, ["pr24-fixed"]), [])
 
     def test_the_regression_group_turns_the_pvp_rule_on_for_both_games(self):
         from tests import test_desync
@@ -187,7 +168,7 @@ class BuildAndGroupTests(unittest.TestCase):
             joined = " ".join(arguments["hook-regression"])
             self.assertIn("--mp-setrule PVP 1", joined)
 
-    def test_the_baseline_control_expects_no_success_line_and_the_fixed_build_expects_one(self):
+    def test_a_control_build_expects_no_success_line_and_the_fixed_build_expects_one(self):
         good = "Body.Attack TRANSPILER SUCCESS :)\n"
         self.assertEqual(desync.launch_log_checks(good, good, expect_no_scatter=False, expect_success=True)["issues"], [])
         control = desync.launch_log_checks("nothing", "nothing", expect_no_scatter=False, expect_success=False)

@@ -93,7 +93,6 @@
         "unit.test_udpproxy",
         "unit.test_desync_series",
         "unit.test_launchplan",
-        "unit.test_diagblock",
         "unit.test_launchsummary",
         "unit.test_hook_scenarios",
         "unit.test_regression_scenarios",

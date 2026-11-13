@@ -56,7 +56,7 @@ class ProfileRepeatTests(unittest.TestCase):
 
     def test_the_run_count_adds_each_profiles_own_repetitions(self):
         profiles = launchplan.parse_profiles(["0:0@10", "100:0@20", "100:60@10"])
-        launch = launchplan.plan_launches(["upstream-diag"], ["hand-mining"], profiles, 1)[0]
+        launch = launchplan.plan_launches(["pr24-control"], ["hand-mining"], profiles, 1)[0]
         self.assertEqual(launchplan.runs_in_launch(launch, {"hand-mining": {"plain": 0, "network": 1}}), 40)
 
     def test_the_child_arguments_keep_the_repeats(self):
@@ -70,8 +70,8 @@ class PlanTests(unittest.TestCase):
     profiles = launchplan.parse_profiles(["100:0", "100:60", "250:100"])
 
     def test_network_settings_do_not_add_launches(self):
-        few = launchplan.plan_launches(["upstream-fixes", "stock-5.5.0"], ["hand-mining"], launchplan.parse_profiles(["100:0"]), 3)
-        many = launchplan.plan_launches(["upstream-fixes", "stock-5.5.0"], ["hand-mining"], self.profiles, 3)
+        few = launchplan.plan_launches(["pr24-fixed", "stock-5.5.0"], ["hand-mining"], launchplan.parse_profiles(["100:0"]), 3)
+        many = launchplan.plan_launches(["pr24-fixed", "stock-5.5.0"], ["hand-mining"], self.profiles, 3)
         self.assertEqual((len(few), len(many)), (2, 2))
 
     def test_one_launch_per_build_and_startup_group(self):
@@ -114,7 +114,7 @@ class CountTests(unittest.TestCase):
 
     def test_without_grouping_every_run_would_be_its_own_launch(self):
         profiles = launchplan.parse_profiles(["100:0", "100:60", "250:100"])
-        launches = launchplan.plan_launches(["upstream-fixes", "stock-5.5.0"], ["hand-mining"], profiles, 3)
+        launches = launchplan.plan_launches(["pr24-fixed", "stock-5.5.0"], ["hand-mining"], profiles, 3)
         self.assertEqual(launchplan.launches_without_grouping(launches, COUNTS), 36)
         self.assertEqual(len(launches), 2)
 

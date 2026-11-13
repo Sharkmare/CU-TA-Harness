@@ -10,16 +10,6 @@ from . import launchplan
 
 SAMPLE_OFFSETS_SECONDS = (0.0, 2.0, 10.0)
 FLAVOUR_BUILDS = ("stock-5.5.0", "stock-5.4.0", "fork")
-STAGE_BUILD = "upstream-fixes"
-DIAG_BUILD = "upstream-diag"
-DIAG2_BUILD = "upstream-diag2"
-DIAG3_BUILD = "upstream-diag3"
-FIXED_BUILD = "upstream-fixed"
-BASELINE_BUILD = "upstream-baseline"
-FIXED_DIAG_BUILD = "upstream-fixed-diag"
-FIXED_NOBUILD_BUILD = "upstream-fixed-nobuild"
-FIXED_V2_BUILD = "upstream-fixed-v2"
-FIXED_FINAL_BUILD = "upstream-fixed-final"
 OFFICIAL_BUILD = "official-5.5.0"
 FULLBUILD_CONTROL_BUILD = "fullbuild-control"
 FULLBUILD_FIXED_BUILD = "fullbuild-fixed"
@@ -28,13 +18,9 @@ PR24_CONTROL_BUILD = "pr24-control"
 PR24_FIXED_BUILD = "pr24-fixed"
 PR24_VERBOSE_BUILD = "pr24-fixed-verbose"
 PR24_CONTROL_VERBOSE_BUILD = "pr24-control-verbose"
-STAGE_CHOICES = {STAGE_BUILD: "stage", DIAG_BUILD: "diag-stage", DIAG2_BUILD: "diag-stage2", DIAG3_BUILD: "diag-stage3",
-                 FIXED_BUILD: "fullgame-stage", BASELINE_BUILD: "baseline-stage", FIXED_DIAG_BUILD: "fullgame-diag-stage",
-                 FIXED_NOBUILD_BUILD: "fullgame-nobuild-stage", FIXED_V2_BUILD: "fullgame-v2-stage", FIXED_FINAL_BUILD: "fullgame-final-stage", OFFICIAL_BUILD: "official-stage",
-                 FULLBUILD_CONTROL_BUILD: "fullbuild-control-stage", FULLBUILD_FIXED_BUILD: "fullbuild-fixed-stage", SPECTATOR_FIX_BUILD: "spectator-fix-stage",
+STAGE_CHOICES = {OFFICIAL_BUILD: "official-stage", FULLBUILD_CONTROL_BUILD: "fullbuild-control-stage", FULLBUILD_FIXED_BUILD: "fullbuild-fixed-stage", SPECTATOR_FIX_BUILD: "spectator-fix-stage",
                  PR24_CONTROL_BUILD: "pr24-control-stage", PR24_FIXED_BUILD: "pr24-fixed-stage", PR24_VERBOSE_BUILD: "pr24-fixed-verbose-stage", PR24_CONTROL_VERBOSE_BUILD: "pr24-control-verbose-stage"}
-KNOWN_BUILDS = FLAVOUR_BUILDS + (STAGE_BUILD, DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD, FIXED_BUILD, BASELINE_BUILD, FIXED_DIAG_BUILD, FIXED_NOBUILD_BUILD, FIXED_V2_BUILD, FIXED_FINAL_BUILD, OFFICIAL_BUILD, FULLBUILD_CONTROL_BUILD, FULLBUILD_FIXED_BUILD, SPECTATOR_FIX_BUILD, PR24_CONTROL_BUILD, PR24_FIXED_BUILD, PR24_VERBOSE_BUILD, PR24_CONTROL_VERBOSE_BUILD)
-DIAG_BUILDS = (DIAG_BUILD, DIAG2_BUILD, DIAG3_BUILD)
+KNOWN_BUILDS = FLAVOUR_BUILDS + (OFFICIAL_BUILD, FULLBUILD_CONTROL_BUILD, FULLBUILD_FIXED_BUILD, SPECTATOR_FIX_BUILD, PR24_CONTROL_BUILD, PR24_FIXED_BUILD, PR24_VERBOSE_BUILD, PR24_CONTROL_VERBOSE_BUILD)
 TRANSPILER_MARKER = "TRANSPILER"
 PATCH_PROBLEM_MARKERS = ("Failed to patch", "IL Compile Error", "Ambiguous match")
 

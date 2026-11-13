@@ -273,7 +273,7 @@ class PreflightTests(unittest.TestCase):
 
     def test_the_stage_builds_for_both_launches_exist_in_the_stage_table(self):
         from casualtieslink import instances
-        for build in ("upstream-baseline", "upstream-fixed-final"):
+        for build in ("pr24-control", "pr24-fixed"):
             self.assertIn(build, instances.stage_directory_by_build())
             self.assertIn(build, desync.KNOWN_BUILDS)
 
