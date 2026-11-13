@@ -1,6 +1,6 @@
-"""Compact result table of the wood block mining launches: python tools/wood_mining_table.py A=.state/wood_dune_reports:d0-j0 B=.state/wood_dune_reports:d50-j60 C=.state/wood_exp_reports:d50-j60 [--format text|markdown]
+"""Compact result table of the wood block mining launches at the cooldown rate: python tools/wood_mining_table.py D=.state/wood_fd_reports:d100-j100 E=.state/wood_fe_reports:d100-j100 [--format text|markdown] [--runs]
 
-Each argument is LABEL=REPORT_DIRECTORY:NETWORK, the network being the d<delay>-j<jitter> part of the report file names.
+Each argument is LABEL=REPORT_DIRECTORY:NETWORK, the network being the d<delay>-j<jitter> part of the report file names. --runs prints the per-run bunching evidence instead of the summary.
 """
 import argparse
 import glob
@@ -9,7 +9,10 @@ import os
 import statistics
 import sys
 
-HEADERS = ("variant", "client", "network", "valid", "REVERSION", "swings", "swing interval s", "damage per swing", "broke at swing", "scraps per break", "host damage = client damage at every swing", "host log drops")
+HEADERS = ("variant", "client", "network", "valid", "REVERSION", "swings per run", "client swing interval s (min / median / max)", "host arrival spacing s (min, estimated)",
+           "arrivals under 0.124 s", "host swings applied vs client", "scraps per break (client / host)")
+RUN_HEADERS = ("run", "verdict", "swings", "client interval s (min / median / max)", "host arrival spacing s (min / median / max)", "arrivals under 0.124 s", "predicted host drops",
+               "client swings applied", "host swings applied", "reappeared (client)")
 MISSING = "-"
 
 
@@ -17,41 +20,10 @@ def load_runs(directory, network):
     runs = []
     for path in sorted(glob.glob(os.path.join(directory, "wood_mining_*__%s_r*.json" % network))):
         with open(path, encoding="utf-8") as handle:
-            runs.append(json.load(handle))
+            report = json.load(handle)
+        report["_name"] = os.path.basename(path)
+        runs.append(report)
     return runs
-
-
-def damage_per_swing(run):
-    """The rise of the client's damage for the cell per swing, read after each swing, up to the swing that broke the block."""
-    previous = 0.0
-    steps = []
-    for entry in run["woodSwings"]:
-        if entry["client"]["block"] == 0:
-            break
-        steps.append(entry["client"]["damage"] - previous)
-        previous = entry["client"]["damage"]
-    return statistics.median(steps) if steps else None
-
-
-def broke_at_swing(run):
-    for entry in run["woodSwings"]:
-        if entry["client"]["block"] == 0:
-            return entry["swing"]
-    return None
-
-
-def scraps_made(run):
-    """The most woodscraps near the cell seen in any sample minus the count before the run; scraps of earlier runs stay in the world, so the count before is subtracted."""
-    before = (run["woodRun"].get("scraps") or {}).get("before") or {}
-    made = {}
-    for side in ("client", "host"):
-        seen = [sample[side][3] for sample in run["samples"] if len(sample[side]) > 3 and sample[side][3] is not None]
-        made[side] = (max(seen) - before[side]) if seen and before.get(side) is not None else None
-    return made
-
-
-def host_matches_client(run):
-    return all(abs(entry["host"]["damage"] - entry["client"]["damage"]) < 0.05 for entry in run["woodSwings"])
 
 
 def join_unique(values):
@@ -59,37 +31,67 @@ def join_unique(values):
     for value in values:
         if value not in ordered:
             ordered.append(value)
-    return "/".join(str(value) for value in ordered) if ordered else MISSING
+    return ", ".join(str(value) for value in ordered) if ordered else MISSING
+
+
+def triple(distribution):
+    return MISSING if not distribution else "%.3f / %.3f / %.3f" % (distribution["min"], distribution["median"], distribution["max"])
+
+
+def scraps_made(run):
+    scraps = run["woodRun"]["scraps"]
+    before, end = scraps.get("before") or {}, scraps.get("end") or {}
+    return {side: (end[side] - before[side]) if end.get(side) is not None and before.get(side) is not None else None for side in ("client", "host")}
+
+
+def interval_extremes(valid):
+    """Smallest, median of the medians and largest client swing interval over the valid runs."""
+    distributions = [run["woodRun"]["bunching"]["clientIntervals"] for run in valid if run["woodRun"]["bunching"]["clientIntervals"]]
+    if not distributions:
+        return MISSING
+    return "%.3f / %.3f / %.3f" % (min(item["min"] for item in distributions), statistics.median(item["median"] for item in distributions), max(item["max"] for item in distributions))
 
 
 def summarize(label, runs, client_name, network):
     valid = [run for run in runs if run["woodRun"]["verdict"] != "invalid"]
     reversions = [run for run in valid if run["woodRun"]["verdict"] == "reversion"]
     timing = "; ".join("%.2f s after the break" % run["woodRun"]["clientReappeared"][0]["goneFor"] for run in reversions)
-    intervals = [value for run in valid for value in run["swings"]["clientIntervals"]]
-    spacing = MISSING if not intervals else "%.2f to %.2f (mean %.2f)" % (min(intervals), max(intervals), statistics.mean(intervals))
-    damage = [damage_per_swing(run) for run in valid]
-    made = [scraps_made(run) for run in valid]
-    drops = [run["woodRun"]["hostEventCounts"]["cooldown"] for run in valid]
     invalid = len(runs) - len(valid)
+    spacing_min = [run["woodRun"]["bunching"]["hostArrivalSpacings"]["min"] for run in valid if run["woodRun"]["bunching"]["hostArrivalSpacings"]]
+    under = sum(run["woodRun"]["bunching"]["arrivalsUnderCooldown"] for run in valid)
+    estimated = sum(run["woodRun"]["bunching"]["arrivalsEstimated"] for run in valid)
+    applied_client = sum(run["woodRun"]["damage"]["clientSwingsApplied"] for run in valid)
+    applied_host = sum(run["woodRun"]["damage"]["hostSwingsApplied"] for run in valid)
+    made = [scraps_made(run) for run in valid]
     return [label, client_name, network, "%d/%d%s" % (len(valid), len(runs), "" if not invalid else " (%d invalid)" % invalid),
             ("%d%s" % (len(reversions), " (%s)" % timing if timing else "")) if valid else MISSING,
-            join_unique(run["woodRun"]["swingsFired"] for run in valid), spacing, join_unique("%.2f" % value for value in damage if value is not None),
-            join_unique(broke_at_swing(run) for run in valid),
-            join_unique("%s client/%s host" % (item["client"], item["host"]) for item in made),
-            "%d/%d runs" % (len([run for run in valid if host_matches_client(run)]), len(valid)), join_unique(drops)]
+            join_unique(run["woodRun"]["swingsFired"] for run in valid), interval_extremes(valid),
+            MISSING if not spacing_min else "%.3f" % min(spacing_min), "%d of %d" % (under, estimated), "%d vs %d" % (applied_host, applied_client),
+            join_unique("%s / %s" % (item["client"], item["host"]) for item in made)]
 
 
-def render_text(rows):
-    grid = [HEADERS] + rows
-    widths = [max(len(str(row[index])) for row in grid) for index in range(len(HEADERS))]
+def run_rows(runs):
+    rows = []
+    for run in runs:
+        wood = run["woodRun"]
+        bunching = wood["bunching"]
+        reappeared = wood.get("clientReappeared") or []
+        rows.append([run["_name"].split("__")[-1][:-5], wood["verdict"] + ("" if not wood["reasons"] else ": " + "; ".join(wood["reasons"])), wood["swingsFired"], triple(bunching["clientIntervals"]),
+                     triple(bunching["hostArrivalSpacings"]), bunching["arrivalsUnderCooldown"], bunching["predictedHostDrops"], wood["damage"]["clientSwingsApplied"],
+                     wood["damage"]["hostSwingsApplied"], MISSING if not reappeared else "%.2f s" % reappeared[0]["goneFor"]])
+    return rows
+
+
+def render_text(headers, rows):
+    grid = [headers] + rows
+    widths = [max(len(str(row[index])) for row in grid) for index in range(len(headers))]
     return "\n".join("  ".join(str(cell).ljust(widths[index]) for index, cell in enumerate(row)).rstrip() for row in grid) + "\n"
 
 
-def render_markdown(rows):
+def render_markdown(headers, rows):
     def escape(value):
         return str(value).replace("\\", "\\\\").replace("|", "\\|").replace("<", "\\<").replace(">", "\\>")
-    lines = ["| " + " | ".join(HEADERS) + " |", "|" + "|".join("---" for _ in HEADERS) + "|"]
+    lines = ["| " + " | ".join(escape(header) for header in headers) + " |", "|" + "|".join("---" for _ in headers) + "|"]
     lines.extend("| " + " | ".join(escape(cell) for cell in row) + " |" for row in rows)
     return "\n".join(lines) + "\n"
 
@@ -98,15 +100,24 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("variants", nargs="+", help="LABEL=DIRECTORY:NETWORK")
     parser.add_argument("--format", choices=("text", "markdown"), default="text")
+    parser.add_argument("--runs", action="store_true", help="the per-run bunching evidence")
     arguments = parser.parse_args(argv)
-    rows = []
+    render = render_markdown if arguments.format == "markdown" else render_text
+    chunks = []
+    summary = []
     for item in arguments.variants:
         label, rest = item.split("=", 1)
         directory, network = rest.rsplit(":", 1)
         runs = load_runs(directory, network)
         client_name = {2: "Dune", 0: "Experiment"}.get((runs[0]["woodRun"]["identities"] or {}).get("clientWanted")) if runs else MISSING
-        rows.append(summarize(label, runs, client_name, network))
-    text = render_markdown(rows) if arguments.format == "markdown" else render_text(rows)
+        if arguments.runs:
+            chunks.append(("%s (%s, %s)" % (label, client_name, network), run_rows(runs)))
+        else:
+            summary.append(summarize(label, runs, client_name, network))
+    if arguments.runs:
+        text = "\n".join(("**%s**\n\n" % title if arguments.format == "markdown" else title + "\n") + render(RUN_HEADERS, rows) for title, rows in chunks)
+    else:
+        text = render(HEADERS, summary)
     sys.stdout.buffer.write(text.encode("ascii", "replace"))
     return 0
 
