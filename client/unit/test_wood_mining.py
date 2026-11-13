@@ -198,6 +198,18 @@ class SwingBurstRecordTests(unittest.TestCase):
         self.assertEqual(report["steamlikeLines"]["client"], ["steamlike on"])
 
 
+class ResyncGuardRecordTests(unittest.TestCase):
+    LOG = "x\n[Info] RESYNCGUARD kept cell=4,5 localAgeS=0.60\nnoise\n[Info] RESYNCGUARD summary local-breaks=1 kept-through-resync=1 applied-after-window=0\n"
+
+    def test_the_resyncguard_lines_are_counted_by_kind_with_the_first_ones_kept(self):
+        record = wood.resyncguard_record(self.LOG)
+        self.assertEqual((record["lines"], record["counts"]), (2, {"kept": 1, "summary": 1}))
+        self.assertTrue(record["first"][0].endswith("localAgeS=0.60"))
+
+    def test_a_log_without_the_lines_gives_zero_counts(self):
+        self.assertEqual(wood.resyncguard_record("nothing\n")["counts"], {"kept": 0, "summary": 0})
+
+
 class SteamlikeProblemTests(unittest.TestCase):
     GOOD = "STEAMLIKE delivery on (reliable messages sent as ReliableOrdered)\nx\nSTEAMLIKE local delivery on peer=1\n"
 

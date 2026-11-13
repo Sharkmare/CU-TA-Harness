@@ -234,6 +234,17 @@ def swingburst_record(host_log_text):
     return {"lines": len(lines), "counts": counts, "first": [line[-220:] for line in lines[:SWINGBURST_LINE_LIMIT]]}
 
 
+RESYNCGUARD_MARKER = "RESYNCGUARD"
+RESYNCGUARD_KINDS = (("kept", "RESYNCGUARD kept"), ("summary", "RESYNCGUARD summary"))
+
+
+def resyncguard_record(client_log_text):
+    """The RESYNCGUARD lines of the client of the run: the cells kept through a host chunk resync, the summaries (local breaks, kept through resync, applied after the window)."""
+    lines = [line.strip() for line in client_log_text.splitlines() if RESYNCGUARD_MARKER in line]
+    counts = {name: len([line for line in lines if marker in line]) for name, marker in RESYNCGUARD_KINDS}
+    return {"lines": len(lines), "counts": counts, "first": [line[-220:] for line in lines[:SWINGBURST_LINE_LIMIT]]}
+
+
 def steamlike_lines(log_text):
     """Log lines that name the steamlike transport, so the report shows whether both games started in that mode."""
     return [line.strip()[-200:] for line in log_text.splitlines() if STEAMLIKE_MARKER in line.lower()][:10]
@@ -345,6 +356,7 @@ def extend_report(report, observation, run_logs, packets):
     report["woodSwings"] = [dict(entry, arrivalEstimate=None if arrivals[index] is None else round(arrivals[index] - started, 3)) for index, entry in enumerate(swings)]
     report["liveValues"] = context.get("liveValues")
     report["swingBurst"] = swingburst_record(run_logs.get("host") or "")
+    report["resyncGuard"] = resyncguard_record(run_logs.get("client") or "")
     report["steamlikeLines"] = {side: steamlike_lines(run_logs.get(side) or "") for side in ("host", "client")}
     stalls = report.get("stallTrace") or []
     report["woodRun"]["stalls"] = {"count": len(stalls), "packetsHeld": sum(entry["held"] for entry in stalls), "longest": max([round(entry["end"] - entry["start"], 3) for entry in stalls if entry.get("start") is not None] or [None])}
