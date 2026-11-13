@@ -330,6 +330,151 @@ class ParkedHostTests(unittest.TestCase):
         self.assertIsNone(control.closest_approach({"linkRead": None, "holder": None, "paths": {}}, [{"x": 0.0, "y": 0.0}]))
 
 
+def view(holder, rb, link=None, target=None):
+    return {"holder": holder, "linkRead": link if link is not None else holder, "paths": {"rb.position": rb}}
+
+
+TARGET = {"x": 5.0, "y": 6.0}
+
+
+class OffsetGame(FakeBodyGame):
+    """A held body whose link read, rb.position or holder view can each be moved off the target."""
+
+    def __init__(self, position, link_offset=0.0, rb_offset=0.0, holder_offset=0.0):
+        super().__init__(position)
+        self.link_offset, self.rb_offset, self.holder_offset = link_offset, rb_offset, holder_offset
+
+    def get(self, target, path="", depth=1):
+        point = super().get(target, path, depth)
+        offset = self.rb_offset if path == "rb.position" else self.link_offset
+        return {"x": point["x"] + offset, "y": point["y"]}
+
+    def call(self, command, **arguments):
+        result = super().call(command, **arguments)
+        if command == control.STATUS_COMMAND and result:
+            result[0]["position"] = {"x": result[0]["position"]["x"] + self.holder_offset, "y": result[0]["position"]["y"]}
+        return result
+
+
+class JudgeSeatTests(unittest.TestCase):
+    def test_a_seat_where_the_holder_and_rb_agree_with_the_target_is_ok_even_when_the_link_read_wandered(self):
+        judgment = control.judge_seat(view({"x": 5.0, "y": 6.0}, {"x": 5.01, "y": 6.0}, link={"x": 5.4, "y": 6.0}), TARGET)
+        self.assertTrue(judgment["ok"], judgment["issues"])
+        self.assertTrue(judgment["linkReadDisagrees"])
+        self.assertEqual(judgment["linkDrift"], 0.4)
+
+    def test_a_seat_is_refused_when_rb_position_is_off_even_if_the_link_read_and_holder_look_fine(self):
+        judgment = control.judge_seat(view({"x": 5.0, "y": 6.0}, {"x": 5.3, "y": 6.0}, link={"x": 5.0, "y": 6.0}), TARGET)
+        self.assertFalse(judgment["ok"])
+        self.assertTrue(any("rb.position is 0.300" in issue for issue in judgment["issues"]), judgment["issues"])
+        self.assertFalse(judgment["linkReadDisagrees"])
+
+    def test_a_seat_is_refused_when_the_holder_view_is_off(self):
+        judgment = control.judge_seat(view({"x": 5.2, "y": 6.0}, {"x": 5.0, "y": 6.0}), TARGET)
+        self.assertFalse(judgment["ok"])
+        self.assertTrue(any("holder's view is 0.200" in issue for issue in judgment["issues"]), judgment["issues"])
+
+    def test_a_seat_is_refused_when_the_holder_and_rb_disagree_with_each_other_but_both_are_near_the_target(self):
+        judgment = control.judge_seat(view({"x": 4.97, "y": 6.0}, {"x": 5.04, "y": 6.0}), TARGET, tolerance=0.05)
+        self.assertFalse(judgment["ok"])
+        self.assertTrue(any("apart" in issue for issue in judgment["issues"]), judgment["issues"])
+
+    def test_a_seat_is_refused_when_the_holder_view_or_rb_position_cannot_be_read(self):
+        self.assertFalse(control.judge_seat({"holder": None, "linkRead": TARGET, "paths": {"rb.position": TARGET}}, TARGET)["ok"])
+        self.assertFalse(control.judge_seat({"holder": TARGET, "linkRead": TARGET, "paths": {}}, TARGET)["ok"])
+
+    def test_the_tolerance_is_the_strict_default(self):
+        self.assertEqual(control.judge_seat.__defaults__[0], control.HOLD_TOLERANCE)
+        self.assertEqual(control.verify_swinging_body.__defaults__[0], control.HOLD_TOLERANCE)
+
+
+class VerifySwingingBodyTests(unittest.TestCase):
+    def test_a_held_body_whose_link_read_wanders_is_verified_and_the_disagreement_is_recorded(self):
+        game = OffsetGame({"x": 0, "y": 0}, link_offset=0.4)
+        result = control.seat_swinging_body(game, TARGET, paths=["rb.position"], sleep=no_sleep)
+        self.assertTrue(result["ok"], result["issues"])
+        self.assertTrue(result["linkReadDisagrees"])
+        self.assertEqual(result["linkDrifts"], [0.4] * control.VERIFY_POLLS)
+        self.assertEqual(result["drifts"], result["linkDrifts"])
+
+    def test_a_held_body_whose_rb_position_is_off_is_not_verified(self):
+        game = OffsetGame({"x": 0, "y": 0}, rb_offset=0.3)
+        result = control.seat_swinging_body(game, TARGET, paths=["rb.position"], sleep=no_sleep)
+        self.assertFalse(result["ok"])
+        self.assertTrue(any("rb.position" in issue for issue in result["issues"]))
+
+    def test_one_bad_reading_among_good_ones_fails_the_seat(self):
+        game = OffsetGame({"x": 0, "y": 0})
+        control.hold_at(game, TARGET)
+        readings = iter([0.0, 0.0, 0.4, 0.0])
+        real = game.get
+
+        def get(target, path="", depth=1):
+            point = real(target, path, depth)
+            return {"x": point["x"] + (next(readings) if path == "rb.position" else 0.0), "y": point["y"]}
+
+        game.get = get
+        result = control.verify_swinging_body(game, TARGET, paths=["rb.position"], sleep=no_sleep)
+        self.assertFalse(result["ok"])
+
+
+class PreflightViewsTests(unittest.TestCase):
+    def test_a_swinging_victim_is_never_judged_by_distance_only(self):
+        host, client = OffsetGame({"x": 0, "y": 0}, rb_offset=0.4), OffsetGame({"x": 5, "y": 6})
+        control.hold_at(host, {"x": -7.0, "y": 6.0})
+        control.hold_at(client, TARGET)
+        check = control.preflight_views(host, client, {"x": -7.0, "y": 6.0}, TARGET, control.ROLE_SWINGING, ["rb.position"], ["rb.position"], sleep=no_sleep)
+        self.assertFalse(check["ok"])
+        self.assertTrue(any(issue.startswith("the victim seat did not verify") for issue in check["issues"]), check["issues"])
+        self.assertGreater(check["separation"], 6.0)
+
+    def test_the_client_that_swings_is_verified_by_the_holder_and_rb_not_by_distance(self):
+        host, client = OffsetGame({"x": 0, "y": 0}), OffsetGame({"x": 5, "y": 6}, rb_offset=0.3)
+        control.hold_at(host, {"x": -7.0, "y": 6.0})
+        control.hold_at(client, TARGET)
+        check = control.preflight_views(host, client, {"x": -7.0, "y": 6.0}, TARGET, control.ROLE_PARKED, ["rb.position"], ["rb.position"], sleep=no_sleep)
+        self.assertFalse(check["ok"])
+        self.assertTrue(any(issue.startswith("the client seat did not verify") for issue in check["issues"]), check["issues"])
+
+    def test_a_parked_host_with_wandering_reads_never_fails_the_preflight_and_its_reads_are_recorded(self):
+        host, client = OffsetGame({"x": 0, "y": 0}, link_offset=0.9, rb_offset=0.9, holder_offset=0.9), OffsetGame({"x": 5, "y": 6})
+        control.hold_at(host, {"x": -7.0, "y": 6.0})
+        control.hold_at(client, TARGET)
+        check = control.preflight_views(host, client, {"x": -7.0, "y": 6.0}, TARGET, control.ROLE_PARKED, ["rb.position"], ["rb.position"], sleep=no_sleep)
+        self.assertTrue(check["ok"], check["issues"])
+        self.assertEqual(len(check["parkedHost"]["reads"]), control.VERIFY_POLLS)
+        self.assertNotIn("hostSeat", check)
+        self.assertTrue(check["clientSeat"]["ok"])
+
+    def test_a_client_whose_link_read_wanders_but_whose_holder_and_rb_agree_passes_with_the_disagreement_recorded(self):
+        host, client = OffsetGame({"x": 0, "y": 0}), OffsetGame({"x": 5, "y": 6}, link_offset=0.25)
+        control.hold_at(host, {"x": -7.0, "y": 6.0})
+        control.hold_at(client, TARGET)
+        check = control.preflight_views(host, client, {"x": -7.0, "y": 6.0}, TARGET, control.ROLE_PARKED, ["rb.position"], ["rb.position"], sleep=no_sleep)
+        self.assertTrue(check["ok"], check["issues"])
+        self.assertTrue(check["clientSeat"]["linkReadDisagrees"])
+        self.assertEqual(check["clientDrift"], 0.25)
+
+    def test_an_unknown_host_role_is_refused(self):
+        with self.assertRaises(control.PositionControlError):
+            control.preflight_views(FakeBodyGame({"x": 0, "y": 0}), FakeBodyGame({"x": 5, "y": 6}), TARGET, TARGET, "idle")
+
+
+class ParkedDistanceTests(unittest.TestCase):
+    def snapshot(self, x):
+        return {"linkRead": {"x": x, "y": 0.0}, "holder": {"x": x, "y": 0.0}, "paths": {"rb.position": {"x": x, "y": 0.0}}}
+
+    def test_a_parked_body_that_stays_far_has_no_problem_and_the_smallest_distance_is_reported(self):
+        problems, smallest = control.parked_distance_problems([("a", self.snapshot(-10.0)), ("b", self.snapshot(-8.0))], [{"x": 0.0, "y": 0.0}], 6.0)
+        self.assertEqual((problems, smallest), ([], 8.0))
+
+    def test_a_close_reading_or_an_unreadable_one_is_a_problem(self):
+        problems, smallest = control.parked_distance_problems([("a", self.snapshot(-10.0)), ("b", self.snapshot(-5.0)), ("c", None)], [{"x": 0.0, "y": 0.0}], 6.0)
+        self.assertEqual(smallest, 5.0)
+        self.assertEqual(len(problems), 2)
+        self.assertIn("at b", problems[0])
+
+
 class StartPositionTests(unittest.TestCase):
     def test_the_start_positions_are_recorded_even_when_nothing_is_held(self):
         record = control.start_positions(FakeBodyGame({"x": 1, "y": 2}), FakeBodyGame({"x": 4, "y": 6}), copy_state={"victimOnClient": "Dynamic"})

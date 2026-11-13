@@ -36,6 +36,7 @@ MIN_RESEAT_OFFSET = 0.5
 BAND_WAIT_SECONDS = 0.3
 BAND_TRIES = 4
 PARK_DIRECTION = "left"
+MIN_PARKED_DISTANCE = 6.0
 POSITION_FAILURE_CATEGORY = "position-preflight-failed"
 CAST_SAMPLE_STEP = 0.25
 RAW_HIT_WIDTH = 700
@@ -305,18 +306,33 @@ def position_setup(host, client, context):
     anchor = STATE["anchor"] or base.player_position(client)
     park = positioncontrol.point_at(anchor, PARK_DIRECTION, positioncontrol.PARK_DISTANCE)
     context["hostPark"] = park
+    context["hostPaths"] = positioncontrol.discover_diagnostic_paths(host)
+    context["clientPaths"] = positioncontrol.discover_diagnostic_paths(client)
     context["startPositions"] = positioncontrol.start_positions(host, client, copy_state=lambda: crate_copy_state(client, context))
-    context["hostHold"] = positioncontrol.place_and_hold(host, park)
+    context["hostHold"] = positioncontrol.place_and_hold(host, park, positioncontrol.PARKED_TOLERANCE)
 
 
 def run_preflight(host, client, context, band):
+    """The client swings and is verified by the holder's view and rb.position; the host only stands parked and is judged by its distance from the client and the crate."""
     seat = band.get("seat") or base.player_position(client)
-    check = positioncontrol.preflight_pair(host, client, context["hostPark"], seat, copy_state=lambda: crate_copy_state(client, context))
+    check = positioncontrol.preflight_views(host, client, context["hostPark"], seat, positioncontrol.ROLE_PARKED, context["hostPaths"], context["clientPaths"],
+                                            copy_state=lambda: crate_copy_state(client, context))
     context["positionControl"] = check
-    if not context["hostHold"]["ok"]:
-        check["issues"].append("the host hold did not verify: drifts %s" % context["hostHold"]["drifts"])
-        check["ok"] = False
+    problems, smallest = positioncontrol.parked_distance_problems([("preflight read %d" % number, snapshot) for number, snapshot in enumerate(check["parkedHost"]["reads"], 1)],
+                                                                   [seat, context["position"]], MIN_PARKED_DISTANCE)
+    context["parkedProblems"] = list(problems)
+    context["parkedSmallest"] = smallest
     return check
+
+
+def record_parked_host(host, client, context, index):
+    """The parked host's position at one swing, and a problem when its nearest read is closer than MIN_PARKED_DISTANCE to the client or the crate."""
+    snapshot = positioncontrol.parked_snapshot(host, context["hostPaths"])
+    problems, smallest = positioncontrol.parked_distance_problems([("swing %d" % index, snapshot)], [base.player_position(client), context["position"]], MIN_PARKED_DISTANCE)
+    context["parkedProblems"] = context.get("parkedProblems", []) + problems
+    if smallest is not None and (context.get("parkedSmallest") is None or smallest < context["parkedSmallest"]):
+        context["parkedSmallest"] = smallest
+    return snapshot
 
 
 def before_swing(client, context, index, aim):
@@ -330,7 +346,8 @@ def before_swing(client, context, index, aim):
         if not check["ok"]:
             context["positionFailure"] = check
             return None
-    return {"band": band, "geometry": read_geometry(client, host, context, aim),
+    parked = record_parked_host(host, client, context, index) if context.get("hostPark") else None
+    return {"band": band, "geometry": read_geometry(client, host, context, aim), "parkedHost": parked,
             "physics": {"host": crate_physics(host, context["hostHandle"]), "client": crate_physics(client, context["clientHandle"])}}
 
 
@@ -385,6 +402,10 @@ def check(context):
     if issues:
         STATE["swing_failed"] += 1
         record_failure("first-swing-no-damage", issues[0])
+    elif context.get("parkedProblems"):
+        message = "CONFOUNDED: the parked host was not far enough from the swing: %s" % "; ".join(context["parkedProblems"][:3])
+        record_failure("parked-host-too-close", message)
+        return [message]
     else:
         STATE["valid"] += 1
     return issues

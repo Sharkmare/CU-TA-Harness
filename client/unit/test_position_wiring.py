@@ -43,7 +43,7 @@ class CrateWiringTests(unittest.TestCase):
     def test_the_first_swing_runs_the_preflight_and_records_both_positions_and_the_separation(self):
         with self.physics():
             crates.position_setup(self.host, self.client, self.context)
-            self.client.position = {"x": 50.0, "y": 50.0}
+            crates.seat_client(self.client, {"x": 50.0, "y": 50.0})
             band = {"ok": True, "distances": [3.0], "seat": {"x": 50.0, "y": 50.0}}
             with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback: band), \
                     mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {}):
@@ -77,8 +77,66 @@ class CrateWiringTests(unittest.TestCase):
                 mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {}), mock.patch.object(crates, "run_preflight") as preflight, \
                 mock.patch.object(crates, "crate_physics", lambda game, handle: {}):
             self.context["hostPark"] = {"x": 38.0, "y": 50.0}
+            self.context["hostPaths"] = []
             crates.before_swing(self.client, self.context, 2, {"x": 53.0, "y": 50.0})
         preflight.assert_not_called()
+
+    def preflight_with_wandering_host(self, host_offset):
+        with self.physics():
+            crates.position_setup(self.host, self.client, self.context)
+            crates.seat_client(self.client, {"x": 50.0, "y": 50.0})
+            real = self.host.get
+            self.host.get = lambda target, path="", depth=1: {"x": real(target, path, depth)["x"] + host_offset, "y": real(target, path, depth)["y"]}
+            band = {"ok": True, "distances": [3.0], "seat": {"x": 50.0, "y": 50.0}}
+            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback: band), \
+                    mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {}):
+                return crates.before_swing(self.client, self.context, 1, {"x": 53.0, "y": 50.0})
+
+    def test_a_parked_host_that_wanders_by_a_unit_does_not_invalidate_the_run_but_is_recorded(self):
+        result = self.preflight_with_wandering_host(0.9)
+        self.assertIsNotNone(result)
+        self.assertNotIn("positionFailure", self.context)
+        self.assertEqual(self.context["parkedProblems"], [])
+        self.assertGreater(self.context["parkedSmallest"], crates.MIN_PARKED_DISTANCE)
+        self.assertIn("reads", self.context["positionControl"]["parkedHost"])
+
+    def test_a_parked_host_closer_than_the_minimum_to_the_swing_makes_the_run_confounded_and_not_valid(self):
+        self.preflight_with_wandering_host(0.0)
+        self.context["measurements"] = [{"hostDelta": 19.3, "clientDelta": 19.3}]
+        self.context["parkedProblems"] = ["the parked body was 4.00 from the swing at swing 3 (by rb.position), below 6.0"]
+        with mock.patch.object(crates.world, "check_first_swing", lambda context: []):
+            issues = crates.check(self.context)
+        self.assertTrue(issues[0].startswith("CONFOUNDED"), issues)
+        self.assertEqual(crates.STATE["valid"], 0)
+        self.assertEqual(dict(crates.STATE["reasons"]), {"parked-host-too-close": 1})
+
+    def test_a_run_whose_parked_host_stayed_far_is_valid(self):
+        self.context["measurements"] = [{"hostDelta": 19.3, "clientDelta": 19.3}]
+        self.context["parkedProblems"] = []
+        with mock.patch.object(crates.world, "check_first_swing", lambda context: []):
+            self.assertEqual(crates.check(self.context), [])
+        self.assertEqual(crates.STATE["valid"], 1)
+
+    def test_each_swing_records_the_parked_host_and_a_close_reading_is_kept_as_a_problem(self):
+        with self.physics():
+            crates.position_setup(self.host, self.client, self.context)
+        self.host.position = {"x": 51.0, "y": 50.0}
+        crates.record_parked_host(self.host, self.client, self.context, 4)
+        self.assertEqual(len(self.context["parkedProblems"]), 1)
+        self.assertIn("swing 4", self.context["parkedProblems"][0])
+
+    def test_the_client_that_swings_must_pass_the_holder_and_rb_check_in_the_crate_preflight(self):
+        with self.physics():
+            crates.position_setup(self.host, self.client, self.context)
+            crates.seat_client(self.client, {"x": 50.0, "y": 50.0})
+            real = self.client.get
+            self.client.get = lambda target, path="", depth=1: ({"x": real(target, path, depth)["x"] + 0.3, "y": real(target, path, depth)["y"]} if path == "rb.position" else real(target, path, depth))
+            band = {"ok": True, "distances": [3.0], "seat": {"x": 50.0, "y": 50.0}}
+            with mock.patch.object(crates, "ensure_band", lambda host, client, handle, fallback: band), \
+                    mock.patch.object(crates, "read_geometry", lambda client, host, context, aim: {"never": "read"}):
+                result = crates.before_swing(self.client, self.context, 1, {"x": 53.0, "y": 50.0})
+        self.assertIsNone(result)
+        self.assertTrue(any("the client seat did not verify" in issue and "rb.position" in issue for issue in self.context["positionFailure"]["issues"]))
 
     def test_both_holds_are_released_after_the_swings_even_when_they_fail(self):
         with mock.patch.object(crates.world, "act", side_effect=RuntimeError("link died")):
@@ -106,6 +164,31 @@ class PvpWiringTests(unittest.TestCase):
         self.assertTrue(issues[0].startswith("INVALID: the position preflight failed"))
         self.assertEqual(crates.STATE["valid"], 0)
         self.assertEqual(dict(crates.STATE["reasons"]), {pvp_banded.POSITION_FAILURE_CATEGORY: 1})
+
+    def test_the_victim_that_is_punched_is_verified_by_the_holder_and_rb_not_by_distance(self):
+        from unit.test_positioncontrol import OffsetGame
+        pvp_banded.PATHS.update({"victim": ["rb.position"], "client": ["rb.position"]})
+        self.addCleanup(pvp_banded.PATHS.update, {"victim": [], "client": []})
+        host, client = OffsetGame({"x": 20.0, "y": 5.0}, rb_offset=0.3), OffsetGame({"x": 17.15, "y": 5.0})
+        positioncontrol.hold_at(host, {"x": 20.0, "y": 5.0})
+        positioncontrol.hold_at(client, {"x": 17.15, "y": 5.0})
+        with mock.patch.object(positioncontrol.time, "sleep", no_sleep):
+            check = pvp_banded.preflight(host, client, {"x": 20.0, "y": 5.0}, {"seat": {"x": 17.15, "y": 5.0}})
+            seat = pvp_banded.seat_victim(host, {"x": 20.0, "y": 5.0})
+        self.assertFalse(check["ok"])
+        self.assertTrue(any(issue.startswith("the victim seat did not verify") for issue in check["issues"]), check["issues"])
+        self.assertFalse(seat["ok"])
+        self.assertTrue(any("rb.position" in issue for issue in seat["issues"]))
+
+    def test_a_victim_whose_link_read_wanders_but_whose_holder_and_rb_agree_is_seated(self):
+        from unit.test_positioncontrol import OffsetGame
+        pvp_banded.PATHS.update({"victim": ["rb.position"], "client": []})
+        self.addCleanup(pvp_banded.PATHS.update, {"victim": [], "client": []})
+        host = OffsetGame({"x": 20.0, "y": 5.0}, link_offset=0.4)
+        with mock.patch.object(positioncontrol.time, "sleep", no_sleep):
+            seat = pvp_banded.seat_victim(host, {"x": 20.0, "y": 5.0})
+        self.assertTrue(seat["ok"], seat["issues"])
+        self.assertTrue(seat["linkReadDisagrees"])
 
     def test_an_overlapping_pair_at_the_first_punch_is_invalid_and_nothing_is_fired(self):
         host, client = mock.Mock(), mock.Mock()

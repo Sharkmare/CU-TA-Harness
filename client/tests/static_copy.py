@@ -12,6 +12,7 @@ GROUP = "hook-evidence"
 NAME = "staticcrate_hit_by_client"
 FAR_COLUMNS = (45.0, -45.0, 50.0, -50.0, 55.0, -55.0, 60.0, -60.0)
 MIN_FAR_DISTANCE = 40.0
+FAR_ATTEMPTS = 4
 POCKET_ROWS = 4
 SPAWN_LIFT = 0.5
 WORLD_EDGE_MARGIN = 5
@@ -33,8 +34,10 @@ def pocket_is_open(host, x, y):
     return floor > 0 and not any(body_cells)
 
 
-def find_far_pocket(host, origin, half_width):
+def find_far_pocket(host, origin, half_width, farther_than=0.0):
     for column in FAR_COLUMNS:
+        if abs(column) <= farther_than:
+            continue
         x = origin["x"] + column
         if abs(x) > half_width - WORLD_EDGE_MARGIN:
             continue
@@ -59,27 +62,35 @@ def prepare(host, client):
     base.empty_the_hand(client)
     anchor = crates.hold_client_at_anchor(client)
     half_width = int(host.get("world", "halfWidth", depth=0))
-    pocket = find_far_pocket(host, anchor, half_width)
-    if pocket is None:
-        fail_setup("no-far-pocket", "no open pocket %s to %s tiles from the client at (%.1f, %.1f) in a world half width of %d" % (FAR_COLUMNS[0], FAR_COLUMNS[-1], anchor["x"], anchor["y"], half_width))
-    try:
-        target = crates.spawn_object(host, client, crates.CRATE_ID, crates.MIN_HEALTH, spot=pocket)
-    except crates.SetupFailure as failure:
-        STATE["setup_failed"] += 1
-        crates.record_failure("far-" + failure.category, str(failure))
-        raise
-    far_distance = base.distance(anchor, target["position"])
-    client_flags = crates.crate_physics(client, target["clientHandle"])
-    host_far = crates.crate_physics(host, target["handle"])
-    if far_distance < MIN_FAR_DISTANCE:
+    states = []
+    target = None
+    far_distance = 0.0
+    for attempt in range(1, FAR_ATTEMPTS + 1):
+        pocket = find_far_pocket(host, anchor, half_width, farther_than=far_distance)
+        if pocket is None:
+            fail_setup("no-far-pocket", "no open pocket %s to %s tiles from the client at (%.1f, %.1f) in a world half width of %d, farther than %.0f; copy states so far %s" % (
+                FAR_COLUMNS[0], FAR_COLUMNS[-1], anchor["x"], anchor["y"], half_width, far_distance, states))
+        try:
+            target = crates.spawn_object(host, client, crates.CRATE_ID, crates.MIN_HEALTH, spot=pocket)
+        except crates.SetupFailure as failure:
+            STATE["setup_failed"] += 1
+            crates.record_failure("far-" + failure.category, str(failure))
+            raise
+        far_distance = base.distance(anchor, target["position"])
+        client_flags = crates.crate_physics(client, target["clientHandle"])
+        host_far = crates.crate_physics(host, target["handle"])
+        states.append({"attempt": attempt, "distance": round(far_distance, 1), "clientBodyType": client_flags["bodyType"], "clientPhysicsActive": client_flags["physicsActive"],
+                       "hostBodyType": host_far["bodyType"], "hostPhysicsActive": host_far["physicsActive"]})
+        if far_distance < MIN_FAR_DISTANCE:
+            crates_destroy(host, target["handle"])
+            fail_setup("crate-not-far", "the spawned crate is only %.1f from the client, below %.0f" % (far_distance, MIN_FAR_DISTANCE))
+        if client_flags["physicsActive"] is False:
+            break
         crates_destroy(host, target["handle"])
-        fail_setup("crate-not-far", "the spawned crate is only %.1f from the client, below %.0f" % (far_distance, MIN_FAR_DISTANCE))
     if client_flags["physicsActive"] is not False:
-        crates_destroy(host, target["handle"])
-        fail_setup("client-copy-not-static-at-far", "the client copy %.1f away is bodyType %s physicsActive %s (host copy %s), not Static" % (
-            far_distance, client_flags["bodyType"], client_flags["physicsActive"], host_far))
+        fail_setup("client-copy-not-static-at-far", "the client copy is not Static at any tried distance, so no static-copy result is counted; copy state per distance %s" % states)
     STATE["static_at_far"] += 1
-    target = dict(target, farDistance=round(far_distance, 1), hostFarState=host_far, clientFarState=client_flags, anchor=anchor)
+    target = dict(target, farDistance=round(far_distance, 1), hostFarState=host_far, clientFarState=client_flags, anchor=anchor, farAttempts=states)
     return {"position": target["position"], "name": None, "host": host, "hostHandle": target["handle"], "clientHandle": target["clientHandle"],
             "target": target, "measurements": [], "anchor": anchor}
 

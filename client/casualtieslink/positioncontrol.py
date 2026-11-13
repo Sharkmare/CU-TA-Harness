@@ -10,6 +10,8 @@ MAX_TOLERANCE = 5.0
 HOLD_TOLERANCE = 0.05
 PARKED_TOLERANCE = 0.5
 PARKED_STRICT = "strict"
+ROLE_SWINGING = "swinging"
+ROLE_PARKED = "parked"
 PARKED_RECORDED = "recorded"
 DIAGNOSTIC_PATHS = ("rb.position", "body.transform.position", "limbs[0].transform.position", "limbs[1].transform.position", "rb.velocity", "rb.linearVelocity")
 MIN_SEPARATION = 2.0
@@ -157,7 +159,7 @@ def place_and_hold(game, target, tolerance=HOLD_TOLERANCE, sleep=None, observe=N
             "maxDriftSeenByHolder": mine[0].get("maxDrift") if mine else None, "exceededTicks": mine[0].get("exceededTicks") if mine else None, "observations": observations}
 
 
-def preflight_pair(host, client, host_target, client_target, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, copy_state=None, host_drift_counts=True):
+def preflight_pair(host, client, host_target, client_target, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, copy_state=None, host_drift_counts=True, client_drift_counts=True):
     """Both bodies at their targets within the tolerance and not overlapping; the result goes into the report and decides whether the run counts. With host_drift_counts False the host's drift is reported but is not an issue."""
     host_target = validate_point(host_target, "host target")
     client_target = validate_point(client_target, "client target")
@@ -172,7 +174,7 @@ def preflight_pair(host, client, host_target, client_target, tolerance=HOLD_TOLE
     issues = []
     if host_drift_counts and host_drift > tolerance:
         issues.append("the host body is %.3f from its target (tolerance %.3f)" % (host_drift, tolerance))
-    if client_drift > tolerance:
+    if client_drift_counts and client_drift > tolerance:
         issues.append("the client body is %.3f from its target (tolerance %.3f)" % (client_drift, tolerance))
     if separation < min_separation:
         issues.append("the bodies are %.3f apart, below the %.3f minimum: they overlap" % (separation, min_separation))
@@ -180,6 +182,94 @@ def preflight_pair(host, client, host_target, client_target, tolerance=HOLD_TOLE
     return {"ok": not issues, "issues": issues, "hostPosition": host_position, "clientPosition": client_position, "hostTarget": host_target, "clientTarget": client_target,
             "hostDrift": round(host_drift, 4), "clientDrift": round(client_drift, 4), "separation": round(separation, 4), "tolerance": tolerance, "minSeparation": float(min_separation),
             "copyState": state}
+
+
+def judge_seat(snapshot, target, tolerance=HOLD_TOLERANCE):
+    """A body that takes part in the swing is seated only when the holder's own view and rb.position both sit within the tolerance of the target and of each other. The link position
+    read is recorded and compared but never decides: a wandering link read is reported as linkReadDisagrees, not as a failed seat."""
+    target = validate_point(target, "target")
+    holder = as_point(snapshot.get("holder"))
+    rb = as_point((snapshot.get("paths") or {}).get("rb.position"))
+    link = as_point(snapshot.get("linkRead"))
+    issues = []
+    if holder is None:
+        issues.append("the holder's view of the body is not readable")
+    if rb is None:
+        issues.append("rb.position is not readable")
+    holder_drift = None if holder is None else distance_between(holder, target)
+    rb_drift = None if rb is None else distance_between(rb, target)
+    holder_vs_rb = None if holder is None or rb is None else distance_between(holder, rb)
+    if holder_drift is not None and holder_drift > tolerance:
+        issues.append("the holder's view is %.3f from the target (tolerance %.3f)" % (holder_drift, tolerance))
+    if rb_drift is not None and rb_drift > tolerance:
+        issues.append("rb.position is %.3f from the target (tolerance %.3f)" % (rb_drift, tolerance))
+    if holder_vs_rb is not None and holder_vs_rb > tolerance:
+        issues.append("the holder's view and rb.position are %.3f apart (tolerance %.3f)" % (holder_vs_rb, tolerance))
+    link_drift = None if link is None else distance_between(link, target)
+    return {"ok": not issues, "issues": issues, "holderDrift": None if holder_drift is None else round(holder_drift, 4), "rbDrift": None if rb_drift is None else round(rb_drift, 4),
+            "holderVsRb": None if holder_vs_rb is None else round(holder_vs_rb, 4), "linkDrift": None if link_drift is None else round(link_drift, 4),
+            "linkReadDisagrees": link is None or link_drift > tolerance, "snapshot": snapshot}
+
+
+def verify_swinging_body(game, target, tolerance=HOLD_TOLERANCE, paths=(), sleep=None, polls=VERIFY_POLLS):
+    """Read a held body that swings (or is punched) several times and judge every reading with judge_seat; one failed reading fails the seat."""
+    sleep = sleep or time.sleep
+    judgments = []
+    for _ in range(polls):
+        sleep(VERIFY_INTERVAL_SECONDS)
+        judgments.append(judge_seat(parked_snapshot(game, list(paths)), target, tolerance))
+    issues = []
+    for judgment in judgments:
+        for issue in judgment["issues"]:
+            if issue not in issues:
+                issues.append(issue)
+    return {"ok": bool(judgments) and all(judgment["ok"] for judgment in judgments), "issues": issues, "linkReadDisagrees": any(judgment["linkReadDisagrees"] for judgment in judgments),
+            "linkDrifts": [judgment["linkDrift"] for judgment in judgments], "holderDrifts": [judgment["holderDrift"] for judgment in judgments],
+            "rbDrifts": [judgment["rbDrift"] for judgment in judgments], "judgments": judgments, "target": target, "tolerance": tolerance}
+
+
+def seat_swinging_body(game, target, tolerance=HOLD_TOLERANCE, paths=(), sleep=None):
+    """Put the local body at the target, hold it, and verify it by the holder's view and rb.position."""
+    hold_at(game, validate_point(target, "target"), tolerance)
+    result = verify_swinging_body(game, target, tolerance, paths, sleep)
+    result["drifts"] = result["linkDrifts"]
+    return result
+
+
+def preflight_views(host, client, host_target, client_target, host_role, host_paths=(), client_paths=(), tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, copy_state=None, sleep=None):
+    """The preflight for runs where bodies play different roles. The client always swings and is verified by judge_seat. The host is either ROLE_SWINGING (the victim of a punch,
+    verified the same way) or ROLE_PARKED (only its readings are recorded; the caller checks its distance). The link position reads are recorded and never decide."""
+    if host_role not in (ROLE_SWINGING, ROLE_PARKED):
+        raise PositionControlError("host_role must be %r or %r, got %r" % (ROLE_SWINGING, ROLE_PARKED, host_role))
+    check = preflight_pair(host, client, host_target, client_target, tolerance, min_separation, copy_state, host_drift_counts=False, client_drift_counts=False)
+    client_seat = verify_swinging_body(client, client_target, tolerance, client_paths, sleep)
+    check["clientSeat"] = client_seat
+    for issue in client_seat["issues"]:
+        check["issues"].append("the client seat did not verify: " + issue)
+    if host_role == ROLE_SWINGING:
+        host_seat = verify_swinging_body(host, host_target, tolerance, host_paths, sleep)
+        check["hostSeat"] = host_seat
+        for issue in host_seat["issues"]:
+            check["issues"].append("the victim seat did not verify: " + issue)
+    else:
+        check["parkedHost"] = {"role": ROLE_PARKED, "target": host_target, "paths": list(host_paths), "reads": [parked_snapshot(host, list(host_paths)) for _ in range(VERIFY_POLLS)]}
+    check["ok"] = not check["issues"]
+    return check
+
+
+def parked_distance_problems(snapshots, points, minimum, label="parked body"):
+    """The parked body must stay at least `minimum` from every point by the nearest of its readable reads; returns the problems and the smallest distance seen."""
+    problems = []
+    smallest = None
+    for name, snapshot in snapshots:
+        approach = closest_approach(snapshot, points) if snapshot else None
+        if approach is None:
+            problems.append("no readable %s position at %s" % (label, name))
+            continue
+        smallest = approach["distance"] if smallest is None else min(smallest, approach["distance"])
+        if approach["distance"] < minimum:
+            problems.append("the %s was %.2f from the swing at %s (by %s), below %.1f" % (label, approach["distance"], name, approach["source"], minimum))
+    return problems, smallest
 
 
 def seat_pair(host, client, client_target, park_direction, tolerance=HOLD_TOLERANCE, min_separation=MIN_SEPARATION, park_distance=PARK_DISTANCE, copy_state=None, sleep=None, attempts=SEAT_ATTEMPTS,

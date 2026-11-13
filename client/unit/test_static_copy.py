@@ -67,19 +67,33 @@ class PrepareHarness(unittest.TestCase):
         self.client_state = {"bodyType": "Static", "physicsActive": False}
         self.spawn_error = None
         self.spawn_args = None
+        self.client_states = []
+        self.farther_than_asked = []
+        self.forced_position = None
+        self.far_x = 60.0
 
         def spawn_object(host, client, object_id, min_health, spot=None):
             self.spawn_args = (object_id, min_health, spot)
             if self.spawn_error:
                 raise self.spawn_error
-            return dict(self.target)
+            if self.forced_position is not None:
+                return dict(self.target, position=self.forced_position)
+            return dict(self.target, position={"x": spot["x"], "y": spot["y"]}) if spot else dict(self.target)
 
         def crate_physics(game, handle):
-            return dict(self.client_state, handle=handle) if game is self.client else {"handle": handle, "bodyType": "Dynamic", "physicsActive": True}
+            if game is self.client:
+                state = self.client_states.pop(0) if self.client_states else self.client_state
+                return dict(state, handle=handle)
+            return {"handle": handle, "bodyType": "Dynamic", "physicsActive": True}
+
+        def find_far_pocket(host, origin, half, farther_than=0.0):
+            self.farther_than_asked.append(farther_than)
+            self.far_x = max(60.0, origin["x"] + farther_than + 5.0)
+            return {"x": self.far_x, "y": 100.5}
 
         for patch in (mock.patch.object(static.crates, "spawn_object", spawn_object), mock.patch.object(static.crates, "crate_physics", crate_physics),
                       mock.patch.object(static.crates, "hold_client_at_anchor", lambda client: {"x": 10.0, "y": 100.0}),
-                      mock.patch.object(static, "find_far_pocket", lambda host, origin, half: {"x": 60.0, "y": 100.5}),
+                      mock.patch.object(static, "find_far_pocket", find_far_pocket),
                       mock.patch.object(static.base, "empty_the_hand", lambda client: None)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -100,8 +114,27 @@ class PrepareTests(PrepareHarness):
             static.prepare(self.host, self.client)
         self.assertEqual(caught.exception.category, "client-copy-not-static-at-far")
         self.assertIn("Dynamic", str(caught.exception))
-        self.host.set.assert_called_once_with("id:5", "health", 0)
+        self.assertEqual(self.host.set.call_count, static.FAR_ATTEMPTS)
         self.assertEqual(static.STATE["static_at_far"], 0)
+        self.assertEqual(len(self.farther_than_asked), static.FAR_ATTEMPTS)
+        self.assertEqual(self.farther_than_asked, sorted(self.farther_than_asked))
+        self.assertIn("copy state per distance", str(caught.exception))
+
+    def test_a_copy_that_is_dynamic_at_the_first_distance_but_static_farther_out_is_counted_with_every_state_recorded(self):
+        self.client_states = [{"bodyType": "Dynamic", "physicsActive": True}, {"bodyType": "Static", "physicsActive": False}]
+        context = static.prepare(self.host, self.client)
+        attempts = context["target"]["farAttempts"]
+        self.assertEqual([item["clientPhysicsActive"] for item in attempts], [True, False])
+        self.assertGreater(attempts[1]["distance"], attempts[0]["distance"])
+        self.assertEqual(static.STATE["static_at_far"], 1)
+        self.assertEqual(context["target"]["clientFarState"]["physicsActive"], False)
+        self.host.set.assert_called_once_with("id:5", "health", 0)
+
+    def test_a_dynamic_copy_is_never_counted_as_a_static_copy_result(self):
+        self.client_state = {"bodyType": "Dynamic", "physicsActive": True}
+        with self.assertRaises(crates.SetupFailure):
+            static.prepare(self.host, self.client)
+        self.assertEqual((static.STATE["static_at_far"], static.STATE["valid"]), (0, 0))
 
     def test_an_unreadable_client_physics_state_is_not_taken_for_static(self):
         self.client_state = {"bodyType": None, "physicsActive": None}
@@ -109,13 +142,13 @@ class PrepareTests(PrepareHarness):
             static.prepare(self.host, self.client)
 
     def test_a_crate_that_ended_up_close_is_refused(self):
-        self.target["position"] = {"x": 20.0, "y": 100.5}
+        self.forced_position = {"x": 20.0, "y": 100.5}
         with self.assertRaises(crates.SetupFailure) as caught:
             static.prepare(self.host, self.client)
         self.assertEqual(caught.exception.category, "crate-not-far")
 
     def test_no_pocket_is_a_setup_failure(self):
-        with mock.patch.object(static, "find_far_pocket", lambda host, origin, half: None), self.assertRaises(crates.SetupFailure) as caught:
+        with mock.patch.object(static, "find_far_pocket", lambda host, origin, half, farther_than=0.0: None), self.assertRaises(crates.SetupFailure) as caught:
             static.prepare(self.host, self.client)
         self.assertEqual(caught.exception.category, "no-far-pocket")
 

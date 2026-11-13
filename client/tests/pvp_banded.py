@@ -116,13 +116,17 @@ def record_start(host, client, context):
     context["startPositions"] = positioncontrol.start_positions(host, client, copy_state=lambda: victim_copy_state(client, context))
 
 
+PATHS = {"victim": [], "client": []}
+
+
 def seat_victim(host, spot):
-    """The victim goes back to the same spot and is held there until just before the punch, so every punch starts from the same geometry."""
-    return positioncontrol.place_and_hold(host, spot)
+    """The victim goes back to the same spot and is held there until just before the punch, so every punch starts from the same geometry. The victim takes part in the
+    punch, so it is verified by the holder's view and rb.position, never by distance."""
+    return positioncontrol.seat_swinging_body(host, spot, paths=PATHS["victim"])
 
 
 def preflight(host, client, spot, band):
-    return positioncontrol.preflight_pair(host, client, spot, band.get("seat") or base.player_position(client))
+    return positioncontrol.preflight_views(host, client, spot, band.get("seat") or base.player_position(client), positioncontrol.ROLE_SWINGING, PATHS["victim"], PATHS["client"])
 
 
 def release_holds(host, client):
@@ -143,6 +147,8 @@ def act(client, context, accept_range=None):
 
 
 def run_punches(host, client, context, entries, accept_range):
+    PATHS["victim"] = positioncontrol.discover_diagnostic_paths(host)
+    PATHS["client"] = positioncontrol.discover_diagnostic_paths(client)
     spot = None
     previous_after = None
     side = None
@@ -154,7 +160,7 @@ def run_punches(host, client, context, entries, accept_range):
             record_start(host, client, context)
         victim_hold = seat_victim(host, spot)
         if not victim_hold["ok"]:
-            context["positionFailure"] = {"ok": False, "issues": ["the victim hold did not verify before punch %d: drifts %s" % (index, victim_hold["drifts"])]}
+            context["positionFailure"] = {"ok": False, "issues": ["the victim hold did not verify before punch %d: %s; link reads %s" % (index, "; ".join(victim_hold.get("issues") or ["no detail"]), victim_hold["drifts"])]}
             break
         victim = spot
         if side is None:
