@@ -460,9 +460,9 @@ class ProfileDrivesTheOutputTests(unittest.TestCase):
             with self.assertRaises(prtable.ProfileError):
                 prtable.load_profile(path)
 
-    def test_the_shipped_corpse_profile_compares_the_control_with_the_fix_build(self):
+    def test_the_shipped_corpse_profile_compares_the_control_with_the_final_fix_build(self):
         profile = prtable.load_profile(os.path.join(PROFILES, "corpse-fix.json"))
-        self.assertEqual([build["build"] for build in profile["tables"][0]["builds"]], [VERBOSE, FIXED])
+        self.assertEqual([build["build"] for build in profile["tables"][0]["builds"]], [VERBOSE, "pr24-3d060fe-corpse-fix2"])
         self.assertEqual([column["label"] for column in profile["tables"][0]["columns"]], ["host hp", "client hp (min)", "broke"])
 
 
