@@ -585,7 +585,7 @@ def wait_for_block_on_both(host, client, centre, expected, timeout=FRESH_BLOCK_V
         expected, centre["x"], centre["y"], timeout, block_value(host, centre), block_value(client, centre)))
 
 
-def place_fresh_block(host, client, layout="side"):
+def place_fresh_block(host, client, layout="side", block_id=FRESH_BLOCK_ID):
     base = block_cell(client, player_position(client))
     low, high = FRESH_BLOCK_HEALTH_RANGE
     seen = []
@@ -594,12 +594,12 @@ def place_fresh_block(host, client, layout="side"):
         centre = world_centre_of_cell(client, cell)
         existing = block_value(host, centre)
         if existing == 0:
-            host.call("invoke", target="world", method="SetBlock", args=[cell["x"], cell["y"], FRESH_BLOCK_ID], types=["Int32", "Int32", "UInt16"])
-            wait_for_block_on_both(host, client, centre, FRESH_BLOCK_ID)
-            health = block_health(client, FRESH_BLOCK_ID)
+            host.call("invoke", target="world", method="SetBlock", args=[cell["x"], cell["y"], block_id], types=["Int32", "Int32", "UInt16"])
+            wait_for_block_on_both(host, client, centre, block_id)
+            health = block_health(client, block_id)
             if not low <= health <= high:
-                raise AssertionError("block %d has health %s, outside %s" % (FRESH_BLOCK_ID, health, FRESH_BLOCK_HEALTH_RANGE))
-            return cell, centre, FRESH_BLOCK_ID, health, True
+                raise AssertionError("block %d has health %s, outside %s" % (block_id, health, FRESH_BLOCK_HEALTH_RANGE))
+            return cell, centre, block_id, health, True
         seen.append((column, rise, existing))
     raise AssertionError("no free cell for a %s block next to the client; occupied (column, rise, block) %s" % (layout, seen))
 
@@ -618,10 +618,10 @@ def apply_position_control(host, client, context):
     return context
 
 
-def fresh_block_prepare_with(pattern, layout="side", walk=False):
+def fresh_block_prepare_with(pattern, layout="side", walk=False, block_id=FRESH_BLOCK_ID):
     def prepare(host, client):
         empty_the_hand(client)
-        cell, centre, block, health, placed = place_fresh_block(host, client, layout)
+        cell, centre, block, health, placed = place_fresh_block(host, client, layout, block_id)
         context = {"position": centre, "blockId": block, "blockHealth": health, "cell": cell, "placedByHost": placed, "aimPattern": pattern, "layout": layout, "walk": walk,
                    "hostGame": host, "hostBodyHandle": body_handle_by_name(host, CLIENT_BODY_NAME), "swingLog": [], "firstCall": None, "lastWalk": 0.0, "walkIndex": 0}
         if POSITION_CONTROL_ENABLED:
@@ -791,6 +791,7 @@ def ready_up(games, timeout=READY_TIMEOUT_SECONDS, step=1.0, before_ready=None):
 
 
 from . import hook_scenarios  # noqa: E402,F401
+from . import wood_mining  # noqa: E402,F401
 from . import regression_scenarios  # noqa: E402,F401
 from . import evidence_scenarios  # noqa: E402,F401
 from . import world_building  # noqa: E402,F401

@@ -137,9 +137,13 @@ def series_method(run):
         report["gamesAnswerAfterRun"] = games_answer(self)
         report["clientBody"] = body_identity(self)
         report["transpilerLines"] = {which: desync.transpiler_lines(GAMES.log_text(which)) for which in ("host", "client")}
+        extend_report = getattr(scenario, "extend_report", None)
+        issues = extend_report(report, observation, run_logs) if extend_report else []
+        report["issues"] = issues
         text = desync.format_series_report(report)
         print("\n" + text)
         desync.save_series_report(report, REPORT_DIRECTORY)
+        self.assertEqual(issues, [], text)
         self.assertEqual(report["verdict"], desync.VERDICT_PERSISTED, text)
     method.__name__ = run.name
     method.__doc__ = scenario.description
@@ -222,14 +226,17 @@ PVP_RULE_ARGUMENTS = ["--mp-setrule", "PVP", "1"]
 GROUP_CLIENT_ARGUMENTS = {"default": [], "mixed-characters": mp_arguments(CORPSE_FLAGS), "hand-mining": ["--mp-verbose"],
                           "mixed-hand-mining": mp_arguments(CORPSE_FLAGS) + ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                           "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"], "corpse-control-dune-milky": ["--mp-verbose"]}
+                          "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"], "corpse-control-dune-milky": ["--mp-verbose"],
+                          "wood-mining-dune": ["--mp-verbose"], "wood-mining-experiment": ["--mp-verbose"]}
 GROUP_HOST_ARGUMENTS = {"default": [], "mixed-characters": [], "hand-mining": ["--mp-verbose"], "mixed-hand-mining": ["--mp-verbose"], "hook-check": ["--mp-verbose"],
                         "hook-regression": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "hook-evidence": ["--mp-verbose"] + PVP_RULE_ARGUMENTS,
-                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"], "corpse-control-dune-milky": ["--mp-verbose"]}
-GROUP_CLIENT_CHARACTER = {"hook-dune": 2, "corpse-repro": 2, "corpse-control-dune": 2, "corpse-control-milky": 1, "corpse-control-dune-milky": 1}
-GROUP_HOST_CHARACTER = {"corpse-repro": 1, "corpse-control-dune": 2, "corpse-control-milky": 1, "corpse-control-dune-milky": 2}
+                        "hook-dune": ["--mp-verbose"] + PVP_RULE_ARGUMENTS, "console-leak": [], "spectator": [], "corpse-repro": ["--mp-verbose"], "corpse-control-dune": ["--mp-verbose"], "corpse-control-milky": ["--mp-verbose"], "corpse-control-dune-milky": ["--mp-verbose"],
+                        "wood-mining-dune": ["--mp-verbose"], "wood-mining-experiment": ["--mp-verbose"]}
+GROUP_CLIENT_CHARACTER = {"hook-dune": 2, "corpse-repro": 2, "corpse-control-dune": 2, "corpse-control-milky": 1, "corpse-control-dune-milky": 1,
+                         "wood-mining-dune": 2, "wood-mining-experiment": 0}
+GROUP_HOST_CHARACTER = {"corpse-repro": 1, "corpse-control-dune": 2, "corpse-control-milky": 1, "corpse-control-dune-milky": 2, "wood-mining-dune": 1, "wood-mining-experiment": 1}
 GROUP_HOST_PLUGINS = {"hook-check": ["noscatter"]}
-PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune", "corpse-repro", "corpse-control-dune", "corpse-control-milky", "corpse-control-dune-milky")
+PROBE_GROUPS = ("hand-mining", "mixed-hand-mining", "hook-check", "hook-regression", "hook-evidence", "hook-dune", "corpse-repro", "corpse-control-dune", "corpse-control-milky", "corpse-control-dune-milky", "wood-mining-dune", "wood-mining-experiment")
 EVIDENCE_GROUPS = ("hook-evidence", "hook-dune")
 
 
