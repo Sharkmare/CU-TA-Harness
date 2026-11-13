@@ -85,7 +85,7 @@ def hold_snapshot(host, client):
 
 
 def hold_problems(snapshots, entries):
-    """Anything that makes the corpse result confounded: a hold that is missing, lost, over its tolerance or unreadable, or a swing that was not fired."""
+    """Anything that makes the corpse result confounded: a hold that is missing, lost, over its tolerance or unreadable, or a swing that was not fired. The parked host takes no part in the swing, so its drift is not judged here, only that its hold exists and is not lost; how close it stays is judged by parked_problems."""
     problems = []
     for moment, snapshot in snapshots.items():
         for which in ("host", "client"):
@@ -96,6 +96,8 @@ def hold_problems(snapshots, entries):
             if not rows:
                 problems.append("no %s hold at %s" % (which, moment))
             for row in rows:
+                if which == "host" and not row.get("lost"):
+                    continue
                 if row.get("lost") or row.get("heldWithinTolerance") is not True or (row.get("exceededTicks") or 0) > 0:
                     problems.append("%s hold at %s: held within tolerance %s, exceeded ticks %s, max drift %s, lost %s" % (
                         which, moment, row.get("heldWithinTolerance"), row.get("exceededTicks"), row.get("maxDrift"), row.get("lost")))

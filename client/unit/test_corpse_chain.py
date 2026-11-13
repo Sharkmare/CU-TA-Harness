@@ -77,6 +77,11 @@ class HoldTests(unittest.TestCase):
         self.assertTrue(any(problem.startswith("client hold at beforeFirstSwing") and "exceeded ticks 3" in problem for problem in problems), problems)
         self.assertFalse(any(problem.startswith("host hold") for problem in problems))
 
+    def test_the_parked_hosts_drift_is_not_a_hold_problem_but_the_clients_is(self):
+        entries = [entry(1, 250.0, -10.0)]
+        self.assertEqual(chain.hold_problems(snapshots(host=[hold_row(held=False, exceeded=500, drift=1.0)]), entries), [])
+        self.assertTrue(chain.hold_problems(snapshots(client=[hold_row(held=False, exceeded=500, drift=1.0)]), entries))
+
     def test_a_lost_body_is_a_problem(self):
         self.assertTrue(chain.hold_problems(snapshots(host=[hold_row(lost=True)]), [entry(1, 250.0, -10.0)]))
 
