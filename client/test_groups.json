@@ -122,7 +122,8 @@
     {
       "id": "repo-tools",
       "modules": [
-        "tools.test_check_commit_message"
+        "tools.test_check_commit_message",
+        "tools.test_mutation_check"
       ],
       "needs_game": false
     },

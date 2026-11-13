@@ -10,8 +10,12 @@ TOOLS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(TOOLS)
 MUTANTS_PATH = os.path.join(TOOLS, "mutants.json")
 COPIED_FOLDERS = ("plugin", "plugin-tests", "client", "tools")
-IGNORED = ("bin", "obj", "__pycache__", "reports", "*.dll", ".test_state.json")
+IGNORED = ("bin", "obj", "__pycache__", "*.dll", ".test_state.json")
+CLIENT_REPORTS_FOLDER = "reports"
 MUTANT_TIMEOUT_SECONDS = 90
+MODS_ROOT_ENVIRONMENT_VARIABLE = "CU_MODS_ROOT"
+LINK_DLL_ENVIRONMENT_VARIABLE = "CU_LINK_DLL"
+BUILT_LINK_DLL = os.path.join(REPO, "plugin", "bin", "CasualtiesLink.dll")
 GROUPS_RELATIVE = os.path.join("client", "test_groups.json")
 OFFLINE_GROUP = "client-offline"
 
@@ -30,9 +34,42 @@ def suite_command(suite, root):
     raise ValueError("unknown suite %r" % suite)
 
 
+def suite_environment():
+    environment = dict(os.environ)
+    environment.setdefault(MODS_ROOT_ENVIRONMENT_VARIABLE, os.path.dirname(REPO))
+    environment.setdefault(LINK_DLL_ENVIRONMENT_VARIABLE, BUILT_LINK_DLL)
+    return environment
+
+
+def run_suite(suite, root):
+    command, cwd = suite_command(suite, root)
+    try:
+        completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=MUTANT_TIMEOUT_SECONDS, env=suite_environment())
+    except subprocess.TimeoutExpired:
+        return None, ""
+    return completed.returncode, completed.stdout + completed.stderr
+
+
+def control_run(scratch, suite):
+    root = os.path.join(scratch, "control-" + suite)
+    os.makedirs(root)
+    copy_tree(root)
+    returncode, output = run_suite(suite, root)
+    if returncode == 0:
+        return True, ""
+    return False, "timed out" if returncode is None else first_failure(suite, output) or output.strip()[-200:]
+
+
+def ignored_names(directory, names):
+    skipped = set(shutil.ignore_patterns(*IGNORED)(directory, names))
+    if os.path.basename(directory) == "client" and CLIENT_REPORTS_FOLDER in names:
+        skipped.add(CLIENT_REPORTS_FOLDER)
+    return skipped
+
+
 def copy_tree(root):
     for folder in COPIED_FOLDERS:
-        shutil.copytree(os.path.join(REPO, folder), os.path.join(root, folder), ignore=shutil.ignore_patterns(*IGNORED))
+        shutil.copytree(os.path.join(REPO, folder), os.path.join(root, folder), ignore=ignored_names)
 
 
 def first_failure(suite, output):
@@ -53,13 +90,10 @@ def run_mutant(scratch, index, mutant):
         return "ANCHOR", "anchor found %d times" % text.count(mutant["old"])
     with open(path, "w", encoding="utf-8", newline="") as handle:
         handle.write(text.replace(mutant["old"], mutant["new"]))
-    command, cwd = suite_command(mutant["suite"], root)
-    try:
-        completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=MUTANT_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
+    returncode, output = run_suite(mutant["suite"], root)
+    if returncode is None:
         return "caught", "tests hung for %ds" % MUTANT_TIMEOUT_SECONDS
-    output = completed.stdout + completed.stderr
-    return ("caught" if completed.returncode != 0 else "SURVIVED"), first_failure(mutant["suite"], output)
+    return ("caught" if returncode != 0 else "SURVIVED"), first_failure(mutant["suite"], output)
 
 
 def main(argv=None):
@@ -73,6 +107,11 @@ def main(argv=None):
     scratch = tempfile.mkdtemp(prefix="mutants_")
     problems = 0
     try:
+        for suite in sorted({mutant["suite"] for mutant in mutants}):
+            passes, detail = control_run(scratch, suite)
+            if not passes:
+                print("CONTROL FAILED  the unmutated %s suite fails in its scratch copy, so no mutant can be judged: %s" % (suite, detail))
+                return 2
         for index, mutant in enumerate(mutants):
             status, detail = run_mutant(scratch, index, mutant)
             problems += status != "caught"
