@@ -12,6 +12,7 @@ namespace CasualtiesLink.Tests
             EventBufferTests.Register(suite);
             MessageCounterTests.Register(suite);
             PositionHoldTests.Register(suite);
+            HookStatsTests.Register(suite);
             return suite.Run();
         }
     }

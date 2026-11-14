@@ -11,3 +11,5 @@ plugin-tests/obj/
 
 # our own scenarios, builds, profiles and evidence: not part of the public tree
 local/
+plugin-hookprofiler/bin/
+plugin-hookprofiler/obj/
