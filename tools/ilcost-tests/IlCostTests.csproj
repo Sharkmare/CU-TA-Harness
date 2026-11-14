@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>10</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>IlCost.Tests</RootNamespace>
+    <AssemblyName>IlCostTests</AssemblyName>
+    <OutputPath>bin\</OutputPath>
+    <StartupObject>IlCost.Tests.TestMain</StartupObject>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GameDir Condition="'$(GameDir)'==''">C:\Program Files (x86)\Steam\steamapps\common\Casualties Unknown</GameDir>
+    <CecilDll Condition="'$(CecilDll)'==''">$(GameDir)\BepInEx\core\Mono.Cecil.dll</CecilDll>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Mono.Cecil"><HintPath>$(CecilDll)</HintPath><Private>true</Private></Reference>
+    <Compile Include="..\ilcost\Analyzer.cs" />
+    <Compile Include="..\ilcost\Rules.cs" />
+    <Compile Include="..\ilcost\Hooks.cs" />
+    <Compile Include="..\ilcost\Program.cs" Exclude="" />
+    <Compile Include="..\..\plugin-tests\TestKit.cs" />
+    <Compile Include="..\..\plugin\RequestGate.cs" />
+  </ItemGroup>
+</Project>

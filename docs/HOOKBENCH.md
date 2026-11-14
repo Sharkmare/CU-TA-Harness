@@ -1,4 +1,6 @@
-# Hook benchmark
+# Hook benchmark (live run, unused)
+
+Needs a live game run and has never been launched. The operator does not want games launched for this work, so the offline analysis in `docs/ILCOST.md` is the tool in use. The plugin, runner and comparison rules below stay for a later live measurement.
 
 Measures what a mod's engine-called code costs, from inside the game, and decides whether two builds differ.
 

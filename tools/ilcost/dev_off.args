@@ -1,0 +1,7 @@
+--assume-live-objects
+--assume-field Con._DEV_TELEKINESIS=false
+--assume-return Impact.Live=false
+--assume-null-field PlayerCrush.live
+--assume-null-field CreatureHold.held
+--assume-null-field CreatureHold.flung
+--assume-null-field DragPatch.HeldVictim
