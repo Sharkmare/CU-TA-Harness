@@ -22,6 +22,7 @@ REPOSITORY_ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPOSITORY_ROOT, "client"))
 sys.path.insert(0, HERE)
 
+import hookbench_logs
 import hookbench_stats as stats
 
 PROFILER_DLL = os.path.join(REPOSITORY_ROOT, "plugin-hookprofiler", "bin", "HookProfiler.dll")
@@ -155,6 +156,9 @@ def run_launch(arguments, index):
             gamelist.append(games.client.game)
         if gamelist and not ready_up(gamelist, timeout=WORLD_TIMEOUT_SECONDS):
             raise RuntimeError("the games did not reach a world")
+        for member in (games.host, games.client):
+            if member is not None:
+                member.game.wait_state("in-world", timeout=WORLD_TIMEOUT_SECONDS)
         host = games.host.game
         record["setup"] = unwrap(control_call(host, "Setup", arguments.disable or "", "1"))
         record["inventory"] = unwrap(control_call(host, "Inventory", "CasualtiesMP"))
@@ -164,6 +168,9 @@ def run_launch(arguments, index):
         record["install"] = json.loads(json.dumps(unwrap(control_call(host, "Wrap", "CasualtiesMP", ""))))
         return record
     finally:
+        games.stop()
+        record["keptLogs"] = hookbench_logs.keep_logs({"host": games.host_copy, "client": games.client_copy if arguments.mode == "pair" else None}, os.path.join(arguments.out, arguments.label, "logs"), "%s_%02d" % (arguments.label, index))
+        print("kept logs:", record["keptLogs"], flush=True)
         games.dispose()
         lock.release()
 

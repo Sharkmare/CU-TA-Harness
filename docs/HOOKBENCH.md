@@ -1,6 +1,6 @@
-# Hook benchmark (live run, unused)
+# Hook benchmark
 
-Needs a live game run and has never been launched. The operator does not want games launched for this work, so the offline analysis in `docs/ILCOST.md` is the tool in use. The plugin, runner and comparison rules below stay for a later live measurement.
+Status: one live run done (2026-11-14, `--mode host`, stage upstream-full-release-e9eb3ce, hooked pass only, 150 s). Modes: `host` and `pair` work (the world starts through the multiplayer host flags and `ready_up`); `solo` (no multiplayer flags, `start_run` from the menu) is UNSUPPORTED: in two launches the world did not load within 60 s and the main thread then stopped answering, and the cause was not diagnosed because the logs were lost. The runner now keeps the BepInEx log of each copy under `<out>/<label>/logs` before the copy is deleted (`tools/hookbench_logs.py`, tested by `tools/test_hookbench_logs.py`).
 
 Measures what a mod's engine-called code costs, from inside the game, and decides whether two builds differ.
 
