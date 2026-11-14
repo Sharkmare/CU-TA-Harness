@@ -117,6 +117,36 @@ namespace HookProfiler
             return installInfo;
         }
 
+        /// <summary>Third step, after Wrap and before Begin: also times every method declared by the named types (simple names, comma separated) so a hook's cost can be attributed to the methods inside it. Property accessors are skipped.</summary>
+        public static string WrapTypes(string assemblies, string typeNames)
+        {
+            if (harmony == null) throw new Exception("call Wrap first");
+            var wanted = new HashSet<string>((typeNames ?? "").Split(',').Select(n => n.Trim()).Where(n => n.Length > 0));
+            var failures = new List<string>();
+            int added = 0;
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies().Where(a => AssemblySet(assemblies).Contains(a.GetName().Name)))
+            {
+                Type[] types;
+                try { types = assembly.GetTypes(); }
+                catch (System.Reflection.ReflectionTypeLoadException partial) { types = partial.Types.Where(x => x != null).ToArray(); }
+                foreach (var type in types.Where(x => wanted.Contains(x.Name) && !x.ContainsGenericParameters))
+                {
+                    foreach (var method in type.GetMethods(flags))
+                    {
+                        if (method.IsAbstract || method.IsSpecialName || method.ContainsGenericParameters || method.GetMethodBody() == null) continue;
+                        if (Wrapper.IndexByHandle.ContainsKey((long)method.MethodHandle.Value)) continue;
+                        if (Stats.Count >= Stats.Capacity - 1) { failures.Add("capacity reached"); break; }
+                        var hook = new Hook { Name = Targets.NameOf(method), Method = method, Index = Stats.Count };
+                        hook.Kinds.Add("granular");
+                        try { Wrapper.Apply(harmony, hook); hooks.Add(hook); Stats.Count++; added++; }
+                        catch (Exception failure) { failures.Add(hook.Name + ": " + failure.Message); }
+                    }
+                }
+            }
+            return JsonConvert.SerializeObject(new { added, failures });
+        }
+
         static void CalibrateOverhead()
         {
             const int calls = 2000000;

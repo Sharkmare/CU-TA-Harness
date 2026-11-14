@@ -82,6 +82,25 @@ def spawn_scene(host, bodies, crates, seed, spread, drop_height):
     return handles
 
 
+def churn(host, arguments, handles, seconds):
+    """For the recording time: every few seconds drop a new burst of bodies and crates over the host and remove the oldest, so collisions keep happening. Returns the number of bursts."""
+    if arguments.burst_seconds <= 0:
+        time.sleep(seconds)
+        return 0
+    deadline = time.time() + seconds
+    generation = 0
+    kept = []
+    while time.time() < deadline:
+        generation += 1
+        kept.append(spawn_scene(host, arguments.burst_bodies, arguments.burst_crates, arguments.seed + generation, SCENE_SPREAD, SCENE_DROP_HEIGHT))
+        if len(kept) > arguments.burst_keep:
+            destroy_scene(host, kept.pop(0))
+        time.sleep(min(arguments.burst_seconds, max(0.0, deadline - time.time())))
+    for burst in kept:
+        handles.extend(burst)
+    return generation
+
+
 def start_walking(host):
     try:
         host.hold(key="D")
@@ -106,15 +125,17 @@ def destroy_scene(host, handles):
             pass
 
 
-def one_pass(host, label, wrapped, arguments):
+def one_pass(host, label, wrapped, arguments, seconds=None):
+    seconds = seconds or arguments.seconds
     if wrapped:
         control_call(host, "Wrap", "CasualtiesMP", arguments.burn or "")
     handles = spawn_scene(host, arguments.bodies, arguments.crates, arguments.seed, SCENE_SPREAD, SCENE_DROP_HEIGHT)
     time.sleep(WARMUP_SECONDS)
     walking = start_walking(host)
     control_call(host, "Begin", label)
-    time.sleep(arguments.seconds)
+    bursts = churn(host, arguments, handles, seconds)
     report = unwrap(control_call(host, "End"))
+    report["bursts"] = bursts
     report["walking"] = walking
     stop_walking(host, walking)
     destroy_scene(host, handles)
@@ -163,8 +184,13 @@ def run_launch(arguments, index):
         record["setup"] = unwrap(control_call(host, "Setup", arguments.disable or "", "1"))
         record["inventory"] = unwrap(control_call(host, "Inventory", "CasualtiesMP"))
         clean = None if arguments.hooked_only else one_pass(host, "clean", False, arguments)
+        control_call(host, "Wrap", "CasualtiesMP", arguments.burn or "")
+        if arguments.granular_types:
+            record["granular"] = unwrap(control_call(host, "WrapTypes", "CasualtiesMP", arguments.granular_types))
         wrapped = one_pass(host, "wrapped", True, arguments)
         record["clean"], record["wrapped"] = clean, wrapped
+        if arguments.second_pass_seconds > 0:
+            record["wrapped2"] = one_pass(host, "wrapped2", True, arguments, arguments.second_pass_seconds)
         record["install"] = json.loads(json.dumps(unwrap(control_call(host, "Wrap", "CasualtiesMP", ""))))
         return record
     finally:
@@ -211,6 +237,12 @@ def main(argv=None):
     parser.add_argument("--label", default="run")
     parser.add_argument("--mode", choices=("pair", "host", "solo"), default="pair")
     parser.add_argument("--hooked-only", action="store_true", help="skip the clean pass")
+    parser.add_argument("--granular-types", default="", help="simple type names whose every method is timed as well")
+    parser.add_argument("--second-pass-seconds", type=float, default=0.0, help="record a second pass of this length in the same launch")
+    parser.add_argument("--burst-seconds", type=float, default=0.0, help="drop a new burst of bodies and crates this often during recording (0 = none)")
+    parser.add_argument("--burst-bodies", type=int, default=3)
+    parser.add_argument("--burst-crates", type=int, default=10)
+    parser.add_argument("--burst-keep", type=int, default=6, help="bursts kept alive before the oldest is removed")
     parser.add_argument("--character", type=int, default=2)
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--disable", help="comma separated type name fragments whose Harmony patches are removed before measuring")
