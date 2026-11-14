@@ -36,6 +36,8 @@ SCENE_SPREAD = 6.0
 SCENE_DROP_HEIGHT = 7.0
 BODY_ID = "guard"
 CRATE_ID = "medcrate"
+CRYSTAL_ID = "crystalenemy"
+CRYSTALS = 3
 WARMUP_SECONDS = 5.0
 WORLD_TIMEOUT_SECONDS = 150.0
 
@@ -66,13 +68,33 @@ def spawn_scene(host, bodies, crates, seed, spread, drop_height):
     generator = random.Random(seed)
     anchor = host.player()["position"] if isinstance(host.player(), dict) and "position" in host.player() else {"x": 0.0, "y": 0.0}
     handles = []
-    for kind, count in ((BODY_ID, bodies), (CRATE_ID, crates)):
+    for kind, count in ((BODY_ID, bodies), (CRATE_ID, crates), (CRYSTAL_ID, CRYSTALS)):
         for _ in range(count):
             x = anchor["x"] + generator.uniform(-spread, spread)
             y = anchor["y"] + drop_height + generator.uniform(0, spread)
-            rows = host.spawn(kind, x=x, y=y, pickup=False)
+            try:
+                rows = host.spawn(kind, x=x, y=y, pickup=False)
+            except Exception as failure:
+                print("spawn %s failed: %s" % (kind, str(failure)[:120]), flush=True)
+                break
             handles.extend(row["object"] for row in rows)
     return handles
+
+
+def start_walking(host):
+    try:
+        host.hold(key="D")
+        return "holding D"
+    except Exception as failure:
+        return "walking failed: %s" % str(failure)[:100]
+
+
+def stop_walking(host, state):
+    if state.startswith("holding"):
+        try:
+            host.release(key="D")
+        except Exception:
+            pass
 
 
 def destroy_scene(host, handles):
@@ -88,9 +110,12 @@ def one_pass(host, label, wrapped, arguments):
         control_call(host, "Wrap", "CasualtiesMP", arguments.burn or "")
     handles = spawn_scene(host, arguments.bodies, arguments.crates, arguments.seed, SCENE_SPREAD, SCENE_DROP_HEIGHT)
     time.sleep(WARMUP_SECONDS)
+    walking = start_walking(host)
     control_call(host, "Begin", label)
     time.sleep(arguments.seconds)
     report = unwrap(control_call(host, "End"))
+    report["walking"] = walking
+    stop_walking(host, walking)
     destroy_scene(host, handles)
     report["sceneObjects"] = len(handles)
     return report
@@ -107,21 +132,33 @@ def run_launch(arguments, index):
         games.prepare()
         games.configure_host([], arguments.build)
         install_profiler(games.host_copy)
-        games.host = games.launch_host([], arguments.build)
+        if arguments.mode == "solo":
+            from casualtieslink.launcher import GameProcess
+            games.host = GameProcess(instances.HOST_PORT, [], directory=games.host_copy, manage_save=False,
+                                     window_args=["-screen-fullscreen", "0", "-screen-width", "640", "-screen-height", "360"])
+        else:
+            games.host = games.launch_host([], arguments.build)
         games.host.start(instances.START_TIMEOUT_SECONDS, allow_existing=True)
         gamelist = [games.host.game]
+        if arguments.mode == "solo":
+            try:
+                games.host.game.start_run(character=arguments.character)
+            except Exception as failure:
+                print("start_run: %s; waiting for the world" % str(failure)[:120], flush=True)
+            games.host.game.wait_state("in-world", timeout=WORLD_TIMEOUT_SECONDS)
+            gamelist = []
         if arguments.mode == "pair":
             games.configure_client([], arguments.build)
             install_profiler(games.client_copy)
             games.client = games.launch_client([], arguments.build)
             games.client.start(instances.START_TIMEOUT_SECONDS, allow_existing=True)
             gamelist.append(games.client.game)
-        if not ready_up(gamelist, timeout=WORLD_TIMEOUT_SECONDS):
+        if gamelist and not ready_up(gamelist, timeout=WORLD_TIMEOUT_SECONDS):
             raise RuntimeError("the games did not reach a world")
         host = games.host.game
         record["setup"] = unwrap(control_call(host, "Setup", arguments.disable or "", "1"))
         record["inventory"] = unwrap(control_call(host, "Inventory", "CasualtiesMP"))
-        clean = one_pass(host, "clean", False, arguments)
+        clean = None if arguments.hooked_only else one_pass(host, "clean", False, arguments)
         wrapped = one_pass(host, "wrapped", True, arguments)
         record["clean"], record["wrapped"] = clean, wrapped
         record["install"] = json.loads(json.dumps(unwrap(control_call(host, "Wrap", "CasualtiesMP", ""))))
@@ -165,7 +202,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--build")
     parser.add_argument("--label", default="run")
-    parser.add_argument("--mode", choices=("pair", "host"), default="pair")
+    parser.add_argument("--mode", choices=("pair", "host", "solo"), default="pair")
+    parser.add_argument("--hooked-only", action="store_true", help="skip the clean pass")
+    parser.add_argument("--character", type=int, default=2)
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--disable", help="comma separated type name fragments whose Harmony patches are removed before measuring")
     parser.add_argument("--burn", help="fragment:microseconds,... deliberate extra cost in matching hooks (proves the benchmark can fail)")
