@@ -41,3 +41,7 @@ The game copies share the profile folder and PlayerPrefs registry with the insta
 - `python tools/test_hookbench_stats.py` (comparison rules, 8 tests, mutation checked by hand).
 - `dotnet run -c Release --project plugin-tests` (includes `HookStatsTests`, the counting core).
 - The runner and the plugin's Harmony wrapping are exercised only by a real launch.
+
+## Chunk sleep correctness and multiplayer perf
+
+- `plugin-hookprofiler/SleepProbe.cs` (static `HookProfiler.SleepProbe` through the link): `Dump`, `Pulse`, `LocalPosition`, `ChunkKeyAt`, `ArmKeep`. It reads the mod's chunk sleep list by reflection, so it works against any build of the mod.
