@@ -125,7 +125,8 @@ def destroy_scene(host, handles):
             pass
 
 
-def one_pass(host, label, wrapped, arguments, seconds=None):
+def one_pass(host, label, wrapped, arguments, seconds=None, client=None):
+    """Record one pass on the host and, when a client game is given, on the client at the same time."""
     seconds = seconds or arguments.seconds
     if wrapped:
         control_call(host, "Wrap", "CasualtiesMP", arguments.burn or "")
@@ -133,14 +134,33 @@ def one_pass(host, label, wrapped, arguments, seconds=None):
     time.sleep(WARMUP_SECONDS)
     walking = start_walking(host)
     control_call(host, "Begin", label)
+    if client is not None:
+        control_call(client, "Begin", label)
     bursts = churn(host, arguments, handles, seconds)
     report = unwrap(control_call(host, "End"))
+    if client is not None:
+        report["client"] = unwrap(control_call(client, "End"))
     report["bursts"] = bursts
     report["walking"] = walking
     stop_walking(host, walking)
     destroy_scene(host, handles)
     report["sceneObjects"] = len(handles)
     return report
+
+
+def place_client_away(host, client, chunks):
+    """Hold the client `chunks` chunks to the left of the host, so neither is in the other's 3x3, and wait until it has arrived. The host walks right during recording."""
+    import chunksleep_ab
+    start = chunksleep_ab.wait_landed(host, "host")
+    chunksleep_ab.wait_landed(client, "client")
+    size = hookbench_chunk_size(host, start)
+    target = {"x": start["x"] - chunks * size, "y": start["y"]}
+    chunksleep_ab.hold(client, target)
+    return {"hostStart": start, "chunkSize": size, "clientTarget": target}
+
+
+def hookbench_chunk_size(host, start):
+    return unwrap(host.call("invoke", target="static:HookProfiler.SleepProbe", method="ChunkKeyAt", args=[str(start["x"]), str(start["y"])], types=["String", "String"]))["chunkSize"]
 
 
 def run_launch(arguments, index):
@@ -181,16 +201,25 @@ def run_launch(arguments, index):
             if member is not None:
                 member.game.wait_state("in-world", timeout=WORLD_TIMEOUT_SECONDS)
         host = games.host.game
+        client = games.client.game if arguments.mode == "pair" else None
+        if client is not None and arguments.client_away_chunks > 0:
+            record["clientPlacement"] = place_client_away(host, client, arguments.client_away_chunks)
         record["setup"] = unwrap(control_call(host, "Setup", arguments.disable or "", "1"))
+        if client is not None:
+            record["clientSetup"] = unwrap(control_call(client, "Setup", arguments.disable or "", "1"))
         record["inventory"] = unwrap(control_call(host, "Inventory", "CasualtiesMP"))
         clean = None if arguments.hooked_only else one_pass(host, "clean", False, arguments)
         control_call(host, "Wrap", "CasualtiesMP", arguments.burn or "")
+        if client is not None:
+            control_call(client, "Wrap", "CasualtiesMP", arguments.burn or "")
         if arguments.granular_types:
             record["granular"] = unwrap(control_call(host, "WrapTypes", "CasualtiesMP", arguments.granular_types))
-        wrapped = one_pass(host, "wrapped", True, arguments)
+            if client is not None:
+                record["clientGranular"] = unwrap(control_call(client, "WrapTypes", "CasualtiesMP", arguments.granular_types))
+        wrapped = one_pass(host, "wrapped", True, arguments, client=client)
         record["clean"], record["wrapped"] = clean, wrapped
         if arguments.second_pass_seconds > 0:
-            record["wrapped2"] = one_pass(host, "wrapped2", True, arguments, arguments.second_pass_seconds)
+            record["wrapped2"] = one_pass(host, "wrapped2", True, arguments, arguments.second_pass_seconds, client=client)
         record["install"] = json.loads(json.dumps(unwrap(control_call(host, "Wrap", "CasualtiesMP", ""))))
         return record
     finally:
@@ -244,6 +273,7 @@ def main(argv=None):
     parser.add_argument("--burst-crates", type=int, default=10)
     parser.add_argument("--burst-keep", type=int, default=6, help="bursts kept alive before the oldest is removed")
     parser.add_argument("--character", type=int, default=2)
+    parser.add_argument("--client-away-chunks", type=int, default=0, help="pair mode: hold the client this many chunks left of the host and profile it too")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--disable", help="comma separated type name fragments whose Harmony patches are removed before measuring")
     parser.add_argument("--burn", help="fragment:microseconds,... deliberate extra cost in matching hooks (proves the benchmark can fail)")
