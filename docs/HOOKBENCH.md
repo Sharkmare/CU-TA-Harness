@@ -44,4 +44,6 @@ The game copies share the profile folder and PlayerPrefs registry with the insta
 
 ## Chunk sleep correctness and multiplayer perf
 
+- `tools/chunksleep_ab.py --build <id> --label <name>`: launches host plus one client, holds them 6 chunks apart, spawns labelled crate groups at chunk centres, and samples the awake and asleep state of every watched object on BOTH machines after each move (client to host area and back, host to client area and back, a SimKeep armed on a far crate). Each move also records a fast `SleepProbe.Pulse` trace (hot objects that are still switched off) so the wake latency is measured. `--compare a.json b.json ...` prints per machine counts, the hot-but-off invariant, wake latency, and labelled differences against the first report. The world seed is not controllable, so only the labelled crates are compared across builds.
+- A build that wrongly skips a chunk keeps the final states (the mod's `Visit` cycle still wakes everything within about 0.6 s), so the final-state compare cannot fail on it; the wake latency can. Prove the check against a deliberately broken variant before trusting a fix.
 - `plugin-hookprofiler/SleepProbe.cs` (static `HookProfiler.SleepProbe` through the link): `Dump`, `Pulse`, `LocalPosition`, `ChunkKeyAt`, `ArmKeep`. It reads the mod's chunk sleep list by reflection, so it works against any build of the mod.
