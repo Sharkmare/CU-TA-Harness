@@ -30,8 +30,11 @@ SESSION_ADDRESS = "127.0.0.1:7790"
 HOST_PORT = 7650
 PROXY_PORT = 7791
 CLIENT_PORT = 7651
+SECOND_CLIENT_PORT = 7652
+SECOND_CLIENT_NAME = "ClientE"
 HOST_COPY_NAME = "CU-scenario-host"
 CLIENT_COPY_NAME = "CU-scenario-client"
+SECOND_CLIENT_COPY_NAME = "CU-scenario-client2"
 START_TIMEOUT_SECONDS = 240.0
 BUILTIN_TOGETHER_CHOICES = ("stock", "keep")
 
@@ -321,8 +324,8 @@ def host_arguments(extra=()):
     return mp_arguments(flags) + list(extra)
 
 
-def client_arguments(extra=(), address=SESSION_ADDRESS):
-    flags = {"nosteam": True, "startclient": True, "setname": "ClientD", "ip-port": address}
+def client_arguments(extra=(), address=SESSION_ADDRESS, name="ClientD"):
+    flags = {"nosteam": True, "startclient": True, "setname": name, "ip-port": address}
     return mp_arguments(flags) + list(extra)
 
 
@@ -337,6 +340,8 @@ class ScenarioGames:
         self.client_copy = client_copy or copy_directory(CLIENT_COPY_NAME)
         self.host = None
         self.client = None
+        self.second_client_copy = copy_directory(SECOND_CLIENT_COPY_NAME)
+        self.second_client = None
         self.proxy = None
         self.prepared = False
 
@@ -410,6 +415,20 @@ class ScenarioGames:
             raise
         return self.client.game
 
+    def start_second_client(self, client_plugins, together, client_extra=()):
+        """A third player, ClientE, joining the same host from its own game copy."""
+        testcopy.make_copy(self.second_client_copy)
+        configure_instance(self.second_client_copy, client_plugins, together=together)
+        self.second_client = GameProcess(SECOND_CLIENT_PORT, client_arguments(list(client_extra) + flavour_arguments(together), name=SECOND_CLIENT_NAME),
+                                        directory=self.second_client_copy, manage_save=False,
+                                        window_args=["-screen-fullscreen", "0", "-screen-width", "640", "-screen-height", "360"])
+        try:
+            self.second_client.start(START_TIMEOUT_SECONDS, allow_existing=True)
+        except Exception:
+            self.stop()
+            raise
+        return self.second_client.game
+
     def stop_client(self):
         if self.client is not None:
             try:
@@ -427,18 +446,19 @@ class ScenarioGames:
         if self.proxy is not None:
             self.proxy.stop()
             self.proxy = None
-        for member in (self.client, self.host):
+        for member in (self.second_client, self.client, self.host):
             if member is not None:
                 try:
                     member.close()
                 except Exception:
                     pass
+        self.second_client = None
         self.client = None
         self.host = None
 
     def dispose(self):
         self.stop()
-        for directory in (self.host_copy, self.client_copy):
+        for directory in (self.host_copy, self.client_copy, self.second_client_copy):
             testcopy.remove_copy(directory)
         if self.prepared:
             self.guard.restore()
