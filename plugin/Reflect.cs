@@ -285,6 +285,13 @@ namespace CasualtiesLink
             if (value is Vector3 v3) return new Dictionary<string, object> { { "x", v3.x }, { "y", v3.y }, { "z", v3.z } };
             if (value is Color c) return new Dictionary<string, object> { { "r", c.r }, { "g", c.g }, { "b", c.b }, { "a", c.a } };
             if (value is Quaternion q) return new Dictionary<string, object> { { "x", q.x }, { "y", q.y }, { "z", q.z }, { "w", q.w } };
+            if (value is Delegate subscribers)
+            {
+                var targets = new List<object>();
+                foreach (Delegate subscriber in subscribers.GetInvocationList())
+                    targets.Add((subscriber.Target == null ? "static " : subscriber.Target.GetType().Name + " ") + subscriber.Method.Name);
+                return new Dictionary<string, object> { { "$delegate", type.Name }, { "count", targets.Count }, { "targets", targets } };
+            }
             if (value is IDictionary dictionary)
             {
                 var map = new Dictionary<string, object>();
